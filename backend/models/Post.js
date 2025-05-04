@@ -41,8 +41,19 @@ const postSchema = new mongoose.Schema(
       type: String,
       required: true
     },
-    mediaUrl: {
+    mediaUrls: {
+      type: [String], // Changed from single `mediaUrl` to array
+      default: []
+    },
+    region: {
       type: String
+    },
+    department: {
+      type: String
+    },
+    isAnonymous: {
+      type: Boolean,
+      default: true
     },
     likes: {
       type: Number,
@@ -50,7 +61,7 @@ const postSchema = new mongoose.Schema(
     },
     comments: [commentSchema]
   },
-  { timestamps: true } // adds createdAt and updatedAt to the post
+  { timestamps: true }
 );
 
 module.exports = mongoose.model('Post', postSchema);

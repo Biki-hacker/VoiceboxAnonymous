@@ -12,23 +12,29 @@ import EmployeeVerification from './components/EmployeeVerification';
 import CreatePost from './pages/CreatePost';
 import PostsFeed from './pages/PostsFeed';
 import AdminDashboard from './pages/AdminDashboard';
+import EmployeeDashboard from './pages/EmployeeDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
     <Router>
       <Routes>
-        {/* Public */}
+        {/* Public Routes */}
         <Route path="/" element={<Home />} />
         <Route path="/signin" element={<SignIn />} />
         <Route path="/signup" element={<SignUp />} />
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/updatepassword" element={<UpdatePassword />} />
 
-        {/* Verification (open) */}
-        <Route path="/verify" element={<EmployeeVerification />} />
-
-        {/* Admin Dashboard (protected) */}
+        {/* Protected Routes */}
+        <Route
+          path="/verify"
+          element={
+            <ProtectedRoute>
+              <EmployeeVerification />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/admin-dashboard"
           element={
@@ -37,8 +43,14 @@ function App() {
             </ProtectedRoute>
           }
         />
-
-        {/* Employee Routes (protected) */}
+        <Route
+          path="/employee-dashboard"
+          element={
+            <ProtectedRoute>
+              <EmployeeDashboard />
+            </ProtectedRoute>
+          }
+        />
         <Route
           path="/create-post"
           element={

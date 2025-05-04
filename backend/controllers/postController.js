@@ -3,7 +3,15 @@ const Post = require('../models/Post');
 // Create a new post
 exports.createPost = async (req, res) => {
   try {
-    const { orgId, postType, content, mediaUrl } = req.body;
+    const {
+      orgId,
+      postType,
+      content,
+      mediaUrls,
+      region,
+      department,
+      isAnonymous
+    } = req.body;
 
     if (!orgId || !postType || !content) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -13,7 +21,10 @@ exports.createPost = async (req, res) => {
       orgId,
       postType,
       content,
-      mediaUrl: mediaUrl || null
+      mediaUrls: mediaUrls || [],
+      region: region || null,
+      department: department || null,
+      isAnonymous: isAnonymous !== false // default true
     });
 
     await newPost.save();
@@ -63,7 +74,7 @@ exports.reactToPost = async (req, res) => {
       return res.status(404).json({ message: 'Post not found' });
     }
 
-    post.likes += 1; // Increment the like count for the post
+    post.likes += 1;
     await post.save();
     res.status(200).json({ message: 'Post liked!', post });
   } catch (err) {
@@ -144,4 +155,3 @@ exports.reactToComment = async (req, res) => {
     res.status(500).json({ message: 'Error reacting to comment' });
   }
 };
-

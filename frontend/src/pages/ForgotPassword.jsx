@@ -9,7 +9,7 @@ export default function ForgotPassword() {
   const handleResetPassword = async (e) => {
     e.preventDefault();
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'http://localhost:5173/update-password',
+      redirectTo: 'http://localhost:5173/updatepassword',
     });
 
     if (error) {

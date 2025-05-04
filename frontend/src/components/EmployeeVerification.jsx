@@ -1,74 +1,103 @@
 // src/pages/EmployeeVerification.jsx
 import React, { useState } from 'react';
 import { api } from '../api/axios';
+import { useNavigate } from 'react-router-dom';
 
 const EmployeeVerification = () => {
   const [orgSearch, setOrgSearch] = useState('');
   const [organization, setOrganization] = useState(null);
   const [params, setParams] = useState({});
-  const [verified, setVerified] = useState(false);
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const navigate = useNavigate();
 
   const handleSearch = async () => {
+    setLoading(true);
+    setError('');
     try {
       const res = await api.get(`/organizations/search?name=${orgSearch}`);
       setOrganization(res.data);
       setParams({});
     } catch (err) {
-      alert('Organization not found');
+      setOrganization(null);
+      setError('Organization not found. Please check the name.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleVerify = async () => {
+    if (!organization) return;
+
+    setLoading(true);
+    setError('');
     try {
       const res = await api.post('/users/verify', {
         organizationId: organization._id,
         verificationParams: params,
       });
+
       if (res.data.success) {
-        setVerified(true);
+        navigate('/employee-dashboard');
       } else {
-        alert('Verification failed');
+        setError('Verification failed. Please check your details.');
       }
     } catch (err) {
-      alert('Verification error');
+      setError('Verification error. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div>
-      <h2>Verify Your Organization</h2>
+    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-4">
+      <div className="w-full max-w-md bg-gray-800 rounded-lg shadow-md p-6">
+        <h2 className="text-2xl font-bold mb-4 text-center">Employee Verification</h2>
 
-      <input
-        type="text"
-        placeholder="Search your organization..."
-        value={orgSearch}
-        onChange={(e) => setOrgSearch(e.target.value)}
-      />
-      <button onClick={handleSearch}>Search</button>
+        <div className="mb-4">
+          <input
+            type="text"
+            placeholder="Enter your organization name"
+            className="w-full p-2 rounded text-black"
+            value={orgSearch}
+            onChange={(e) => setOrgSearch(e.target.value)}
+          />
+          <button
+            onClick={handleSearch}
+            disabled={loading}
+            className="mt-2 w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded"
+          >
+            {loading ? 'Searching...' : 'Search Organization'}
+          </button>
+        </div>
 
-      {organization && (
-        <>
-          <h3>{organization.name}</h3>
-          {organization.verificationFields.map((field) => (
-            <div key={field}>
+        {organization && (
+          <>
+            <h3 className="text-xl font-semibold mb-2 text-center">{organization.name}</h3>
+            {organization.verificationFields.map((field) => (
               <input
+                key={field}
                 type="text"
                 placeholder={`Enter your ${field}`}
+                className="w-full p-2 mb-2 rounded text-black"
                 onChange={(e) =>
                   setParams((prev) => ({ ...prev, [field]: e.target.value }))
                 }
               />
-            </div>
-          ))}
-          <button onClick={handleVerify}>Submit Verification</button>
-        </>
-      )}
+            ))}
+            <button
+              onClick={handleVerify}
+              disabled={loading}
+              className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded"
+            >
+              {loading ? 'Verifying...' : 'Submit Verification'}
+            </button>
+          </>
+        )}
 
-      {verified && (
-        <p style={{ color: 'green' }}>
-          ✅ You are verified. Now you can post anonymously!
-        </p>
-      )}
+        {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
+      </div>
     </div>
   );
 };
