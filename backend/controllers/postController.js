@@ -155,3 +155,48 @@ exports.reactToComment = async (req, res) => {
     res.status(500).json({ message: 'Error reacting to comment' });
   }
 };
+
+exports.editPost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const { content, mediaUrl, postType } = req.body;
+
+    const updatedPost = await Post.findByIdAndUpdate(
+      postId,
+      {
+        ...(content && { content }),
+        ...(mediaUrl && { mediaUrl }),
+        ...(postType && { postType }),
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+
+    if (!updatedPost) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.status(200).json({ message: 'Post updated', post: updatedPost });
+  } catch (err) {
+    console.error("Error editing post:", err);
+    res.status(500).json({ message: 'Error editing post' });
+  }
+};
+
+// Delete a post
+exports.deletePost = async (req, res) => {
+  try {
+    const { postId } = req.params;
+
+    const deletedPost = await Post.findByIdAndDelete(postId);
+
+    if (!deletedPost) {
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    res.status(200).json({ message: 'Post deleted' });
+  } catch (err) {
+    console.error("Error deleting post:", err);
+    res.status(500).json({ message: 'Error deleting post' });
+  }
+};

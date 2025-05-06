@@ -1,5 +1,5 @@
 // src/pages/CreatePost.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { api } from '../api/axios';
 import { uploadMedia } from '../utils/uploadMedia';
 
@@ -11,6 +11,24 @@ const CreatePost = () => {
   const [media, setMedia] = useState([]);
   const [mediaFile, setMediaFile] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [editingPostId, setEditingPostId] = useState(null);
+  const [posts, setPosts] = useState([]);
+
+  const ORG_ID = 'your_org_id'; // Replace with real orgId or prop/context
+
+  // Fetch existing posts
+  const fetchPosts = async () => {
+    try {
+      const res = await api.get(`/posts/${ORG_ID}`);
+      setPosts(res.data);
+    } catch (err) {
+      console.error('Failed to load posts:', err);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
 
   const handleMediaUpload = async () => {
     if (!mediaFile) return;
@@ -27,26 +45,45 @@ const CreatePost = () => {
     }
   };
 
+  const resetForm = () => {
+    setPostType('feedback');
+    setContent('');
+    setRegion('');
+    setDepartment('');
+    setMedia([]);
+    setEditingPostId(null);
+  };
+
   const handleSubmit = async () => {
     try {
-      await api.post('/posts', {
-        organizationId: 'your_org_id', // Replace with actual orgId logic
-        postType,
-        content,
-        region: region || undefined,
-        department: department || undefined,
-        media,
-        isAnonymous: true,
-      });
-      alert('Post created successfully!');
-      // Reset form
-      setContent('');
-      setRegion('');
-      setDepartment('');
-      setMedia([]);
+      if (editingPostId) {
+        // Edit mode
+        await api.put(`/posts/${editingPostId}`, {
+          postType,
+          content,
+          media: media,
+          region: region || undefined,
+          department: department || undefined,
+        });
+        alert('Post updated successfully!');
+      } else {
+        // Create mode
+        await api.post('/posts', {
+          organizationId: ORG_ID,
+          postType,
+          content,
+          region: region || undefined,
+          department: department || undefined,
+          media,
+          isAnonymous: true,
+        });
+        alert('Post created successfully!');
+      }
+      resetForm();
+      fetchPosts();
     } catch (err) {
       console.error(err);
-      alert('Error creating post');
+      alert('Error submitting post');
     }
   };
 
@@ -56,9 +93,30 @@ const CreatePost = () => {
     setMedia(newMedia);
   };
 
+  const handleEdit = (post) => {
+    setEditingPostId(post._id);
+    setPostType(post.postType);
+    setContent(post.content);
+    setRegion(post.region || '');
+    setDepartment(post.department || '');
+    setMedia(post.media || []);
+  };
+
+  const handleDelete = async (postId) => {
+    if (!window.confirm('Are you sure you want to delete this post?')) return;
+    try {
+      await api.delete(`/posts/${postId}`);
+      alert('Post deleted');
+      fetchPosts();
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      alert('Failed to delete post');
+    }
+  };
+
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 20 }}>
-      <h2>Create a Post</h2>
+    <div style={{ maxWidth: 700, margin: '0 auto', padding: 20 }}>
+      <h2>{editingPostId ? 'Edit Post' : 'Create a Post'}</h2>
 
       <label>
         Post Type:
@@ -138,8 +196,32 @@ const CreatePost = () => {
 
       <br />
       <button onClick={handleSubmit} style={{ marginTop: 20 }}>
-        Submit Post
+        {editingPostId ? 'Update Post' : 'Submit Post'}
       </button>
+      {editingPostId && (
+        <button onClick={resetForm} style={{ marginLeft: 10 }}>
+          Cancel Edit
+        </button>
+      )}
+
+      {/* List of existing posts */}
+      <hr style={{ margin: '40px 0' }} />
+      <h3>Your Posts</h3>
+      {posts.length === 0 ? (
+        <p>No posts yet.</p>
+      ) : (
+        <ul>
+          {posts.map((post) => (
+            <li key={post._id} style={{ marginBottom: 20 }}>
+              <p><strong>{post.postType.toUpperCase()}</strong> — {post.content}</p>
+              <small>Region: {post.region || 'N/A'} | Department: {post.department || 'N/A'}</small>
+              <br />
+              <button onClick={() => handleEdit(post)}>Edit</button>{' '}
+              <button onClick={() => handleDelete(post._id)}>Delete</button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 };

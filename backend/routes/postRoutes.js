@@ -7,7 +7,9 @@ const {
   editComment,
   getPostsByOrg,
   getPostStats,
-  reactToComment
+  reactToComment,
+  editPost,
+  deletePost
 } = require('../controllers/postController');
 
 const router = express.Router();
@@ -17,6 +19,11 @@ router.post('/', createPost);
 router.post('/:postId/like', reactToPost);
 router.post('/:postId/comment', commentOnPost);
 router.post('/:postId/comment/:commentId/react', reactToComment);
+
+// Edit and delete posts
+router.put('/:postId', editPost);                            
+router.delete('/:postId', deletePost);                      
+
 
 // Edit and delete comments
 router.put('/:postId/comment/:commentId', editComment);
