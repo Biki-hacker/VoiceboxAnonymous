@@ -26,19 +26,11 @@ function App() {
         <Route path="/forgotpassword" element={<ForgotPassword />} />
         <Route path="/updatepassword" element={<UpdatePassword />} />
 
-        {/* Protected Routes */}
-        <Route
-          path="/verify"
-          element={
-            <ProtectedRoute>
-              <EmployeeVerification />
-            </ProtectedRoute>
-          }
-        />
+        {/* Protected Routes with Role-Based Access */}
         <Route
           path="/admin-dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="admin">
               <AdminDashboard />
             </ProtectedRoute>
           }
@@ -46,15 +38,23 @@ function App() {
         <Route
           path="/employee-dashboard"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="employee">
               <EmployeeDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/verify"
+          element={
+            <ProtectedRoute requiredRole="employee">
+              <EmployeeVerification />
             </ProtectedRoute>
           }
         />
         <Route
           path="/create-post"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="employee">
               <CreatePost />
             </ProtectedRoute>
           }
@@ -62,7 +62,7 @@ function App() {
         <Route
           path="/posts"
           element={
-            <ProtectedRoute>
+            <ProtectedRoute requiredRole="employee">
               <PostsFeed />
             </ProtectedRoute>
           }

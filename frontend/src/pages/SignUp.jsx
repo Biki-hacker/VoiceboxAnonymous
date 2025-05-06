@@ -8,6 +8,7 @@ export default function SignUp() {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState('employee'); // default role
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
@@ -22,10 +23,16 @@ export default function SignUp() {
       return;
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error: signUpError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { role }, // store role in user metadata
+      },
+    });
 
-    if (error) {
-      setError(error.message);
+    if (signUpError) {
+      setError(signUpError.message);
     } else {
       setMessage("Check your inbox to confirm your email.");
       setTimeout(() => navigate('/signin'), 3000);
@@ -36,6 +43,7 @@ export default function SignUp() {
     <div className="min-h-screen flex items-center justify-center bg-gray-900 text-white">
       <form onSubmit={handleSignUp} className="bg-gray-800 p-6 rounded-lg shadow-lg w-full max-w-sm space-y-4">
         <h2 className="text-2xl font-bold">Sign Up</h2>
+
         <input
           type="email"
           placeholder="Email"
@@ -43,6 +51,7 @@ export default function SignUp() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
+
         <input
           type={showPassword ? 'text' : 'password'}
           placeholder="Password"
@@ -50,6 +59,7 @@ export default function SignUp() {
           onChange={(e) => setPassword(e.target.value)}
           required
         />
+
         <input
           type={showPassword ? 'text' : 'password'}
           placeholder="Confirm Password"
@@ -57,15 +67,33 @@ export default function SignUp() {
           onChange={(e) => setConfirmPassword(e.target.value)}
           required
         />
+
         <div className="flex items-center space-x-2">
           <input type="checkbox" onChange={() => setShowPassword(!showPassword)} />
           <label className="text-sm">Show Password</label>
         </div>
+
+        {/* Role selection */}
+        <label className="block text-sm">
+          I am signing up as:
+          <select
+            className="w-full mt-1 p-2 rounded text-black"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+          >
+            <option value="employee">Employee</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+
         <button className="w-full bg-white text-black py-2 rounded hover:bg-gray-300">Register</button>
+
         {message && <p className="text-green-400 text-sm">{message}</p>}
         {error && <p className="text-red-400 text-sm">{error}</p>}
+
         <p className="text-sm text-gray-300">
-          Already have an account? <Link to="/signin" className="text-blue-400">Sign In</Link>
+          Already have an account?{' '}
+          <Link to="/signin" className="text-blue-400">Sign In</Link>
         </p>
       </form>
     </div>

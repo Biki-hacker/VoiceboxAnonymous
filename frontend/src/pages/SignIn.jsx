@@ -2,7 +2,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
-import { api } from '../api/axios';
 
 const SignIn = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -22,17 +21,26 @@ const SignIn = () => {
 
     const { email, password } = formData;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
-      setMessage(error.message);
+    if (signInError) {
+      setMessage(signInError.message);
       return;
     }
 
     try {
-      // Get user role from MongoDB using email
-      const res = await api.get(`/users/role?email=${email}`);
-      const role = res.data.role;
+      // Fetch user metadata to get role
+      const {
+        data: { user },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError) {
+        setMessage('Failed to fetch user details.');
+        return;
+      }
+
+      const role = user?.user_metadata?.role;
 
       if (role === 'admin') {
         navigate('/admin-dashboard');
@@ -42,7 +50,7 @@ const SignIn = () => {
         setMessage('Unknown user role.');
       }
     } catch (err) {
-      setMessage('Error fetching user role. Please try again.');
+      setMessage('Unexpected error. Please try again.');
     }
   };
 
