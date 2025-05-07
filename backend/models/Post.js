@@ -1,3 +1,4 @@
+// models/Post.js
 const mongoose = require('mongoose');
 
 // Sub-schema for a comment
@@ -25,11 +26,12 @@ const commentSchema = new mongoose.Schema({
   }
 });
 
-// Main schema for posts
+// Main Post schema
 const postSchema = new mongoose.Schema(
   {
     orgId: {
-      type: String,
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Organization',
       required: true
     },
     postType: {
@@ -42,7 +44,7 @@ const postSchema = new mongoose.Schema(
       required: true
     },
     mediaUrls: {
-      type: [String], // Changed from single `mediaUrl` to array
+      type: [String],
       default: []
     },
     region: {
@@ -61,7 +63,7 @@ const postSchema = new mongoose.Schema(
     },
     comments: [commentSchema]
   },
-  { timestamps: true }
+  { timestamps: true } // Adds createdAt and updatedAt
 );
 
 module.exports = mongoose.model('Post', postSchema);

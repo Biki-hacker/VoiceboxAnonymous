@@ -1,23 +1,45 @@
+// backend/controllers/authController.js
 const User = require('../models/User');
 
+// Verify employee by matching organization and verification parameters
 exports.verifyEmployee = async (req, res) => {
   try {
-    const { organizationId, verificationParams } = req.body;
+    const { organizationId, verificationParams, email } = req.body;
 
-    // Query using nested matching logic
-    const match = await User.findOne({
+    const query = {
       organizationId,
+      email,
       ...Object.entries(verificationParams).reduce((acc, [key, val]) => {
         acc[`verificationParams.${key}`] = val;
         return acc;
       }, {})
-    });
+    };
 
-    if (match) return res.status(200).json({ success: true, userId: match._id });
+    const existingUser = await User.findOne(query);
+
+    if (existingUser) {
+      existingUser.verified = true;
+      await existingUser.save();
+      return res.status(200).json({ success: true, userId: existingUser._id });
+    }
 
     res.status(401).json({ success: false, message: 'Verification failed' });
   } catch (err) {
     console.error('verifyEmployee error:', err);
     res.status(500).json({ success: false, message: 'Internal Server Error' });
+  }
+};
+
+// Check if employee is already verified
+exports.checkVerificationStatus = async (req, res) => {
+  try {
+    const { email } = req.query;
+    const user = await User.findOne({ email });
+
+    if (!user) return res.status(404).json({ verified: false });
+    res.json({ verified: user.verified, orgId: user.organizationId });
+  } catch (err) {
+    console.error("Verification status check error:", err);
+    res.status(500).json({ verified: false });
   }
 };

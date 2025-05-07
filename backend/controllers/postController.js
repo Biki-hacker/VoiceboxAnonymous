@@ -1,6 +1,7 @@
+// backend/controllers/postController.js
 const Post = require('../models/Post');
 
-// Create a new post
+// Create new post
 exports.createPost = async (req, res) => {
   try {
     const {
@@ -24,7 +25,7 @@ exports.createPost = async (req, res) => {
       mediaUrls: mediaUrls || [],
       region: region || null,
       department: department || null,
-      isAnonymous: isAnonymous !== false // default true
+      isAnonymous: isAnonymous !== false
     });
 
     await newPost.save();
@@ -35,45 +36,34 @@ exports.createPost = async (req, res) => {
   }
 };
 
-// Get all posts by organization ID
 exports.getPostsByOrg = async (req, res) => {
   try {
     const { orgId } = req.params;
-
     const posts = await Post.find({ orgId }).sort({ createdAt: -1 });
     res.status(200).json(posts);
   } catch (err) {
-    console.error("Error fetching posts:", err);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: 'Error fetching posts' });
   }
 };
 
-// Get post stats by type
 exports.getPostStats = async (req, res) => {
   try {
     const { orgId } = req.params;
-
     const stats = await Post.aggregate([
       { $match: { orgId } },
       { $group: { _id: "$postType", count: { $sum: 1 } } }
     ]);
-
     res.status(200).json(stats);
   } catch (err) {
-    console.error("Error getting post stats:", err);
-    res.status(500).json({ message: "Internal Server Error" });
+    res.status(500).json({ message: 'Error getting stats' });
   }
 };
 
 exports.reactToPost = async (req, res) => {
   const { postId } = req.params;
-
   try {
     const post = await Post.findById(postId);
-    if (!post) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
+    if (!post) return res.status(404).json({ message: 'Post not found' });
     post.likes += 1;
     await post.save();
     res.status(200).json({ message: 'Post liked!', post });
@@ -159,44 +149,33 @@ exports.reactToComment = async (req, res) => {
 exports.editPost = async (req, res) => {
   try {
     const { postId } = req.params;
-    const { content, mediaUrl, postType } = req.body;
+    const { content, postType, mediaUrls } = req.body;
 
     const updatedPost = await Post.findByIdAndUpdate(
       postId,
       {
         ...(content && { content }),
-        ...(mediaUrl && { mediaUrl }),
         ...(postType && { postType }),
+        ...(mediaUrls && { mediaUrls }),
         updatedAt: new Date()
       },
       { new: true }
     );
 
-    if (!updatedPost) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
+    if (!updatedPost) return res.status(404).json({ message: 'Post not found' });
     res.status(200).json({ message: 'Post updated', post: updatedPost });
   } catch (err) {
-    console.error("Error editing post:", err);
     res.status(500).json({ message: 'Error editing post' });
   }
 };
 
-// Delete a post
 exports.deletePost = async (req, res) => {
   try {
     const { postId } = req.params;
-
-    const deletedPost = await Post.findByIdAndDelete(postId);
-
-    if (!deletedPost) {
-      return res.status(404).json({ message: 'Post not found' });
-    }
-
+    const deleted = await Post.findByIdAndDelete(postId);
+    if (!deleted) return res.status(404).json({ message: 'Post not found' });
     res.status(200).json({ message: 'Post deleted' });
   } catch (err) {
-    console.error("Error deleting post:", err);
     res.status(500).json({ message: 'Error deleting post' });
   }
 };

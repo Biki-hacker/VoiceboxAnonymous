@@ -1,3 +1,4 @@
+// models/Organization.js
 const mongoose = require('mongoose');
 
 const organizationSchema = new mongoose.Schema({
@@ -6,8 +7,12 @@ const organizationSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  adminEmail: {
+    type: String,
+    required: true
+  },
   verificationSchema: {
-    type: [String], // e.g., ["department", "region", "jobRole"]
+    type: [String], // Fields used for employee verification (e.g., ["employeeId", "region", "department"])
     required: true
   },
   createdAt: {
