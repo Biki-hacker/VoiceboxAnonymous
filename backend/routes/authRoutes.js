@@ -5,6 +5,10 @@ const {
   checkVerificationStatus
 } = require('../controllers/authController');
 
+const { handleSupabaseWebhook } = require('../controllers/authController');
+router.post('/supabase/webhook', handleSupabaseWebhook);
+
+
 const router = express.Router();
 
 router.post('/verify', verifyEmployee);

@@ -60,3 +60,29 @@ exports.checkVerificationStatus = async (req, res) => {
     res.status(500).json({ verified: false, error: 'Internal error' });
   }
 };
+
+// webhook triggered after signup
+exports.handleSupabaseWebhook = async (req, res) => {
+  try {
+    const event = req.body;
+    const { email, user_metadata } = event.record;
+
+    const role = user_metadata?.role;
+    if (!role) {
+      return res.status(400).json({ success: false, message: 'Missing role in metadata' });
+    }
+
+    const newUser = new User({
+      email,
+      role,
+      verificationParams: {}, // can be updated later by employee
+      organizationId: null    // can be updated later by verification
+    });
+
+    await newUser.save();
+    res.status(201).json({ success: true });
+  } catch (err) {
+    console.error('Webhook error:', err);
+    res.status(500).json({ success: false, message: 'Webhook failed' });
+  }
+};
