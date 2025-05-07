@@ -9,5 +9,7 @@ const router = express.Router();
 
 router.post('/verify', verifyEmployee);
 router.get('/is-verified', checkVerificationStatus); // new route to check verification status
+router.get('/verify-status', checkVerificationStatus);
+
 
 module.exports = router;

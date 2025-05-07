@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { api } from '../api/axios';
 
 const SignIn = () => {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -29,27 +30,37 @@ const SignIn = () => {
     }
 
     try {
-      // Fetch user metadata to get role
       const {
         data: { user },
         error: userError,
       } = await supabase.auth.getUser();
 
-      if (userError) {
+      if (userError || !user) {
         setMessage('Failed to fetch user details.');
         return;
       }
 
-      const role = user?.user_metadata?.role;
+      const role = user.user_metadata?.role;
 
       if (role === 'admin') {
+        localStorage.setItem('role', 'admin');
         navigate('/admin-dashboard');
       } else if (role === 'employee') {
-        navigate('/verify');
+        // Check backend for employee verification status
+        const verifyRes = await api.get(`/auth/verify-status?email=${email}`);
+        if (verifyRes.data.verified) {
+          localStorage.setItem('role', 'employee');
+          localStorage.setItem('orgId', verifyRes.data.orgId); // Save orgId for posts
+          navigate('/employee-dashboard');
+        } else {
+          localStorage.setItem('role', 'employee');
+          navigate('/verify');
+        }
       } else {
         setMessage('Unknown user role.');
       }
     } catch (err) {
+      console.error(err);
       setMessage('Unexpected error. Please try again.');
     }
   };

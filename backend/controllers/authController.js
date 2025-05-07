@@ -43,3 +43,20 @@ exports.checkVerificationStatus = async (req, res) => {
     res.status(500).json({ verified: false });
   }
 };
+
+// GET /auth/verify-status?email=example@email.com
+exports.checkVerificationStatus = async (req, res) => {
+  try {
+    const email = req.query.email;
+    const user = await User.findOne({ 'verificationParams.email': email });
+
+    if (user) {
+      return res.status(200).json({ verified: true, orgId: user.organizationId });
+    } else {
+      return res.status(200).json({ verified: false });
+    }
+  } catch (err) {
+    console.error('checkVerificationStatus error:', err);
+    res.status(500).json({ verified: false, error: 'Internal error' });
+  }
+};
