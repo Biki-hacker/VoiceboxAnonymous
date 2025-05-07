@@ -1,7 +1,11 @@
-const logger = (req, res, next) => {
-    console.log(`${req.method} ${req.originalUrl}`);
-    next();
-  };
-  
-  module.exports = logger;
-  
+// middleware/errorHandler.js
+const errorHandler = (err, req, res, next) => {
+  console.error('🔴 Error:', err.stack || err);
+
+  res.status(err.status || 500).json({
+    success: false,
+    message: err.message || 'Internal Server Error'
+  });
+};
+
+module.exports = errorHandler;
