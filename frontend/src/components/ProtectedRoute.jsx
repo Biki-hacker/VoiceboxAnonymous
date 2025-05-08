@@ -13,26 +13,25 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     );
   }
 
-  // If no session, redirect to sign in
+  // No session = Not signed in
   if (!session) {
     return <Navigate to="/signin" />;
   }
 
-  const userRole = session.user.user_metadata?.role;
+  // Get role and orgId from localStorage (Mongo-based auth system)
+  const userRole = localStorage.getItem('role');
+  const orgId = localStorage.getItem('orgId');
 
-  // If a specific role is required but doesn't match user's role
+  // Role mismatch
   if (requiredRole && userRole !== requiredRole) {
-    console.warn(`Access denied. Required role: ${requiredRole}, but user is: ${userRole}`);
+    console.warn(`Access denied. Required: ${requiredRole}, Found: ${userRole}`);
     return <Navigate to="/signin" />;
   }
 
-  // If employee is required to have orgId, check that
-  if (userRole === 'employee') {
-    const orgId = localStorage.getItem('orgId');
-    if (!orgId) {
-      console.warn('Employee user has no orgId in localStorage.');
-      return <Navigate to="/signin" />;
-    }
+  // For employee, make sure orgId exists
+  if (userRole === 'employee' && !orgId) {
+    console.warn('Employee user has no organization ID.');
+    return <Navigate to="/verify" />;
   }
 
   return children;
