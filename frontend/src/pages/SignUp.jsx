@@ -23,18 +23,20 @@ export default function SignUp() {
       return;
     }
 
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { role }, // store role in user metadata
-      },
-    });
+    // Corrected: two separate args—credentials, then options including data for user_metadata
+    const { data, error: signUpError } = await supabase.auth.signUp(
+      { email, password },
+      {
+        data: { role },
+        emailRedirectTo: 'http://localhost:5173/updatepassword',
+      }
+    );
 
     if (signUpError) {
       setError(signUpError.message);
     } else {
       setMessage("Check your inbox to confirm your email.");
+      // After confirmation, Supabase will fire the webhook which inserts into MongoDB
       setTimeout(() => navigate('/signin'), 3000);
     }
   };
@@ -73,7 +75,6 @@ export default function SignUp() {
           <label className="text-sm">Show Password</label>
         </div>
 
-        {/* Role selection */}
         <label className="block text-sm">
           I am signing up as:
           <select
@@ -92,8 +93,7 @@ export default function SignUp() {
         {error && <p className="text-red-400 text-sm">{error}</p>}
 
         <p className="text-sm text-gray-300">
-          Already have an account?{' '}
-          <Link to="/signin" className="text-blue-400">Sign In</Link>
+          Already have an account? <Link to="/signin" className="text-blue-400">Sign In</Link>
         </p>
       </form>
     </div>

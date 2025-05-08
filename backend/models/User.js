@@ -2,18 +2,16 @@
 const mongoose = require('mongoose');
 
 const userSchema = new mongoose.Schema({
-  email: {
-    type: String,
-    required: true
-  },
+  email: { type: String, required: true, unique: true },
+  role: { type: String, enum: ['admin', 'employee'], required: true },
   organizationId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Organization',
-    required: true
+    default: null
   },
   verificationParams: {
     type: Object,
-    required: true
+    default: {}
   },
   verified: {
     type: Boolean,

@@ -46,11 +46,10 @@ const SignIn = () => {
         localStorage.setItem('role', 'admin');
         navigate('/admin-dashboard');
       } else if (role === 'employee') {
-        // Check backend for employee verification status
         const verifyRes = await api.get(`/auth/verify-status?email=${email}`);
         if (verifyRes.data.verified) {
           localStorage.setItem('role', 'employee');
-          localStorage.setItem('orgId', verifyRes.data.orgId); // Save orgId for posts
+          localStorage.setItem('orgId', verifyRes.data.orgId);
           navigate('/employee-dashboard');
         } else {
           localStorage.setItem('role', 'employee');
