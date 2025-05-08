@@ -1,19 +1,23 @@
-// backend/routes/authRoutes.js
+// routes/authRoutes.js
 const express = require('express');
 const router = express.Router();
 const {
+  registerUser,
   verifyEmployee,
   checkVerificationStatus,
   handleSupabaseWebhook
 } = require('../controllers/authController');
 
-// Supabase Webhook for signup event
+// Direct registration (after Supabase signup)
+router.post('/register', registerUser);
+
+// (Optional) disable webhook or leave as no-op
 router.post('/supabase/webhook', handleSupabaseWebhook);
 
-// Employee Verification Route
+// Employee verification
 router.post('/verify', verifyEmployee);
 
-// Check if already verified (called after sign-in)
+// Check status + role
 router.get('/verify-status', checkVerificationStatus);
 
 module.exports = router;
