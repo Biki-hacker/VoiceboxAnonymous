@@ -53,17 +53,17 @@ const AdminDashboard = () => {
     
     // If user is not an admin, redirect
     if (storedRole !== 'admin') {
-      navigate('/dashboard', { state: { message: 'Admin access required' } });
+      navigate('/signin', { state: { message: 'Admin access required' } });
       return;
     }
     
     // Set user data from localStorage
     setUserData({ email: storedEmail, role: storedRole });
     
-    // Verify user with MongoDB Atlas
-    api.get('/users/verify', { params: { email: storedEmail } })
+    // Verify user with our backend using auth/verify-status
+    api.get('/auth/verify-status', { params: { email: storedEmail } })
       .then(res => {
-        if (res.data.role !== 'admin') {
+        if (!res.data.success || res.data.role !== 'admin') {
           // User is not an admin in the database
           localStorage.removeItem('email');
           localStorage.removeItem('role');
@@ -173,467 +173,390 @@ const AdminDashboard = () => {
 
   if (error) {
     return (
-      <div style={{ padding: '2rem', textAlign: 'center' }}>
-        <h2>Error</h2>
-        <p style={{ color: 'red' }}>{error}</p>
-        <button
-          style={{
-            padding: '0.5rem 1rem',
-            backgroundColor: '#4caf50',
-            color: 'white',
-            border: 'none',
-            borderRadius: '5px',
-            cursor: 'pointer'
-          }}
-          onClick={() => window.location.reload()}
-        >
-          Try Again
-        </button>
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-900 text-white p-4">
+        <div className="w-full max-w-2xl bg-gray-800 rounded-lg shadow-md p-6">
+          <h2 className="text-2xl font-bold mb-4 text-center">Error</h2>
+          <p className="text-red-400 text-center">{error}</p>
+          <div className="flex justify-center mt-4">
+            <button
+              className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+              onClick={() => window.location.reload()}
+            >
+              Try Again
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <h2>Admin Dashboard</h2>
+    <div className="min-h-screen bg-gray-900 text-white p-4">
+      <div className="max-w-6xl mx-auto">
+        <h2 className="text-2xl font-bold mb-4">Admin Dashboard</h2>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div>
-          <button
-            style={{
-              margin: '1rem 0',
-              padding: '0.5rem 1rem',
-              backgroundColor: '#4caf50',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer',
-              marginRight: '0.5rem'
-            }}
-            onClick={() => {
-              const name = prompt('Enter organization name:');
-              if (!name) return;
-              
-              api.post('/organizations', {
-                name,
-                adminEmail: userData.email
-              })
-              .then(res => {
-                alert('Organization created successfully!');
-                // Add the new org to the state
-                const newOrg = res.data;
-                setOrganizations(prev => [newOrg, ...prev]);
-                selectOrganization(newOrg);
-              })
-              .catch(err => {
-                console.error('Error creating organization:', err);
-                alert('Failed to create organization. ' + (err.response?.data?.message || 'Please try again.'));
-              });
-            }}
-          >
-            ➕ Add Company
-          </button>
-          
-          {selectedOrg && (
+        <div className="flex justify-between items-center flex-wrap gap-2 mb-4">
+          <div>
             <button
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#2196f3',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer'
-              }}
+              className="bg-green-500 hover:bg-green-600 text-white py-2 px-4 rounded mr-2"
               onClick={() => {
-                const currentFields = selectedOrg.verificationFields || [];
-                const fieldsStr = prompt('Enter employee verification parameters (comma-separated):', currentFields.join(', '));
+                const name = prompt('Enter organization name:');
+                if (!name) return;
                 
-                if (fieldsStr === null) return; // User cancelled
-                
-                const fields = fieldsStr.split(',').map(f => f.trim()).filter(Boolean);
-                
-                api.patch(`/organizations/${selectedOrg._id}`, {
-                  verificationFields: fields
+                api.post('/organizations', {
+                  name,
+                  adminEmail: userData.email
                 })
                 .then(res => {
-                  alert('Verification parameters updated successfully!');
-                  // Update the org in state
-                  setSelectedOrg({...selectedOrg, verificationFields: fields});
-                  // Update in organizations list
-                  setOrganizations(orgs => 
-                    orgs.map(o => o._id === selectedOrg._id ? {...o, verificationFields: fields} : o)
-                  );
+                  alert('Organization created successfully!');
+                  // Add the new org to the state
+                  const newOrg = res.data;
+                  setOrganizations(prev => [newOrg, ...prev]);
+                  selectOrganization(newOrg);
                 })
                 .catch(err => {
-                  console.error('Error updating verification parameters:', err);
-                  alert('Failed to update verification parameters. Please try again.');
+                  console.error('Error creating organization:', err);
+                  alert('Failed to create organization. ' + (err.response?.data?.message || 'Please try again.'));
                 });
               }}
             >
-              Edit Verification Parameters
+              ➕ Add Company
             </button>
-          )}
-        </div>
-
-        <div>
-          {selectedOrg && (
-            <button
-              style={{
-                padding: '0.5rem 1rem',
-                backgroundColor: '#ff9800',
-                color: 'white',
-                border: 'none',
-                borderRadius: '5px',
-                cursor: 'pointer',
-                marginRight: '0.5rem'
-              }}
-              onClick={() => {
-                const postType = prompt('Enter post type (feedback, complaint, suggestion, public):', 'feedback');
-                if (!postType || !['feedback', 'complaint', 'suggestion', 'public'].includes(postType)) {
-                  alert('Invalid post type');
-                  return;
-                }
-                
-                const content = prompt('Enter post content:');
-                if (!content) return;
-                
-                const region = prompt('Enter region (optional):');
-                const department = prompt('Enter department (optional):');
-                
-                api.post('/posts', {
-                  organizationId: selectedOrg._id,
-                  postType,
-                  content,
-                  region: region || undefined,
-                  department: department || undefined,
-                  createdBy: userData.email
-                })
-                .then(res => {
-                  alert('Post created successfully!');
-                  // Add the new post to the state
-                  setPosts(prev => [res.data, ...prev]);
-                  // Refresh stats
-                  api.get(`/posts/stats/${selectedOrg._id}`).then(statsRes => {
-                    setStats(statsRes.data);
-                  });
-                })
-                .catch(err => {
-                  console.error('Error creating post:', err);
-                  alert('Failed to create post. Please try again.');
-                });
-              }}
-            >
-              Add Test Post
-            </button>
-          )}
-          
-          <button
-            style={{
-              padding: '0.5rem 1rem',
-              backgroundColor: '#f44336',
-              color: 'white',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: 'pointer'
-            }}
-            onClick={() => {
-              // Just clear localStorage and redirect
-              localStorage.removeItem('email');
-              localStorage.removeItem('role');
-              navigate('/signin');
-            }}
-          >
-            Log Out
-          </button>
-        </div>
-      </div>
-
-      {loading && organizations.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>
-          <p>Loading organizations...</p>
-        </div>
-      ) : (
-        <>
-          <h3>Your Organizations</h3>
-          {organizations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1rem', border: '1px dashed #ccc', borderRadius: '5px' }}>
-              <p>You don't have any organizations yet.</p>
-              <p>Click "Add Company" to create your first organization.</p>
-            </div>
-          ) : (
-            <ul style={{ listStyle: 'none', paddingLeft: 0 }}>
-              {organizations.map(org => (
-                <li
-                  key={org._id}
-                  onClick={() => selectOrganization(org)}
-                  style={{
-                    padding: '0.5rem',
-                    border: '1px solid #ccc',
-                    borderRadius: '5px',
-                    marginBottom: '0.5rem',
-                    backgroundColor:
-                      selectedOrg?._id === org._id ? '#e0f7fa' : '#fff',
-                    cursor: 'pointer'
-                  }}
-                >
-                  {org.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      )}
-
-      {loading && selectedOrg ? (
-        <div style={{ textAlign: 'center', padding: '2rem' }}>
-          <p>Loading organization data...</p>
-        </div>
-      ) : selectedOrg ? (
-        <>
-          <div style={{ marginTop: '2rem' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-              <div>
-                <h3>Organization: {selectedOrg.name}</h3>
-                <p>Organization ID: <code>{selectedOrg._id}</code></p>
-                <p>Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p>
-              </div>
-              
-              <div style={{ textAlign: 'right' }}>
-                <button
-                  style={{
-                    padding: '0.5rem 1rem',
-                    backgroundColor: '#f44336',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '5px',
-                    cursor: 'pointer'
-                  }}
-                  onClick={() => {
-                    if (!window.confirm(`Are you sure you want to delete "${selectedOrg.name}"? This action cannot be undone.`)) {
-                      return;
-                    }
-                    
-                    api.delete(`/organizations/${selectedOrg._id}`)
-                    .then(() => {
-                      alert('Organization deleted successfully');
-                      // Remove from state
-                      setOrganizations(prev => prev.filter(o => o._id !== selectedOrg._id));
-                      setSelectedOrg(null);
-                      setPosts([]);
-                      setStats([]);
-                    })
-                    .catch(err => {
-                      console.error('Error deleting organization:', err);
-                      alert('Failed to delete organization. Please try again.');
-                    });
-                  }}
-                >
-                  Delete Organization
-                </button>
-              </div>
-            </div>
             
-            <div style={{ marginTop: '1rem', padding: '1rem', border: '1px solid #e0e0e0', borderRadius: '5px', backgroundColor: '#f9f9f9' }}>
-              <h4>Employee Verification Parameters:</h4>
-              {selectedOrg.verificationFields && selectedOrg.verificationFields.length > 0 ? (
-                <>
-                  <ul>
-                    {selectedOrg.verificationFields.map((param, i) => (
-                      <li key={i}>{param}</li>
-                    ))}
-                  </ul>
-                  <p><small>These fields are required for employee verification during registration.</small></p>
-                </>
-              ) : (
-                <>
-                  <p>No verification parameters set.</p>
-                  <p><small>Employees can register without verification. Click "Edit Verification Parameters" to add requirements.</small></p>
-                </>
-              )}
-            </div>
+            {selectedOrg && (
+              <button
+                className="bg-blue-500 hover:bg-blue-600 text-white py-2 px-4 rounded"
+                onClick={() => {
+                  const currentFields = selectedOrg.verificationFields || [];
+                  const fieldsStr = prompt('Enter employee verification parameters (comma-separated):', currentFields.join(', '));
+                  
+                  if (fieldsStr === null) return; // User cancelled
+                  
+                  const fields = fieldsStr.split(',').map(f => f.trim()).filter(Boolean);
+                  
+                  api.patch(`/organizations/${selectedOrg._id}`, {
+                    verificationFields: fields
+                  })
+                  .then(res => {
+                    alert('Verification parameters updated successfully!');
+                    // Update the org in state
+                    setSelectedOrg({...selectedOrg, verificationFields: fields});
+                    // Update in organizations list
+                    setOrganizations(orgs => 
+                      orgs.map(o => o._id === selectedOrg._id ? {...o, verificationFields: fields} : o)
+                    );
+                  })
+                  .catch(err => {
+                    console.error('Error updating verification parameters:', err);
+                    alert('Failed to update verification parameters. Please try again.');
+                  });
+                }}
+              >
+                Edit Verification Parameters
+              </button>
+            )}
           </div>
 
-          <h3>Post Statistics</h3>
-          {stats.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '1rem', border: '1px dashed #ccc', borderRadius: '5px' }}>
-              <p>No post statistics available.</p>
-            </div>
-          ) : (
-            <div
-              style={{
-                display: 'flex',
-                flexWrap: 'wrap',
-                gap: '2rem',
-                marginBottom: '2rem'
+          <div>
+            {selectedOrg && (
+              <button
+                className="bg-orange-500 hover:bg-orange-600 text-white py-2 px-4 rounded mr-2"
+                onClick={() => {
+                  const postType = prompt('Enter post type (feedback, complaint, suggestion, public):', 'feedback');
+                  if (!postType || !['feedback', 'complaint', 'suggestion', 'public'].includes(postType)) {
+                    alert('Invalid post type');
+                    return;
+                  }
+                  
+                  const content = prompt('Enter post content:');
+                  if (!content) return;
+                  
+                  const region = prompt('Enter region (optional):');
+                  const department = prompt('Enter department (optional):');
+                  
+                  api.post('/posts', {
+                    organizationId: selectedOrg._id,
+                    postType,
+                    content,
+                    region: region || undefined,
+                    department: department || undefined,
+                    createdBy: userData.email
+                  })
+                  .then(res => {
+                    alert('Post created successfully!');
+                    // Add the new post to the state
+                    setPosts(prev => [res.data, ...prev]);
+                    // Refresh stats
+                    api.get(`/posts/stats/${selectedOrg._id}`).then(statsRes => {
+                      setStats(statsRes.data);
+                    });
+                  })
+                  .catch(err => {
+                    console.error('Error creating post:', err);
+                    alert('Failed to create post. Please try again.');
+                  });
+                }}
+              >
+                Add Test Post
+              </button>
+            )}
+            
+            <button
+              className="bg-red-500 hover:bg-red-600 text-white py-2 px-4 rounded"
+              onClick={() => {
+                // Just clear localStorage and redirect
+                localStorage.removeItem('email');
+                localStorage.removeItem('role');
+                navigate('/signin');
               }}
             >
-              <div style={{ width: '400px', height: '300px' }}>
-                <Bar data={chartData} options={chartOptions} />
-              </div>
-              <div style={{ width: '400px', height: '300px' }}>
-                <Pie data={chartData} options={chartOptions} />
-              </div>
-            </div>
-          )}
-
-          <h3>Filter Posts</h3>
-          <div
-            style={{
-              display: 'flex',
-              gap: '1rem',
-              marginBottom: '1rem',
-              flexWrap: 'wrap'
-            }}
-          >
-            <select
-              value={selectedType}
-              onChange={e => setSelectedType(e.target.value)}
-              style={{ padding: '0.5rem' }}
-            >
-              <option value="all">All Types</option>
-              <option value="feedback">Feedback</option>
-              <option value="complaint">Complaint</option>
-              <option value="suggestion">Suggestion</option>
-              <option value="public">Public Discussion</option>
-            </select>
-
-            <select
-              value={selectedRegion}
-              onChange={e => setSelectedRegion(e.target.value)}
-              style={{ padding: '0.5rem' }}
-              disabled={uniqueRegions.length === 0}
-            >
-              <option value="all">All Regions</option>
-              {uniqueRegions.map(region => (
-                <option key={region} value={region}>
-                  {region}
-                </option>
-              ))}
-            </select>
-
-            <select
-              value={selectedDepartment}
-              onChange={e => setSelectedDepartment(e.target.value)}
-              style={{ padding: '0.5rem' }}
-              disabled={uniqueDepartments.length === 0}
-            >
-              <option value="all">All Departments</option>
-              {uniqueDepartments.map(dep => (
-                <option key={dep} value={dep}>
-                  {dep}
-                </option>
-              ))}
-            </select>
+              Log Out
+            </button>
           </div>
+        </div>
 
-          <div style={{ marginTop: '1rem' }}>
-            {filteredPosts.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '1rem', border: '1px dashed #ccc', borderRadius: '5px' }}>
-                <p>No posts found matching your filters.</p>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className="md:col-span-1 bg-gray-800 rounded-lg p-4">
+            <h3 className="text-xl font-semibold mb-4">Your Organizations</h3>
+            
+            {loading && organizations.length === 0 ? (
+              <div className="text-center py-4">
+                <p>Loading organizations...</p>
+              </div>
+            ) : organizations.length === 0 ? (
+              <div className="text-center py-4 border border-dashed border-gray-600 rounded-lg">
+                <p>You don't have any organizations yet.</p>
+                <p className="text-sm text-gray-400 mt-2">Click "Add Company" to create your first organization.</p>
               </div>
             ) : (
-              filteredPosts.map((post, i) => (
-                <div
-                  key={i}
-                  style={{
-                    border: '1px solid #ccc',
-                    padding: '1rem',
-                    marginBottom: '1rem',
-                    borderRadius: '8px',
-                    backgroundColor: '#fafafa'
-                  }}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-                    <h4 style={{
-                      display: 'inline-block',
-                      padding: '0.25rem 0.5rem',
-                      backgroundColor: 
-                        post.postType === 'feedback' ? '#4caf50' :
-                        post.postType === 'complaint' ? '#f44336' :
-                        post.postType === 'suggestion' ? '#2196f3' : '#ff9800',
-                      color: 'white',
-                      borderRadius: '4px',
-                      margin: '0 0 0.5rem 0'
-                    }}>
-                      {post.postType.toUpperCase()}
-                    </h4>
-                    
-                    <button
-                      onClick={() => {
-                        if (!window.confirm('Are you sure you want to delete this post?')) {
-                          return;
-                        }
-                        
-                        api.delete(`/posts/${post._id}`)
-                        .then(() => {
-                          // Remove from state
-                          setPosts(prev => prev.filter(p => p._id !== post._id));
-                          // Refresh stats
-                          api.get(`/posts/stats/${selectedOrg._id}`).then(statsRes => {
-                            setStats(statsRes.data);
-                          });
-                        })
-                        .catch(err => {
-                          console.error('Error deleting post:', err);
-                          alert('Failed to delete post. Please try again.');
-                        });
-                      }}
-                      style={{
-                        backgroundColor: 'transparent',
-                        border: 'none',
-                        color: '#f44336',
-                        cursor: 'pointer',
-                        fontSize: '0.8rem'
-                      }}
-                    >
-                      Delete
-                    </button>
+              <ul className="space-y-2">
+                {organizations.map(org => (
+                  <li
+                    key={org._id}
+                    onClick={() => selectOrganization(org)}
+                    className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                      selectedOrg?._id === org._id ? 'bg-blue-900 border-blue-700' : 'bg-gray-700 border-gray-600 hover:bg-gray-600'
+                    }`}
+                  >
+                    {org.name}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
+          <div className="md:col-span-3 bg-gray-800 rounded-lg p-4">
+            {loading && selectedOrg ? (
+              <div className="text-center py-12">
+                <p className="text-lg">Loading organization data...</p>
+              </div>
+            ) : selectedOrg ? (
+              <>
+                <div className="flex justify-between items-start mb-6">
+                  <div>
+                    <h3 className="text-xl font-semibold">{selectedOrg.name}</h3>
+                    <p className="text-gray-400">ID: <code className="bg-gray-700 px-1 rounded text-xs">{selectedOrg._id}</code></p>
+                    <p className="text-gray-400">Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p>
                   </div>
                   
-                  <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
-                    <p>
-                      <strong>Posted by:</strong> {post.createdBy || 'Anonymous'} | {' '}
-                      <strong>Date:</strong> {new Date(post.createdAt).toLocaleString()} | {' '}
-                      <strong>Region:</strong> {post.region || 'N/A'} | {' '}
-                      <strong>Department:</strong> {post.department || 'N/A'}
-                    </p>
+                  <button
+                    className="bg-red-500 hover:bg-red-600 text-white py-1 px-3 rounded text-sm"
+                    onClick={() => {
+                      if (!window.confirm(`Are you sure you want to delete "${selectedOrg.name}"? This action cannot be undone.`)) {
+                        return;
+                      }
+                      
+                      api.delete(`/organizations/${selectedOrg._id}`)
+                      .then(() => {
+                        alert('Organization deleted successfully');
+                        // Remove from state
+                        setOrganizations(prev => prev.filter(o => o._id !== selectedOrg._id));
+                        setSelectedOrg(null);
+                        setPosts([]);
+                        setStats([]);
+                      })
+                      .catch(err => {
+                        console.error('Error deleting organization:', err);
+                        alert('Failed to delete organization. Please try again.');
+                      });
+                    }}
+                  >
+                    Delete Organization
+                  </button>
+                </div>
+                
+                <div className="mb-6 p-4 bg-gray-700 rounded-lg">
+                  <h4 className="font-medium mb-2">Employee Verification Parameters:</h4>
+                  {selectedOrg.verificationFields && selectedOrg.verificationFields.length > 0 ? (
+                    <>
+                      <ul className="list-disc pl-5 mb-2">
+                        {selectedOrg.verificationFields.map((param, i) => (
+                          <li key={i}>{param}</li>
+                        ))}
+                      </ul>
+                      <p className="text-sm text-gray-400">These fields are required for employee verification during registration.</p>
+                    </>
+                  ) : (
+                    <>
+                      <p>No verification parameters set.</p>
+                      <p className="text-sm text-gray-400">Employees can register without verification. Click "Edit Verification Parameters" to add requirements.</p>
+                    </>
+                  )}
+                </div>
+
+                <h3 className="text-xl font-semibold mb-4">Post Statistics</h3>
+                {stats.length === 0 ? (
+                  <div className="text-center py-8 border border-dashed border-gray-600 rounded-lg mb-6">
+                    <p>No post statistics available.</p>
                   </div>
-                  
-                  <div style={{ 
-                    padding: '0.75rem', 
-                    backgroundColor: 'white', 
-                    border: '1px solid #eee',
-                    borderRadius: '4px',
-                    marginBottom: '0.5rem'
-                  }}>
-                    <p>{post.content}</p>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div className="bg-gray-700 p-4 rounded-lg">
+                      <Bar data={chartData} options={chartOptions} />
+                    </div>
+                    <div className="bg-gray-700 p-4 rounded-lg">
+                      <Pie data={chartData} options={chartOptions} />
+                    </div>
                   </div>
-                  
-                  {post.mediaUrl && (
-                    <div style={{ marginTop: '0.5rem' }}>
-                      {post.mediaUrl.match(/\.(jpe?g|png|gif)$/i) ? (
-                        <img
-                          src={post.mediaUrl}
-                          alt="Post media"
-                          style={{ maxWidth: '200px', maxHeight: '200px', objectFit: 'contain' }}
-                        />
-                      ) : (
-                        <a
-                          href={post.mediaUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                )}
+
+                <h3 className="text-xl font-semibold mb-4">Filter Posts</h3>
+                <div className="flex flex-wrap gap-4 mb-6">
+                  <select
+                    value={selectedType}
+                    onChange={e => setSelectedType(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded p-2"
+                  >
+                    <option value="all">All Types</option>
+                    <option value="feedback">Feedback</option>
+                    <option value="complaint">Complaint</option>
+                    <option value="suggestion">Suggestion</option>
+                    <option value="public">Public Discussion</option>
+                  </select>
+
+                  <select
+                    value={selectedRegion}
+                    onChange={e => setSelectedRegion(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded p-2"
+                    disabled={uniqueRegions.length === 0}
+                  >
+                    <option value="all">All Regions</option>
+                    {uniqueRegions.map(region => (
+                      <option key={region} value={region}>
+                        {region}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={selectedDepartment}
+                    onChange={e => setSelectedDepartment(e.target.value)}
+                    className="bg-gray-700 border border-gray-600 rounded p-2"
+                    disabled={uniqueDepartments.length === 0}
+                  >
+                    <option value="all">All Departments</option>
+                    {uniqueDepartments.map(dep => (
+                      <option key={dep} value={dep}>
+                        {dep}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  {filteredPosts.length === 0 ? (
+                    <div className="text-center py-8 border border-dashed border-gray-600 rounded-lg">
+                      <p>No posts found matching your filters.</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {filteredPosts.map((post, i) => (
+                        <div
+                          key={i}
+                          className="border border-gray-600 rounded-lg p-4 bg-gray-700"
                         >
-                          View Media
-                        </a>
-                      )}
+                          <div className="flex justify-between items-start mb-2">
+                            <span className={`inline-block px-2 py-1 rounded text-sm font-medium ${
+                              post.postType === 'feedback' ? 'bg-green-600' :
+                              post.postType === 'complaint' ? 'bg-red-600' :
+                              post.postType === 'suggestion' ? 'bg-blue-600' : 'bg-orange-600'
+                            }`}>
+                              {post.postType.toUpperCase()}
+                            </span>
+                            
+                            <button
+                              onClick={() => {
+                                if (!window.confirm('Are you sure you want to delete this post?')) {
+                                  return;
+                                }
+                                
+                                api.delete(`/posts/${post._id}`)
+                                .then(() => {
+                                  // Remove from state
+                                  setPosts(prev => prev.filter(p => p._id !== post._id));
+                                  // Refresh stats
+                                  api.get(`/posts/stats/${selectedOrg._id}`).then(statsRes => {
+                                    setStats(statsRes.data);
+                                  });
+                                })
+                                .catch(err => {
+                                  console.error('Error deleting post:', err);
+                                  alert('Failed to delete post. Please try again.');
+                                });
+                              }}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                          
+                          <div className="text-sm text-gray-400 mb-3">
+                            <p>
+                              <span className="font-medium">Posted by:</span> {post.createdBy || 'Anonymous'} | {' '}
+                              <span className="font-medium">Date:</span> {new Date(post.createdAt).toLocaleString()} | {' '}
+                              <span className="font-medium">Region:</span> {post.region || 'N/A'} | {' '}
+                              <span className="font-medium">Department:</span> {post.department || 'N/A'}
+                            </p>
+                          </div>
+                          
+                          <div className="bg-gray-800 p-3 rounded-lg mb-2">
+                            <p>{post.content}</p>
+                          </div>
+                          
+                          {post.mediaUrl && (
+                            <div className="mt-2">
+                              {post.mediaUrl.match(/\.(jpe?g|png|gif)$/i) ? (
+                                <img
+                                  src={post.mediaUrl}
+                                  alt="Post media"
+                                  className="max-w-xs max-h-40 object-contain"
+                                />
+                              ) : (
+                                <a
+                                  href={post.mediaUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-blue-400 hover:underline"
+                                >
+                                  View Media
+                                </a>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
-              ))
+              </>
+            ) : (
+              <div className="text-center py-12">
+                <p className="text-lg">Select an organization or create a new one to get started</p>
+              </div>
             )}
           </div>
-        </>
-      ) : null}
+        </div>
+      </div>
     </div>
   );
 };

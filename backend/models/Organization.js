@@ -12,8 +12,12 @@ const organizationSchema = new mongoose.Schema({
     required: true
   },
   verificationSchema: {
+    type: [String], // For backward compatibility
+    default: []
+  },
+  verificationFields: {
     type: [String], // Fields used for employee verification (e.g., ["employeeId", "region", "department"])
-    required: true
+    default: []
   },
   createdAt: {
     type: Date,

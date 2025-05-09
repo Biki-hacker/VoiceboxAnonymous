@@ -2,11 +2,31 @@
 const express = require('express');
 const {
   getOrgByAdminId,
-  updateVerificationParams
+  updateVerificationParams,
+  createOrganization,
+  deleteOrganization,
+  getOrganizationById,
+  updateOrganization
 } = require('../controllers/orgController');
 
 const router = express.Router();
 
+// Route to get organizations by admin email
+router.get('/by-admin', getOrgByAdminId);
+
+// Route to update verification parameters
+router.patch('/:orgId', updateOrganization);
+
+// Route to create new organization
+router.post('/', createOrganization);
+
+// Route to delete an organization
+router.delete('/:orgId', deleteOrganization);
+
+// Route to get organization by ID
+router.get('/:orgId', getOrganizationById);
+
+// Legacy routes (for backward compatibility)
 router.get('/admin/:adminEmail', getOrgByAdminId);
 router.put('/admin/:adminEmail/params', updateVerificationParams);
 
