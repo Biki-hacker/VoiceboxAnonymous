@@ -11,7 +11,7 @@ const {
 // Direct registration (after Supabase signup)
 router.post('/register', registerUser);
 
-// (Optional) disable webhook or leave as no-op
+// (Optional) webhook for Supabase events
 router.post('/supabase/webhook', handleSupabaseWebhook);
 
 // Employee verification

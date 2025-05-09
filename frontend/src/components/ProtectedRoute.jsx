@@ -1,37 +1,68 @@
 // src/components/ProtectedRoute.jsx
-import { Navigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from 'react';
+import { Navigate, useLocation } from 'react-router-dom';
+import { api } from '../api/axios';
 
 const ProtectedRoute = ({ children, requiredRole }) => {
-  const { session, loading } = useAuth();
+  const [isAuthorized, setIsAuthorized] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const location = useLocation();
 
-  if (loading) {
+  useEffect(() => {
+    const verifyUser = async () => {
+      setIsLoading(true);
+      
+      // Check if we have user data in localStorage
+      const email = localStorage.getItem('email');
+      const role = localStorage.getItem('role');
+      
+      if (!email || !role) {
+        setIsAuthorized(false);
+        setIsLoading(false);
+        return;
+      }
+      
+      try {
+        // Verify with backend
+        const response = await api.get('/auth/verify-status', {
+          params: { email }
+        });
+        
+        if (response.data.success && response.data.role === requiredRole) {
+          // Make sure localStorage is in sync with backend
+          localStorage.setItem('role', response.data.role);
+          if (response.data.orgId) {
+            localStorage.setItem('orgId', response.data.orgId);
+          }
+          
+          setIsAuthorized(true);
+        } else {
+          setIsAuthorized(false);
+        }
+      } catch (error) {
+        console.error('Authorization check failed:', error);
+        setIsAuthorized(false);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    verifyUser();
+  }, [requiredRole]);
+
+  if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center text-white bg-gray-900">
-        <p>Loading...</p>
+      <div className="min-h-screen flex justify-center items-center bg-gray-900 text-white">
+        <div className="text-center">
+          <p className="text-xl">Loading...</p>
+          <p className="text-sm text-gray-400">Verifying your access</p>
+        </div>
       </div>
     );
   }
 
-  // No session = Not signed in
-  if (!session) {
-    return <Navigate to="/signin" />;
-  }
-
-  // Get role and orgId from localStorage (Mongo-based auth system)
-  const userRole = localStorage.getItem('role');
-  const orgId = localStorage.getItem('orgId');
-
-  // Role mismatch
-  if (requiredRole && userRole !== requiredRole) {
-    console.warn(`Access denied. Required: ${requiredRole}, Found: ${userRole}`);
-    return <Navigate to="/signin" />;
-  }
-
-  // For employee, make sure orgId exists
-  if (userRole === 'employee' && !orgId) {
-    console.warn('Employee user has no organization ID.');
-    return <Navigate to="/verify" />;
+  if (!isAuthorized) {
+    return <Navigate to="/signin" state={{ message: `You need ${requiredRole} access for this page` }} replace />;
   }
 
   return children;

@@ -7,6 +7,7 @@ import { api } from '../api/axios';
 export default function SignIn() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -19,56 +20,64 @@ export default function SignIn() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage('');
+    setLoading(true);
 
     const { email, password } = formData;
     if (!email || !password) {
       setMessage('Please enter both email and password.');
+      setLoading(false);
       return;
     }
 
-    // 1) Sign in with Supabase
-    const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (signInError) {
-      setMessage(signInError.message);
-      return;
-    }
-
-    // 2) Make sure we got a session
-    if (!signInData.session) {
-      setMessage('Login succeeded but no session returned.');
-      return;
-    }
-
-    // 3) Fetch role & verification from our backend
     try {
+      // 1) Sign in with Supabase
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password
+      });
+
+      if (signInError) {
+        setMessage(signInError.message);
+        setLoading(false);
+        return;
+      }
+
+      // 2) Make sure we got a session
+      if (!signInData.session) {
+        setMessage('Login succeeded but no session returned.');
+        setLoading(false);
+        return;
+      }
+
+      // 3) Fetch role & verification from our backend
       const res = await api.get(`/auth/verify-status`, {
         params: { email }
       });
+      
       const { role, verified, orgId } = res.data;
 
-      // Persist for later
+      // Store user data in localStorage
+      localStorage.setItem('email', email);
       localStorage.setItem('role', role);
+      
+      // Route based on role and verification status
       if (role === 'admin') {
-        return navigate('/admin-dashboard');
-      }
-
-      if (role === 'employee') {
+        navigate('/admin-dashboard');
+      } else if (role === 'employee') {
         if (verified) {
           localStorage.setItem('orgId', orgId || '');
-          return navigate('/employee-dashboard');
+          navigate('/employee-dashboard');
         } else {
-          return navigate('/verify');
+          navigate('/verify');
         }
+      } else {
+        setMessage('Unrecognized user role.');
       }
-
-      setMessage('Unrecognized user role.');
     } catch (err) {
-      console.error('Error fetching user status:', err);
-      setMessage('Failed to retrieve user info from server.');
+      console.error('Error during sign in process:', err);
+      setMessage('Sign in failed. Please check your credentials or try again later.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -97,15 +106,16 @@ export default function SignIn() {
           />
           <button
             type="submit"
-            className="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded"
+            disabled={loading}
+            className="bg-blue-500 hover:bg-blue-600 text-white py-2 rounded disabled:bg-blue-300"
           >
-            Sign In
+            {loading ? 'Signing In...' : 'Sign In'}
           </button>
           {message && <p className="text-sm text-red-400 text-center">{message}</p>}
         </form>
         <div className="text-center mt-4">
           <p>
-            Don’t have an account?{' '}
+            Don't have an account?{' '}
             <a href="/signup" className="text-blue-400 hover:underline">
               Sign Up
             </a>
