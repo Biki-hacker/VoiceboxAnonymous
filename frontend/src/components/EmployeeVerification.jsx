@@ -4,7 +4,7 @@ import { api } from '../api/axios';
 import { useNavigate } from 'react-router-dom';
 
 const EmployeeVerification = () => {
-  const [orgSearch, setOrgSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [organization, setOrganization] = useState(null);
   const [params, setParams] = useState({});
   const [error, setError] = useState('');
@@ -24,25 +24,29 @@ const EmployeeVerification = () => {
   }, [navigate]);
 
   const handleSearch = async () => {
-    if (!orgSearch.trim()) {
-      setError('Please enter an organization name');
+    if (!searchQuery.trim()) {
+      setError('Please enter the organization name or ID');
       return;
     }
 
     setLoading(true);
     setError('');
+    
     try {
-      const res = await api.get(`/organizations/search?name=${orgSearch}`);
+      // Use the new endpoint to search for organization by name or ID
+      const res = await api.get(`/organizations/search?query=${encodeURIComponent(searchQuery)}`);
+      
       if (res.data) {
         setOrganization(res.data);
         setParams({});
       } else {
-        setError('Organization not found. Please check the name.');
+        setOrganization(null);
+        setError('No organization found with this name or ID.');
       }
     } catch (err) {
       console.error('Error searching organization:', err);
       setOrganization(null);
-      setError('Failed to search organization. Please try again.');
+      setError(err.response?.data?.message || 'Organization not found. Please verify the name or ID and try again.');
     } finally {
       setLoading(false);
     }
@@ -51,8 +55,14 @@ const EmployeeVerification = () => {
   const handleVerify = async () => {
     if (!organization || !email) return;
 
+    // Determine which verification fields to use (supporting both field names)
+    const verificationFieldsToUse = 
+      organization.verificationFields?.length > 0 
+        ? organization.verificationFields 
+        : organization.verificationSchema || [];
+    
     // Check if all required fields are filled
-    const missingFields = organization.verificationFields.filter(field => !params[field]);
+    const missingFields = verificationFieldsToUse.filter(field => !params[field]);
     if (missingFields.length > 0) {
       setError(`Please fill in all verification fields: ${missingFields.join(', ')}`);
       return;
@@ -81,7 +91,7 @@ const EmployeeVerification = () => {
       }
     } catch (err) {
       console.error('Verification error:', err);
-      setError('Verification failed. Please check your information and try again.');
+      setError(err.response?.data?.message || 'Verification failed. Please check your information and try again.');
     } finally {
       setLoading(false);
     }
@@ -92,54 +102,83 @@ const EmployeeVerification = () => {
       <div className="w-full max-w-md bg-gray-800 rounded-lg shadow-md p-6">
         <h2 className="text-2xl font-bold mb-4 text-center">Employee Verification</h2>
         
-        <div className="mb-4">
-          <input
-            type="text"
-            placeholder="Enter your organization name"
-            className="w-full p-2 rounded text-black"
-            value={orgSearch}
-            onChange={(e) => setOrgSearch(e.target.value)}
-          />
-          <button
-            onClick={handleSearch}
-            disabled={loading}
-            className="mt-2 w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded disabled:bg-blue-300"
-          >
-            {loading ? 'Searching...' : 'Search Organization'}
-          </button>
-        </div>
+        {!organization && (
+          <div className="mb-4">
+            <div className="mb-2">
+              <label className="block text-sm font-medium mb-1 text-gray-300">Organization Name or ID</label>
+              <input
+                type="text"
+                placeholder="Enter organization name or ID"
+                className="w-full p-2 rounded text-black"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              />
+            </div>
+            <button
+              onClick={handleSearch}
+              disabled={loading}
+              className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded disabled:bg-blue-300"
+            >
+              {loading ? 'Searching...' : 'Find Organization'}
+            </button>
+            
+            <div className="mt-4 text-sm text-gray-400">
+              <p>Contact your organization administrator to get the correct organization name or ID.</p>
+            </div>
+          </div>
+        )}
+
+        {error && <p className="text-red-400 mb-4 text-center">{error}</p>}
 
         {organization && (
           <>
             <h3 className="text-xl font-semibold mb-2 text-center">{organization.name}</h3>
-            {organization.verificationFields && organization.verificationFields.length > 0 ? (
-              organization.verificationFields.map((field) => (
-                <input
-                  key={field}
-                  type="text"
-                  placeholder={`Enter your ${field}`}
-                  className="w-full p-2 mb-2 rounded text-black"
-                  onChange={(e) =>
-                    setParams((prev) => ({ ...prev, [field]: e.target.value }))
-                  }
-                />
+            <p className="text-center text-gray-400 mb-4">ID: {organization._id}</p>
+            
+            {/* Support both verificationFields and verificationSchema */}
+            {(organization.verificationFields?.length > 0 || organization.verificationSchema?.length > 0) ? (
+              (organization.verificationFields || organization.verificationSchema).map((field) => (
+                <div key={field} className="mb-2">
+                  <label className="block text-sm font-medium mb-1 text-gray-300">{field}</label>
+                  <input
+                    type="text"
+                    placeholder={`Enter your ${field}`}
+                    className="w-full p-2 rounded text-black"
+                    onChange={(e) =>
+                      setParams((prev) => ({ ...prev, [field]: e.target.value }))
+                    }
+                    value={params[field] || ''}
+                  />
+                </div>
               ))
             ) : (
               <p className="text-yellow-400 mb-2 text-center">
                 This organization doesn't require verification parameters.
               </p>
             )}
-            <button
-              onClick={handleVerify}
-              disabled={loading}
-              className="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded disabled:bg-green-300"
-            >
-              {loading ? 'Verifying...' : 'Submit Verification'}
-            </button>
+            
+            <div className="flex space-x-2 mt-4">
+              <button
+                onClick={() => {
+                  setOrganization(null);
+                  setSearchQuery('');
+                  setError('');
+                }}
+                className="w-1/3 bg-gray-500 hover:bg-gray-600 text-white py-2 rounded"
+              >
+                Back
+              </button>
+              <button
+                onClick={handleVerify}
+                disabled={loading}
+                className="w-2/3 bg-green-500 hover:bg-green-600 text-white py-2 rounded disabled:bg-green-300"
+              >
+                {loading ? 'Verifying...' : 'Submit Verification'}
+              </button>
+            </div>
           </>
         )}
-
-        {error && <p className="text-red-400 mt-4 text-center">{error}</p>}
       </div>
     </div>
   );

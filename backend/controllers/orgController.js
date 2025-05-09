@@ -105,6 +105,41 @@ exports.getOrganizationById = async (req, res) => {
   }
 };
 
+// New endpoint to search for organizations by name or ID
+exports.searchOrganization = async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query || query.trim() === '') {
+      return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    let org = null;
+
+    // First try to find by ID (if the query looks like a MongoDB ID)
+    if (query.match(/^[0-9a-fA-F]{24}$/)) {
+      org = await Organization.findById(query);
+    }
+
+    // If not found by ID, try to find by name
+    if (!org) {
+      // Use case-insensitive search for name
+      org = await Organization.findOne({ 
+        name: { $regex: new RegExp(query, 'i') }
+      });
+    }
+    
+    if (!org) {
+      return res.status(404).json({ message: 'No organization found matching your search' });
+    }
+    
+    res.json(org);
+  } catch (err) {
+    console.error('Error searching organization:', err);
+    res.status(500).json({ message: 'Error searching organization' });
+  }
+};
+
 // Legacy method for backward compatibility
 exports.updateVerificationParams = async (req, res) => {
   try {

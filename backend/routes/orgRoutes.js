@@ -6,13 +6,17 @@ const {
   createOrganization,
   deleteOrganization,
   getOrganizationById,
-  updateOrganization
+  updateOrganization,
+  searchOrganization
 } = require('../controllers/orgController');
 
 const router = express.Router();
 
 // Route to get organizations by admin email
 router.get('/by-admin', getOrgByAdminId);
+
+// Route to search organization by name or ID
+router.get('/search', searchOrganization);
 
 // Route to update verification parameters
 router.patch('/:orgId', updateOrganization);
