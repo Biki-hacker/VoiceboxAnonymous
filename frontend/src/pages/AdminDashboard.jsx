@@ -60,24 +60,75 @@ const DashboardCard = ({ children, className = "" }) => ( // ... DashboardCard c
 );
 
 // --- Custom Select Component using Headless UI (Dark Mode Aware) ---
-const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => { // ... CustomSelect component remains the same ...
+const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => {
     const selectedOption = options.find(opt => opt.value === value) || options[0];
     return (
-        <Listbox value={value} onChange={onChange} disabled={disabled}>
-            {({ open }) => (
-                <div className="relative">
-                    <Listbox.Label className="flex items-center text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">{Icon && <Icon className="h-3.5 w-3.5 mr-1 text-gray-400 dark:text-slate-500"/>} {label}</Listbox.Label>
-                    <Listbox.Button className={`relative w-full cursor-default rounded-md py-2 pl-3 pr-10 text-left text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}> <span className="block truncate text-gray-900 dark:text-slate-100">{selectedOption.label}</span> <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2"><ChevronUpDownIcon className="h-5 w-5 text-gray-400 dark:text-slate-400" aria-hidden="true" /></span> </Listbox.Button>
-                    <Transition show={open} as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
-                        <Listbox.Options className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-slate-700 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm custom-scrollbar">
-                            {options.map((option) => ( <Listbox.Option key={option.value} className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${ active ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-slate-100' }`} value={option.value}> {({ selected }) => ( <> <span className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}>{option.label}</span> {selected ? ( <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600 dark:text-blue-400"><CheckIcon className="h-5 w-5" aria-hidden="true" /></span> ) : null} </> )} </Listbox.Option> ))}
-                        </Listbox.Options>
-                    </Transition>
-                </div>
-            )}
-        </Listbox>
+      <Listbox value={value} onChange={onChange} disabled={disabled}>
+        {({ open }) => (
+          <div className="relative w-40">
+            <Listbox.Label className="flex items-center text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+              {Icon && <Icon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500" />}
+              {label}
+            </Listbox.Label>
+            <Listbox.Button
+              className={`relative w-full cursor-default rounded-md py-3 pl-3 pr-10 text-left text-sm 
+              bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 shadow-sm 
+              focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition 
+              duration-150 ease-in-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <span className="block truncate text-gray-900 dark:text-slate-100">
+                {selectedOption.label || 'Select'}
+              </span>
+              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                <ChevronUpDownIcon className="h-5 w-5 text-gray-400 dark:text-slate-400" aria-hidden="true" />
+              </span>
+            </Listbox.Button>
+            <Transition
+              show={open}
+              as={Fragment}
+              leave="transition ease-in duration-100"
+              leaveFrom="opacity-100"
+              leaveTo="opacity-0"
+            >
+              <Listbox.Options
+                className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-slate-700 
+                py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm custom-scrollbar"
+              >
+                {options.map((option) => (
+                  <Listbox.Option
+                    key={option.value}
+                    className={({ active }) =>
+                      `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                        active
+                          ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100'
+                          : 'text-gray-900 dark:text-slate-100'
+                      }`
+                    }
+                    value={option.value}
+                  >
+                    {({ selected }) => (
+                      <>
+                        <span className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}>
+                          {option.label}
+                        </span>
+                        {selected && (
+                          <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600 dark:text-blue-400">
+                            <CheckIcon className="h-5 w-5" aria-hidden="true" />
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </Listbox.Option>
+                ))}
+              </Listbox.Options>
+            </Transition>
+          </div>
+        )}
+      </Listbox>
     );
-};
+  };
+  
+  
 
 // --- Theme Toggle Button ---
 const ThemeToggle = ({ theme, toggleTheme }) => ( // ... ThemeToggle component remains the same ...
