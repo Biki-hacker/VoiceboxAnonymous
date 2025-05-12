@@ -1,9 +1,22 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
-}
+/* App.css */
+
+/*
+  Removed the following styles for #root as they conflict
+  with the full-screen dashboard layout required to match the Contra screenshot:
+
+  #root {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 2rem;
+    text-align: center;
+  }
+
+  Keeping these would constrain the dashboard width, center it, and add padding,
+  preventing the edge-to-edge sidebar and main content area seen in the target design.
+*/
+
+/* Keep other potentially useful styles below if needed elsewhere in your app, */
+/* or remove them if they are boilerplate from project setup. */
 
 .logo {
   height: 6em;
@@ -34,9 +47,13 @@
 }
 
 .card {
+  /* This generic .card style might conflict or be redundant */
+  /* with Tailwind card styling used in the dashboard. */
+  /* Consider removing if not used elsewhere. */
   padding: 2em;
 }
 
 .read-the-docs {
+  /* Likely template boilerplate - remove if not used */
   color: #888;
 }
