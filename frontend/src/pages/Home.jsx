@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import AnimatedText from "../components/AnimatedText"; // Assuming this path is correct
 
 // Import the PNG logo for the animated shield
-import shieldLogoPng from '../../src/assets/shield-logo1r.png'; // Ensure this path is correct
+import shieldLogoWebp from '../../src/assets/shield-logo1r.webp'; // Ensure this path is correct
 
 // Shield Logo Component
 const ShieldLogo = () => (
@@ -14,7 +14,7 @@ const ShieldLogo = () => (
     transition={{ repeat: Infinity, duration: 3.5, ease: "easeInOut" }}
   >
     <img
-      src={shieldLogoPng}
+      src={shieldLogoWebp}
       alt="Shield Logo"
       className="w-full h-full object-contain"
       onError={(e) => {
