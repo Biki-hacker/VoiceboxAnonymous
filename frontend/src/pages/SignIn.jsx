@@ -59,6 +59,8 @@ export default function SignIn() {
       // Store user data in localStorage
       localStorage.setItem('email', email);
       localStorage.setItem('role', role);
+      localStorage.setItem('verified', verified);
+      localStorage.setItem('orgId', orgId || '');
       
       // Route based on role and verification status
       if (role === 'admin') {
