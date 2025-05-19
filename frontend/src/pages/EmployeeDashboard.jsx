@@ -392,7 +392,7 @@ const EmployeeDashboard = () => {
       {/* Sidebar */}
       <aside className="w-16 md:w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
         <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
-          <BuildingOfficeIcon className="h-7 w-7 md:h-8 md:h-8" />
+          <BuildingOfficeIcon className="h-7 w-7 md:h-8" />
         </div>
         <nav className="flex flex-col space-y-5 items-center">
           {actions.slice(0, 2).map(action => (
