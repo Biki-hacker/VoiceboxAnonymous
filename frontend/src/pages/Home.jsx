@@ -5,6 +5,7 @@ import AnimatedText from "../components/AnimatedText"; // Assuming this path is 
 
 // Import the PNG logo for the animated shield
 import shieldLogoWebp from '../../src/assets/shield-logo1r.webp'; // Ensure this path is correct
+import vblogo from '../../src/assets/vblogo1.webp';
 
 // Shield Logo Component
 const ShieldLogo = () => (
@@ -298,8 +299,8 @@ export default function Home() {
       <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
         <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
           <div className="text-2xl font-extrabold tracking-widest flex items-center relative">
-            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-2">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2L4 6V12C4 17.5 7.8 22.7 12 23C16.2 22.7 20 17.5 20 12V6L12 2Z" stroke="url(#shield-gradient-nav)" strokeWidth="2" fill="rgba(33, 150, 243, 0.2)" /><path d="M12 7L10 10L12 13L14 10L12 7Z" fill="#2196F3" /><path d="M11 12L9 14L11 16L13 14L11 12Z" fill="#2196F3" /><path d="M13 12L15 14L13 16L11 14L13 12Z" fill="#2196F3" /><defs><linearGradient id="shield-gradient-nav" x1="4" y1="2" x2="20" y2="23" gradientUnits="userSpaceOnUse"><stop stopColor="#2196F3" /><stop offset="1" stopColor="#64B5F6" /></linearGradient></defs></svg>
+            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-3">
+            <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
             </motion.div>
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-500 relative">Voicebox Anonymous<div className="absolute bottom-0 left-0 w-0 h-px bg-blue-400 group-hover:w-full transition-all duration-300" /></span>
           </div>
