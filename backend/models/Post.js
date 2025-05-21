@@ -1,6 +1,18 @@
 // models/Post.js
 const mongoose = require('mongoose');
 
+// Sub-schema for reactions including user tracking
+const reactionDetailSchema = new mongoose.Schema({
+  count: {
+    type: Number,
+    default: 0
+  },
+  users: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  }]
+});
+
 // Sub-schema for a comment
 const commentSchema = new mongoose.Schema({
   _id: {
@@ -19,10 +31,10 @@ const commentSchema = new mongoose.Schema({
     type: Date
   },
   reactions: {
-    like: { type: Number, default: 0 },
-    love: { type: Number, default: 0 },
-    laugh: { type: Number, default: 0 },
-    angry: { type: Number, default: 0 }
+    like: reactionDetailSchema,
+    love: reactionDetailSchema,
+    laugh: reactionDetailSchema,
+    angry: reactionDetailSchema
   },
   author: {
     type: mongoose.Schema.Types.ObjectId,
@@ -62,13 +74,22 @@ const postSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
-    likes: {
-      type: Number,
-      default: 0
+    // Updated reactions schema to include user tracking
+    reactions: {
+      like: reactionDetailSchema,
+      love: reactionDetailSchema,
+      laugh: reactionDetailSchema,
+      angry: reactionDetailSchema
     },
     comments: [commentSchema]
   },
   { timestamps: true } // Adds createdAt and updatedAt
 );
+
+// Middleware to handle removing the post from referenced documents if needed (optional)
+// postSchema.pre('remove', async function(next) {
+//   // Example: Remove post references from users or organizations if any
+//   next();
+// });
 
 module.exports = mongoose.model('Post', postSchema);
