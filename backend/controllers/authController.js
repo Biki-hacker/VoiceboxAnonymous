@@ -1,33 +1,37 @@
 const User = require('../models/User');
 const Organization = require('../models/Organization');
-const { createSession } = require('../utils/session');
+const jwt = require('jsonwebtoken');
 
 exports.registerUser = async (req, res) => {
   try {
-    const { email, role } = req.body;
-    if (!email || !role) {
-      return res.status(400).json({ success: false, message: 'Missing email or role' });
+    const { email, password, role, organizationId } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: 'Email already registered' });
     }
-    
-    const exists = await User.findOne({ email });
-    if (exists) {
-      return res.status(200).json({ success: true, message: 'Already registered' });
-    }
-    
-    const user = new User({ 
-      email, 
+
+    // Create new user
+    const user = new User({
+      email,
+      password,
       role,
-      sessions: [],
-      organizationId: null, 
-      verificationParams: {}, 
-      verified: role === 'admin'
+      organizationId
     });
-    
+
     await user.save();
-    return res.status(201).json({ success: true });
-  } catch (err) {
-    console.error('Register error:', err);
-    return res.status(500).json({ success: false, message: 'Server error' });
+
+    // Generate token
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.status(201).json({ user, token });
+  } catch (error) {
+    res.status(400).json({ error: error.message });
   }
 };
 
@@ -70,7 +74,20 @@ exports.verifyEmployee = async (req, res) => {
     user.verified = true;
     await user.save();
     
-    return res.status(200).json({ success: true, userId: user._id });
+    // Generate JWT token after successful verification
+    const token = jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+    
+    return res.status(200).json({ 
+      success: true, 
+      userId: user._id,
+      token,
+      role: user.role,
+      organizationId: user.organizationId
+    });
   } catch (err) {
     console.error('Verification error:', err);
     return res.status(500).json({ success: false, message: 'Internal server error' });
@@ -85,12 +102,20 @@ exports.checkVerificationStatus = async (req, res) => {
     const user = await User.findOne({ email });
     if (!user) return res.status(404).json({ success: false, message: 'User not found' });
     
+    // Generate new token if user is verified
+    const token = user.verified ? jwt.sign(
+      { userId: user._id },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    ) : null;
+    
     return res.status(200).json({
       success: true,
       verified: user.verified,
       orgId: user.organizationId,
       role: user.role,
-      userId: user._id
+      userId: user._id,
+      token
     });
   } catch (err) {
     console.error('Status check error:', err);

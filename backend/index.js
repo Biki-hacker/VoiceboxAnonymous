@@ -57,8 +57,8 @@ app.use(logger);
 // --- Rate Limiting (Example) ---
 const rateLimit = require('express-rate-limit');
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Limit each IP to 1000 requests per windowMs
+  windowMs: 5 * 60 * 60 * 1000, // 5 hours
+  max: 250000, // Limit each IP to 250000 requests per windowMs
   message: 'Too many requests from this IP, please try again later'
 });
 app.use('/api/', apiLimiter);
@@ -89,9 +89,7 @@ if (!MONGO_URI) {
 }
 
 mongoose.connect(MONGO_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  serverSelectionTimeoutMS: 5000
+  serverSelectionTimeoutMS: 10000
 })
 .then(() => {
   console.log('✅ MongoDB Connected Successfully');

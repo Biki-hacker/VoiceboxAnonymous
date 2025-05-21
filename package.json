@@ -2,7 +2,7 @@
   "dependencies": {
     "@headlessui/react": "^2.2.2",
     "@heroicons/react": "^2.2.0",
-    "@supabase/supabase-js": "^2.49.4",
+    "@supabase/supabase-js": "^2.49.7",
     "axios": "^1.8.4",
     "chart.js": "^4.4.9",
     "cookie-parser": "^1.4.7",

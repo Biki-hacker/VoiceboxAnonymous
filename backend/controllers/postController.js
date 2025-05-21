@@ -1,5 +1,7 @@
 // backend/controllers/postController.js
 const Post = require('../models/Post');
+const Organization = require('../models/Organization');
+const mongoose = require('mongoose');
 
 exports.createPost = async (req, res) => {
   try {
@@ -29,8 +31,6 @@ exports.createPost = async (req, res) => {
     });
 
     await newPost.save();
-    // Populate author's email in the response if needed
-    // await newPost.populate('author', 'email');
     res.status(201).json(newPost);
   } catch (err) {
     console.error("Create post error:", err);
@@ -40,20 +40,21 @@ exports.createPost = async (req, res) => {
 
 exports.getPostsByOrg = async (req, res) => {
   try {
-    // Ensure the authenticated user belongs to the organization they are trying to fetch posts for
-    if (req.user.organizationId.toString() !== req.params.orgId.toString()) {
-      return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
+    // For admin users, check if they created this organization
+    if (req.user.role === 'admin') {
+      const organization = await Organization.findById(req.params.orgId);
+      if (!organization || organization.adminEmail !== req.user.email) {
+        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
+      }
+    } else {
+      // For employees, check if this is their verified organization
+      if (!req.user.organizationId || req.user.organizationId.toString() !== req.params.orgId.toString()) {
+        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
+      }
     }
 
     const posts = await Post.find({ orgId: req.params.orgId })
-      .sort({ createdAt: -1 })
-      // Populate author's email if you need it on the frontend
-      // .populate('author', 'email')
-      // If you want to populate comment authors too:
-      // .populate({
-      //   path: 'comments.author',
-      //   select: 'email'
-      // });
+      .sort({ createdAt: -1 });
     res.status(200).json(posts);
   } catch (err) {
     console.error('Fetch posts error:', err);
@@ -87,9 +88,6 @@ exports.reactToPost = async (req, res) => {
     }
 
     await post.save();
-
-    // Return the updated post or just the reaction counts
-    // Returning the whole post is simpler if frontend uses the whole post object
     res.status(200).json(post);
   } catch (err) {
     console.error('Reaction error:', err);
@@ -116,18 +114,12 @@ exports.commentOnPost = async (req, res) => {
         laugh: { count: 0, users: [] },
         angry: { count: 0, users: [] }
       },
-      createdAt: new Date(), // Set creation time
-      updatedAt: new Date() // Set initial update time
+      createdAt: new Date(),
+      updatedAt: new Date()
     };
 
     post.comments.push(newComment);
     await post.save();
-
-    // Optionally populate the author of the newly added comment
-    // await post.populate('comments.author', 'email');
-
-    // Return the updated post or just the new comment
-    // Returning the whole post is simpler if frontend updates its state with the full post
     res.status(200).json(post);
   } catch (err) {
     console.error('Comment error:', err);
@@ -150,7 +142,6 @@ exports.deleteComment = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized to delete this comment' });
     }
 
-    // Use Mongoose's pull to remove the comment from the array
     post.comments.pull(commentId);
     await post.save();
 
@@ -190,9 +181,7 @@ exports.reactToComment = async (req, res) => {
     }
 
     await post.save();
-
-    // Return the updated post or the comment with updated reactions
-    res.status(200).json(post); // Returning the whole post for consistency
+    res.status(200).json(post);
   } catch (err) {
     console.error('Comment reaction error:', err);
     res.status(500).json({ message: 'Error reacting to comment' });
@@ -211,9 +200,7 @@ exports.deletePost = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     }
 
-    // Use Mongoose's findByIdAndDelete
     await Post.findByIdAndDelete(postId);
-
     res.status(200).json({ message: 'Post deleted successfully' });
   } catch (err) {
     console.error('Delete post error:', err);
@@ -225,21 +212,28 @@ exports.getPostStats = async (req, res) => {
   try {
     const { orgId } = req.params;
 
-    // Verify user belongs to the organization
-    if (req.user.organizationId.toString() !== orgId.toString()) {
-      return res.status(403).json({ message: 'Access denied' });
+    // For admin users, check if they created this organization
+    if (req.user.role === 'admin') {
+      const organization = await Organization.findById(orgId);
+      if (!organization || organization.adminEmail !== req.user.email) {
+        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
+      }
+    } else {
+      // For employees, check if this is their verified organization
+      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
+        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
+      }
     }
 
     const stats = await Post.aggregate([
-      { $match: { orgId: new mongoose.Types.ObjectId(orgId) } }, // Ensure orgId is ObjectId
+      { $match: { orgId: new mongoose.Types.ObjectId(orgId) } },
       { $group: { _id: "$postType", count: { $sum: 1 } } }
     ]);
 
-    // Format the output to include all post types, even those with 0 count
     const postTypes = ['feedback', 'complaint', 'suggestion', 'public'];
     const formattedStats = postTypes.map(type => {
       const stat = stats.find(s => s._id === type);
-      return { type, count: stat ? stat.count : 0 };
+      return { _id: type, count: stat ? stat.count : 0 };
     });
 
     res.status(200).json(formattedStats);
@@ -254,7 +248,6 @@ exports.editPost = async (req, res) => {
     const { content, postType, mediaUrls, region, department, isAnonymous } = req.body;
     const { postId } = req.params;
 
-    // Construct updates object dynamically
     const updates = {};
     if (content !== undefined) updates.content = content;
     if (postType !== undefined) updates.postType = postType;
@@ -262,7 +255,6 @@ exports.editPost = async (req, res) => {
     if (region !== undefined) updates.region = region;
     if (department !== undefined) updates.department = department;
     if (isAnonymous !== undefined) updates.isAnonymous = isAnonymous;
-
 
     if (Object.keys(updates).length === 0) {
        return res.status(400).json({ message: 'No update data provided' });
@@ -276,9 +268,7 @@ exports.editPost = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized to edit this post' });
     }
 
-    // Add updatedAt timestamp
     updates.updatedAt = new Date();
-
     const updatedPost = await Post.findByIdAndUpdate(postId, updates, { new: true });
     res.status(200).json(updatedPost);
   } catch (err) {
@@ -308,11 +298,9 @@ exports.editComment = async (req, res) => {
     }
 
     comment.text = text;
-    comment.updatedAt = new Date(); // Update timestamp
+    comment.updatedAt = new Date();
     await post.save();
-
-    // Return the updated post or just the updated comment
-    res.status(200).json(post); // Returning the whole post for consistency
+    res.status(200).json(post);
   } catch (err) {
     console.error('Edit comment error:', err);
     res.status(500).json({ message: 'Error editing comment' });

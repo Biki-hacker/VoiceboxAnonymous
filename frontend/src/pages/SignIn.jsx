@@ -49,25 +49,27 @@ export default function SignIn() {
         return;
       }
 
-      // 3) Fetch role & verification from our backend
-      const res = await api.get(`/auth/verify-status`, {
-        params: { email }
+      // 3) Get backend JWT token
+      const backendResponse = await api.post('/auth/login', {
+        email,
+        supabaseToken: signInData.session.access_token
       });
-      
-      const { role, verified, orgId } = res.data;
+
+      const { token, role, verified, orgId } = backendResponse.data;
 
       // Store user data in localStorage
       localStorage.setItem('email', email);
       localStorage.setItem('role', role);
       localStorage.setItem('verified', verified);
       localStorage.setItem('orgId', orgId || '');
+      localStorage.setItem('token', token);
+      localStorage.setItem('supabaseToken', signInData.session.access_token);
       
       // Route based on role and verification status
       if (role === 'admin') {
         navigate('/admin-dashboard');
       } else if (role === 'employee') {
         if (verified) {
-          localStorage.setItem('orgId', orgId || '');
           navigate('/employee-dashboard');
         } else {
           navigate('/verify');
@@ -77,7 +79,7 @@ export default function SignIn() {
       }
     } catch (err) {
       console.error('Error during sign in process:', err);
-      setMessage('Sign in failed. Please check your credentials or try again later.');
+      setMessage(err.response?.data?.message || 'Sign in failed. Please check your credentials or try again later.');
     } finally {
       setLoading(false);
     }

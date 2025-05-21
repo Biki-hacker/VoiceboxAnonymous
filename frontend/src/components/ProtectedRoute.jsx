@@ -12,20 +12,23 @@ const ProtectedRoute = ({ children, requiredRole }) => {
     const verifyUser = async () => {
       setIsLoading(true);
       
-      // Check if we have user data in localStorage
-      const email = localStorage.getItem('email');
-      const role = localStorage.getItem('role');
-      
-      if (!email || !role) {
-        setIsAuthorized(false);
-        setIsLoading(false);
-        return;
-      }
-      
       try {
+        // Check if we have user data in localStorage
+        const email = localStorage.getItem('email');
+        const token = localStorage.getItem('token');
+        
+        if (!email || !token) {
+          console.log('Missing email or token in localStorage');
+          setIsAuthorized(false);
+          return;
+        }
+
         // Verify with backend
         const response = await api.get('/auth/verify-status', {
-          params: { email }
+          params: { email },
+          headers: {
+            Authorization: `Bearer ${token}`
+          }
         });
         
         if (response.data.success && response.data.role === requiredRole) {
@@ -34,13 +37,17 @@ const ProtectedRoute = ({ children, requiredRole }) => {
           if (response.data.orgId) {
             localStorage.setItem('orgId', response.data.orgId);
           }
+          if (response.data.token) {
+            localStorage.setItem('token', response.data.token);
+          }
           
           setIsAuthorized(true);
         } else {
+          console.log('Role mismatch or verification failed:', response.data);
           setIsAuthorized(false);
         }
       } catch (error) {
-        console.error('Authorization check failed:', error);
+        console.error('Authorization check failed:', error.response?.data || error.message);
         setIsAuthorized(false);
       } finally {
         setIsLoading(false);
@@ -62,7 +69,16 @@ const ProtectedRoute = ({ children, requiredRole }) => {
   }
 
   if (!isAuthorized) {
-    return <Navigate to="/signin" state={{ message: `You need ${requiredRole} access for this page` }} replace />;
+    return (
+      <Navigate 
+        to="/signin" 
+        state={{ 
+          from: location.pathname,
+          message: `You need ${requiredRole} access for this page` 
+        }} 
+        replace 
+      />
+    );
   }
 
   return children;

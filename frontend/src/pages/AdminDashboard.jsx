@@ -142,24 +142,45 @@ const AdminDashboard = () => {
     const [deletePasswordConfirm, setDeletePasswordConfirm] = useState("");
     const [theme, toggleTheme, setTheme] = useTheme();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-    const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false); // Flag for initial auto-selection
+    const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
 
     // --- Authentication Effect ---
     useEffect(() => {
-        const storedEmail = localStorage.getItem('email');
-        const storedRole = localStorage.getItem('role');
-        if (!storedEmail || !storedRole || storedRole !== 'admin') {
-            navigate('/signin', { state: { message: 'Admin access required. Please sign in.' } });
-            return;
-        }
-        setUserData({ email: storedEmail, role: storedRole });
-        // Optional: verify status with backend, handle errors appropriately
-        api.get('/auth/verify-status', { params: { email: storedEmail } })
-           .catch(err => console.warn('User status verification failed:', err.response?.data?.message || err.message));
+        const verifyAuth = async () => {
+            try {
+                const storedEmail = localStorage.getItem('email');
+                const storedRole = localStorage.getItem('role');
+                const storedToken = localStorage.getItem('token');
+
+                if (!storedEmail || !storedRole || !storedToken || storedRole !== 'admin') {
+                    navigate('/signin', { state: { message: 'Admin access required. Please sign in.' } });
+                    return;
+                }
+
+                // Verify token with backend
+                const response = await api.get('/auth/verify-status', {
+                    params: { email: storedEmail },
+                    headers: { Authorization: `Bearer ${storedToken}` }
+                });
+
+                if (response.data.success) {
+                    setUserData({ email: storedEmail, role: storedRole });
+                } else {
+                    localStorage.clear();
+                    navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
+                }
+            } catch (error) {
+                console.error('Auth verification failed:', error);
+                localStorage.clear();
+                navigate('/signin', { state: { message: 'Authentication failed. Please sign in again.' } });
+            }
+        };
+
+        verifyAuth();
     }, [navigate]);
 
     // --- Callback to select an organization and fetch its details ---
-    const selectOrganization = useCallback((org) => {
+    const selectOrganization = useCallback(async (org) => {
         if (!org) {
             setSelectedOrg(null);
             setPosts([]);
@@ -167,50 +188,64 @@ const AdminDashboard = () => {
             setLoading(prev => ({ ...prev, orgDetails: false }));
             return;
         }
-        // Avoid re-fetching if already selected and details are not currently loading
-        // if (selectedOrg?._id === org._id && !loading.orgDetails) return;
 
         setSelectedOrg(org);
         setLoading(prev => ({ ...prev, orgDetails: true }));
         setError(prev => ({ ...prev, page: null }));
-        setStats([]); setPosts([]);
+        setStats([]);
+        setPosts([]);
 
-        Promise.all([
-            api.get(`/posts/stats/${org._id}`),
-            api.get(`/posts/${org._id}`)
-        ])
-        .then(([statsRes, postsRes]) => {
+        try {
+            const [statsRes, postsRes] = await Promise.all([
+                api.get(`/posts/stats/${org._id}`),
+                api.get(`/posts/${org._id}`)
+            ]);
+
             setStats(statsRes.data);
             setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-        })
-        .catch(err => {
+        } catch (err) {
             console.error(`Error fetching data for ${org.name}:`, err);
-            setError(prev => ({ ...prev, page: `Failed to load details for ${org.name}.` }));
-        })
-        .finally(() => {
+            setError(prev => ({ 
+                ...prev, 
+                page: err.response?.data?.message || `Failed to load details for ${org.name}.` 
+            }));
+        } finally {
             setLoading(prev => ({ ...prev, orgDetails: false }));
-        });
-    }, []); // Removed selectedOrg and loading.orgDetails to simplify, selection implies fetch
+        }
+    }, []);
 
     // --- Callback to fetch the list of organizations ---
-    const fetchOrganizationsList = useCallback(() => {
+    const fetchOrganizationsList = useCallback(async () => {
         if (!userData) return;
+
         setLoading(prev => ({ ...prev, orgList: true }));
         setError(prev => ({ ...prev, page: null }));
-        api.get('/organizations/by-admin', { params: { email: userData.email } })
-            .then(res => {
-                const sortedOrgs = res.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-                setOrganizations(sortedOrgs);
-            })
-            .catch(err => {
-                console.error('Error loading organizations:', err);
-                setError(prev => ({ ...prev, page: 'Failed to load organizations. Please try again.' }));
-                setOrganizations([]); // Clear organizations on error
-            })
-            .finally(() => {
-                setLoading(prev => ({ ...prev, orgList: false }));
+
+        try {
+            const storedToken = localStorage.getItem('token');
+            const response = await api.get('/organizations/by-admin', {
+              params: { email: userData.email },
+              headers: { Authorization: `Bearer ${storedToken}` }
             });
-    }, [userData]);
+
+            const sortedOrgs = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            setOrganizations(sortedOrgs);
+
+            // Auto-select first organization if none selected
+            if (!selectedOrg && sortedOrgs.length > 0) {
+                selectOrganization(sortedOrgs[0]);
+            }
+        } catch (err) {
+            console.error('Error loading organizations:', err);
+            setError(prev => ({ 
+                ...prev, 
+                page: err.response?.data?.message || 'Failed to load organizations. Please try again.' 
+            }));
+            setOrganizations([]);
+        } finally {
+            setLoading(prev => ({ ...prev, orgList: false }));
+        }
+    }, [userData, selectedOrg, selectOrganization]);
 
     // --- Effect to fetch organizations list when userData is available ---
     useEffect(() => {
@@ -221,7 +256,7 @@ const AdminDashboard = () => {
 
     // --- Effect to handle auto-selection of an organization ---
     useEffect(() => {
-        if (loading.orgList) return; // Don't act while list is loading
+        if (loading.orgList) return;
 
         if (!initialOrgSelectedFlag && organizations.length > 0) {
             selectOrganization(organizations[0]);
@@ -233,8 +268,8 @@ const AdminDashboard = () => {
             } else if (!currentSelectedStillExists && organizations.length === 0) {
                 selectOrganization(null);
             }
-        } else if (organizations.length === 0 && selectedOrg) { // If list is empty but something was selected
-             selectOrganization(null);
+        } else if (organizations.length === 0 && selectedOrg) {
+            selectOrganization(null);
         }
     }, [organizations, loading.orgList, selectedOrg, selectOrganization, initialOrgSelectedFlag]);
 

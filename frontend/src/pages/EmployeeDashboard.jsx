@@ -128,31 +128,53 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 };
 
 // --- Comment Section Component ---
-const CommentSection = ({ postId, comments }) => {
+const CommentSection = ({ postId, comments = [] }) => {
   const [newComment, setNewComment] = useState('');
-  const [localComments, setLocalComments] = useState(comments);
+  const [localComments, setLocalComments] = useState(comments || []);
+  const [error, setError] = useState(null);
 
   const handleCommentSubmit = async () => {
+    if (!newComment.trim()) return;
+
     try {
-      const response = await api.post(`/posts/${postId}/comment`, { text: newComment });
-      setLocalComments([...localComments, response.data.comments.slice(-1)[0]]);
-      setNewComment('');
+      const storedToken = localStorage.getItem('token');
+      const response = await api.post(`/posts/${postId}/comment`, 
+        { text: newComment },
+        { headers: { Authorization: `Bearer ${storedToken}` } }
+      );
+      
+      if (response.data && response.data.comments) {
+        setLocalComments([...localComments, response.data.comments.slice(-1)[0]]);
+        setNewComment('');
+        setError(null);
+      }
     } catch (error) {
       console.error('Error posting comment:', error);
+      setError(error.response?.data?.message || 'Failed to post comment');
     }
   };
 
   const handleCommentDelete = async (commentId) => {
     try {
-      await api.delete(`/posts/${postId}/comment/${commentId}`);
+      const storedToken = localStorage.getItem('token');
+      await api.delete(`/posts/${postId}/comment/${commentId}`, {
+        headers: { Authorization: `Bearer ${storedToken}` }
+      });
       setLocalComments(localComments.filter(c => c._id !== commentId));
+      setError(null);
     } catch (error) {
       console.error('Error deleting comment:', error);
+      setError(error.response?.data?.message || 'Failed to delete comment');
     }
   };
 
   return (
     <div className="mt-4 space-y-4">
+      {error && (
+        <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+          {error}
+        </div>
+      )}
       <div className="flex gap-2">
         <input
           type="text"
@@ -163,7 +185,8 @@ const CommentSection = ({ postId, comments }) => {
         />
         <button
           onClick={handleCommentSubmit}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+          disabled={!newComment.trim()}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Post
         </button>
@@ -173,23 +196,27 @@ const CommentSection = ({ postId, comments }) => {
         <div key={comment._id} className="flex gap-3 items-start">
           <div className="flex-1 bg-gray-100 dark:bg-slate-700 p-3 rounded-lg">
             <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-medium dark:text-white">Anonymous</span>
+              <span className="text-sm font-medium dark:text-white">
+                {comment.createdBy || 'Anonymous'}
+              </span>
               <span className="text-xs text-gray-500 dark:text-slate-400">
                 {new Date(comment.createdAt).toLocaleDateString()}
               </span>
             </div>
             <p className="text-gray-800 dark:text-slate-200">{comment.text}</p>
-            <div className="flex gap-2 mt-2">
-              {Object.entries(comment.reactions).map(([type, {count}]) => (
-                <ReactionButton
-                  key={type}
-                  type={type}
-                  count={count}
-                  postId={postId}
-                  commentId={comment._id}
-                />
-              ))}
-            </div>
+            {comment.reactions && Object.entries(comment.reactions).length > 0 && (
+              <div className="flex gap-2 mt-2">
+                {Object.entries(comment.reactions).map(([type, {count}]) => (
+                  <ReactionButton
+                    key={type}
+                    type={type}
+                    count={count || 0}
+                    postId={postId}
+                    commentId={comment._id}
+                  />
+                ))}
+              </div>
+            )}
           </div>
           <button
             onClick={() => handleCommentDelete(comment._id)}
@@ -244,83 +271,203 @@ const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
   const [employeeEmail, setEmployeeEmail] = useState("");
+  const [organizationId, setOrganizationId] = useState("");
   const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState({ posts: false, create: false });
+  const [error, setError] = useState(null);
   const [newPost, setNewPost] = useState({
     postType: 'feedback',
     content: '',
     mediaUrls: [],
     region: '',
     department: '',
-    isAnonymous: true
+    isAnonymous: false
   });
-  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
+  // --- Authentication Effect ---
   useEffect(() => {
-    const storedEmail = localStorage.getItem('email');
-    const storedOrgId = localStorage.getItem('orgId');
-    if (!storedEmail || !storedOrgId) {
-      navigate('/signin');
-    }
-    setEmployeeEmail(storedEmail);
-    if (viewMode === 'view') fetchPosts();
-  }, [navigate, viewMode]);
+    const verifyAuth = async () => {
+      try {
+        const storedEmail = localStorage.getItem('email');
+        const storedRole = localStorage.getItem('role');
+        const storedToken = localStorage.getItem('token');
+        const storedOrgId = localStorage.getItem('orgId');
 
-  const fetchPosts = async () => {
-    try {
-      const orgId = localStorage.getItem('orgId');
-      const response = await api.get(`/posts/${orgId}`);
-      setPosts(response.data);
-    } catch (error) {
-      console.error('Error fetching posts:', error);
-    }
-  };
+        if (!storedEmail || !storedRole || !storedToken || !storedOrgId || storedRole !== 'employee') {
+          navigate('/signin', { state: { message: 'Employee access required. Please sign in.' } });
+          return;
+        }
 
-  const handleCreatePost = async () => {
-    try {
-      const orgId = localStorage.getItem('orgId');
-      const response = await api.post('/posts', {
-        ...newPost,
-        orgId
-      });
-      if (response.data) {
-        setViewMode('dashboard');
-        setNewPost({
-          postType: 'feedback',
-          content: '',
-          mediaUrls: [],
-          region: '',
-          department: '',
-          isAnonymous: true
+        // Verify token and check verification status
+        const response = await api.get('/auth/verify-status', {
+          params: { email: storedEmail },
+          headers: { Authorization: `Bearer ${storedToken}` }
         });
-        await fetchPosts();
+
+        if (response.data.success) {
+          if (!response.data.verified) {
+            // If not verified, redirect to verification page
+            navigate('/employee/verify', { 
+              state: { 
+                message: 'Please complete your verification first.',
+                email: storedEmail,
+                orgId: storedOrgId
+              } 
+            });
+            return;
+          }
+          
+          setEmployeeEmail(storedEmail);
+          setOrganizationId(storedOrgId);
+          fetchPosts(); // Fetch posts after successful authentication
+        } else {
+          localStorage.clear();
+          navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
+        }
+      } catch (error) {
+        console.error('Auth verification failed:', error);
+        localStorage.clear();
+        navigate('/signin', { state: { message: 'Authentication failed. Please sign in again.' } });
       }
-    } catch (error) {
-      console.error('Error creating post:', error);
+    };
+
+    verifyAuth();
+  }, [navigate]);
+
+  // --- Fetch Posts ---
+  const fetchPosts = async () => {
+    if (!organizationId) return;
+
+    setLoading(prev => ({ ...prev, posts: true }));
+    setError(null);
+
+    try {
+      const storedToken = localStorage.getItem('token');
+      const response = await api.get(`/posts/${organizationId}`, {
+        headers: { Authorization: `Bearer ${storedToken}` }
+      });
+      setPosts(response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    } catch (err) {
+      console.error('Error fetching posts:', err);
+      setError(err.response?.data?.message || 'Failed to fetch posts. Please try again.');
+    } finally {
+      setLoading(prev => ({ ...prev, posts: false }));
     }
   };
 
+  // --- Handle File Upload ---
   const handleFileUpload = async (e) => {
-    const files = e.target.files;
-    setIsUploading(true);
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    setLoading(prev => ({ ...prev, create: true }));
+    setUploadProgress(0);
+
     try {
-      const urls = await Promise.all(
-        Array.from(files).map(file => uploadMedia(file))
+      const uploadedUrls = await Promise.all(
+        files.map(async (file) => {
+          const formData = new FormData();
+          formData.append('file', file);
+
+          const response = await api.post('/upload', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' },
+            onUploadProgress: (progressEvent) => {
+              const progress = (progressEvent.loaded / progressEvent.total) * 100;
+              setUploadProgress(progress);
+            }
+          });
+
+          return response.data.url;
+        })
       );
+
       setNewPost(prev => ({
         ...prev,
-        mediaUrls: [...prev.mediaUrls, ...urls]
+        mediaUrls: [...prev.mediaUrls, ...uploadedUrls]
       }));
-    } catch (error) {
-      console.error('Upload failed:', error);
+    } catch (err) {
+      console.error('Error uploading files:', err);
+      setError(err.response?.data?.message || 'Failed to upload files. Please try again.');
     } finally {
-      setIsUploading(false);
+      setLoading(prev => ({ ...prev, create: false }));
+      setUploadProgress(0);
     }
   };
 
+  // --- Handle Create Post ---
+  const handleCreatePost = async () => {
+    if (!newPost.content.trim()) {
+      setError('Post content is required');
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, create: true }));
+    setError(null);
+
+    try {
+      const response = await api.post('/posts', {
+        ...newPost,
+        orgId: organizationId
+      });
+
+      setPosts(prev => [response.data, ...prev]);
+      setNewPost({
+        postType: 'feedback',
+        content: '',
+        mediaUrls: [],
+        region: '',
+        department: '',
+        isAnonymous: false
+      });
+      setViewMode('dashboard');
+    } catch (err) {
+      console.error('Error creating post:', err);
+      setError(err.response?.data?.message || 'Failed to create post. Please try again.');
+    } finally {
+      setLoading(prev => ({ ...prev, create: false }));
+    }
+  };
+
+  // --- Handle Logout ---
   const handleLogout = () => {
     localStorage.clear();
     navigate('/signin');
+  };
+
+  // --- Handle Comment Submit ---
+  const handleCommentSubmit = async (postId, text) => {
+    if (!text.trim()) return;
+
+    try {
+      const response = await api.post(`/posts/${postId}/comment`, { text });
+      setPosts(prev => prev.map(post => 
+        post._id === postId ? response.data : post
+      ));
+    } catch (err) {
+      console.error('Error posting comment:', err);
+      setError(err.response?.data?.message || 'Failed to post comment. Please try again.');
+    }
+  };
+
+  // --- Handle Comment Delete ---
+  const handleCommentDelete = async (postId, commentId) => {
+    try {
+      await api.delete(`/posts/${postId}/comment/${commentId}`);
+      setPosts(prev => prev.map(post => {
+        if (post._id === postId) {
+          return {
+            ...post,
+            comments: post.comments.filter(c => c._id !== commentId)
+          };
+        }
+        return post;
+      }));
+    } catch (err) {
+      console.error('Error deleting comment:', err);
+      setError(err.response?.data?.message || 'Failed to delete comment. Please try again.');
+    }
   };
 
   const actions = [
@@ -416,13 +563,13 @@ const EmployeeDashboard = () => {
                   multiple
                   onChange={handleFileUpload}
                   className="mt-2 block w-full"
-                  disabled={isUploading}
+                  disabled={loading.create}
                   accept="image/*,video/*"
                 />
               </label>
-              {isUploading && (
+              {loading.create && (
                 <p className="text-gray-500 dark:text-slate-400">
-                  Uploading... ({newPost.mediaUrls.length} files attached)
+                  Uploading... ({uploadProgress.toFixed(2)}% complete)
                 </p>
               )}
               <div className="grid grid-cols-3 gap-2 mt-2">
@@ -483,47 +630,59 @@ const EmployeeDashboard = () => {
               <p className="dark:text-white">No posts found.</p>
             ) : (
               <div className="space-y-4">
-                {posts.map(post => (
-                  <div key={post._id} className="border-b pb-4 dark:border-slate-700">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className="font-semibold dark:text-white">
-                        {post.postType.charAt(0).toUpperCase() + post.postType.slice(1)}
+                {posts.map((post, i) => (
+                  <motion.div
+                    key={post._id}
+                    className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: i * 0.03 }}
+                  >
+                    <div className="flex justify-between items-start mb-1 sm:mb-2">
+                      <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
+                        post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
+                        post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
+                        post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
+                        'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
+                      }`}>
+                        {post.postType}
                       </span>
-                      <span className="text-sm text-gray-500 dark:text-slate-400">
-                        {new Date(post.createdAt).toLocaleDateString()}
-                      </span>
-                      {post.isAnonymous && (
-                        <span className="text-sm text-gray-500 dark:text-slate-400">• Anonymous</span>
-                      )}
+                      <button
+                        onClick={() => handleCommentDelete(post._id, post.comments[0]._id)}
+                        className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                        title="Delete Post"
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </button>
                     </div>
-                    <p className="dark:text-white mt-2">{post.content}</p>
-                    
-                    {post.mediaUrls.length > 0 && (
-                      <div className="grid grid-cols-3 gap-2 mt-3">
-                        {post.mediaUrls.map((url, index) => (
-                          <img
-                            key={index}
-                            src={url}
-                            alt="Post media"
-                            className="w-full h-32 object-cover rounded-lg"
+                    <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
+                      {post.content}
+                    </p>
+                    <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1">
+                      <span>By: {post.createdBy || 'Anonymous'}</span>
+                      <span>|</span>
+                      <span>{new Date(post.createdAt).toLocaleString()}</span>
+                      <span className="hidden sm:inline">|</span>
+                      <span className="block sm:inline mt-1 sm:mt-0">Region: {post.region || 'N/A'}</span>
+                      <span className="hidden sm:inline">|</span>
+                      <span className="block sm:inline">Dept: {post.department || 'N/A'}</span>
+                    </div>
+                    {post.reactions && Object.entries(post.reactions).length > 0 && (
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        {Object.entries(post.reactions).map(([type, {count}]) => (
+                          <ReactionButton
+                            key={type}
+                            type={type}
+                            count={count || 0}
+                            postId={post._id}
                           />
                         ))}
                       </div>
                     )}
-
-                    <div className="flex flex-wrap gap-2 mt-3">
-                      {Object.entries(post.reactions).map(([type, {count}]) => (
-                        <ReactionButton
-                          key={type}
-                          type={type}
-                          count={count}
-                          postId={post._id}
-                        />
-                      ))}
-                    </div>
-
-                    <CommentSection postId={post._id} comments={post.comments} />
-                  </div>
+                    {post.comments && post.comments.length > 0 && (
+                      <CommentSection postId={post._id} comments={post.comments} />
+                    )}
+                  </motion.div>
                 ))}
               </div>
             )}

@@ -14,34 +14,88 @@ export default function SignUp() {
   const [error, setError]             = useState('');
   const navigate = useNavigate();
 
+  const validatePassword = (pass) => {
+    const minLength = 8;
+    const hasUpperCase = /[A-Z]/.test(pass);
+    const hasLowerCase = /[a-z]/.test(pass);
+    const hasNumbers = /\d/.test(pass);
+    const hasSpecialChar = /[!@#$%^&*(),.?":{}|<>]/.test(pass);
+
+    if (pass.length < minLength) return 'Password must be at least 8 characters long';
+    if (!hasUpperCase) return 'Password must contain at least one uppercase letter';
+    if (!hasLowerCase) return 'Password must contain at least one lowercase letter';
+    if (!hasNumbers) return 'Password must contain at least one number';
+    if (!hasSpecialChar) return 'Password must contain at least one special character';
+    return null;
+  };
+
   const handleSignUp = async (e) => {
     e.preventDefault();
-    setError(''); setMessage('');
+    setError(''); 
+    setMessage('');
 
+    // Validate passwords match
     if (password !== confirmPassword) {
       setError('Passwords do not match.');
       return;
     }
 
-    // 1) Create in Supabase
-    const { error: signUpError } = await supabase.auth.signUp(
-      { email, password },
-      { emailRedirectTo: 'http://localhost:5173/updatepassword' }
-    );
-    if (signUpError) {
-      setError(signUpError.message);
+    // Validate password strength
+    const passwordError = validatePassword(password);
+    if (passwordError) {
+      setError(passwordError);
       return;
     }
 
-    // 2) Persist in your backend (MongoDB Atlas)
-    const { data, error: regErr } = await api.post('/auth/register', { email, role });
-    if (regErr || !data.success) {
-      setError(regErr?.message || 'Registration failed on backend.');
-      return;
-    }
+    try {
+      // 1) Create in Supabase
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp(
+        { email, password },
+        { emailRedirectTo: `${window.location.origin}/updatepassword` }
+      );
 
-    setMessage('Check your inbox to confirm your email.');
-    setTimeout(() => navigate('/signin'), 3000);
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      if (!signUpData.session) {
+        setMessage('Please check your email to confirm your account.');
+        setTimeout(() => navigate('/signin'), 3000);
+        return;
+      }
+
+      // 2) Register in backend
+      const { data: backendData, error: backendError } = await api.post('/auth/register', {
+        email,
+        role,
+        supabaseToken: signUpData.session.access_token
+      });
+
+      if (backendError) {
+        setError(backendError.message);
+        return;
+      }
+
+      // Store tokens
+      localStorage.setItem('token', backendData.token);
+      localStorage.setItem('supabaseToken', signUpData.session.access_token);
+      localStorage.setItem('email', email);
+      localStorage.setItem('role', role);
+
+      setMessage('Registration successful! Redirecting to dashboard...');
+      setTimeout(() => {
+        if (role === 'admin') {
+          navigate('/admin-dashboard');
+        } else {
+          navigate('/verify');
+        }
+      }, 2000);
+
+    } catch (err) {
+      console.error('Registration error:', err);
+      setError(err.response?.data?.message || 'Registration failed. Please try again later.');
+    }
   };
 
   return (
