@@ -4,15 +4,11 @@ const router = express.Router();
 const {
   registerUser,
   verifyEmployee,
-  checkVerificationStatus,
-  handleSupabaseWebhook
+  checkVerificationStatus 
 } = require('../controllers/authController');
 
 // Direct registration (after Supabase signup)
 router.post('/register', registerUser);
-
-// (Optional) webhook for Supabase events
-router.post('/supabase/webhook', handleSupabaseWebhook);
 
 // Employee verification
 router.post('/verify', verifyEmployee);

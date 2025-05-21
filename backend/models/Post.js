@@ -23,6 +23,11 @@ const commentSchema = new mongoose.Schema({
     love: { type: Number, default: 0 },
     laugh: { type: Number, default: 0 },
     angry: { type: Number, default: 0 }
+  },
+  author: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
   }
 });
 

@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/axios';
 import { uploadMedia } from '../utils/uploadMedia';
+import { hasReacted, toggleReaction } from '../utils/reactions';
 import {
   UserCircleIcon,
   SunIcon,
@@ -13,7 +14,12 @@ import {
   EyeIcon,
   CheckBadgeIcon,
   BuildingOfficeIcon,
-  PlusCircleIcon,
+  HandThumbUpIcon,
+  HeartIcon,
+  FaceSmileIcon,
+  XCircleIcon,
+  ChatBubbleLeftIcon,
+  TrashIcon
 } from '@heroicons/react/24/outline';
 
 // --- Theme Hook ---
@@ -71,7 +77,133 @@ const ThemeToggle = ({ theme, toggleTheme }) => (
   </button>
 );
 
-// --- ActionCard Component ---
+// --- Reaction Button Component ---
+const ReactionButton = ({ type, count, postId, commentId = null }) => {
+  const [isReacted, setIsReacted] = useState(hasReacted(commentId || postId, type));
+  const [currentCount, setCurrentCount] = useState(count);
+
+  const handleReaction = async () => {
+    try {
+      const endpoint = commentId 
+        ? `/posts/${postId}/comment/${commentId}/react`
+        : `/posts/${postId}/react`;
+
+      const response = await api.post(endpoint, { type });
+      
+      // Update counts based on response
+      if (commentId) {
+        setCurrentCount(response.data.comments.find(c => c._id === commentId).reactions[type].count);
+      } else {
+        setCurrentCount(response.data.reactions[type].count);
+      }
+      
+      toggleReaction(commentId || postId, type);
+      setIsReacted(!isReacted);
+    } catch (error) {
+      console.error('Error updating reaction:', error);
+    }
+  };
+
+  const getIcon = () => {
+    switch(type) {
+      case 'like': return <HandThumbUpIcon className="h-5 w-5" />;
+      case 'love': return <HeartIcon className="h-5 w-5 text-red-500" />;
+      case 'laugh': return <FaceSmileIcon className="h-5 w-5 text-yellow-500" />;
+      case 'angry': return <XCircleIcon className="h-5 w-5 text-orange-500" />;
+      default: return <HandThumbUpIcon className="h-5 w-5" />;
+    }
+  };
+
+  return (
+    <button
+      onClick={handleReaction}
+      className={`flex items-center gap-1 px-2 py-1 rounded-full ${
+        isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
+      }`}
+    >
+      {getIcon()}
+      <span className="text-sm">{currentCount}</span>
+    </button>
+  );
+};
+
+// --- Comment Section Component ---
+const CommentSection = ({ postId, comments }) => {
+  const [newComment, setNewComment] = useState('');
+  const [localComments, setLocalComments] = useState(comments);
+
+  const handleCommentSubmit = async () => {
+    try {
+      const response = await api.post(`/posts/${postId}/comment`, { text: newComment });
+      setLocalComments([...localComments, response.data.comments.slice(-1)[0]]);
+      setNewComment('');
+    } catch (error) {
+      console.error('Error posting comment:', error);
+    }
+  };
+
+  const handleCommentDelete = async (commentId) => {
+    try {
+      await api.delete(`/posts/${postId}/comment/${commentId}`);
+      setLocalComments(localComments.filter(c => c._id !== commentId));
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+    }
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Write a comment..."
+          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
+        />
+        <button
+          onClick={handleCommentSubmit}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+        >
+          Post
+        </button>
+      </div>
+
+      {localComments.map(comment => (
+        <div key={comment._id} className="flex gap-3 items-start">
+          <div className="flex-1 bg-gray-100 dark:bg-slate-700 p-3 rounded-lg">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-sm font-medium dark:text-white">Anonymous</span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {new Date(comment.createdAt).toLocaleDateString()}
+              </span>
+            </div>
+            <p className="text-gray-800 dark:text-slate-200">{comment.text}</p>
+            <div className="flex gap-2 mt-2">
+              {Object.entries(comment.reactions).map(([type, {count}]) => (
+                <ReactionButton
+                  key={type}
+                  type={type}
+                  count={count}
+                  postId={postId}
+                  commentId={comment._id}
+                />
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={() => handleCommentDelete(comment._id)}
+            className="p-1 text-red-500 hover:text-red-600"
+          >
+            <TrashIcon className="h-4 w-4" />
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// --- Action Card Component ---
 const ActionCard = ({
   title,
   description,
@@ -97,7 +229,7 @@ const ActionCard = ({
       whileHover={{ scale: 1.03, y: -2 }}
       whileTap={{ scale: 0.98 }}
       className={`w-full mt-auto px-4 py-2.5 rounded-lg font-medium text-sm transition-colors duration-200
-                  ${buttonText === "Logout"
+                  ${buttonText === "Logout" 
                     ? "bg-red-500 hover:bg-red-600 text-white"
                     : "bg-blue-600 hover:bg-blue-700 text-white dark:bg-blue-500 dark:hover:bg-blue-600"
                   }`}
@@ -107,12 +239,12 @@ const ActionCard = ({
   </motion.div>
 );
 
-// --- EmployeeDashboard Component ---
+// --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
   const [theme, toggleTheme] = useTheme();
   const [employeeEmail, setEmployeeEmail] = useState("");
-  const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard', 'create', 'view'
+  const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
   const [newPost, setNewPost] = useState({
     postType: 'feedback',
@@ -131,7 +263,8 @@ const EmployeeDashboard = () => {
       navigate('/signin');
     }
     setEmployeeEmail(storedEmail);
-  }, [navigate]);
+    if (viewMode === 'view') fetchPosts();
+  }, [navigate, viewMode]);
 
   const fetchPosts = async () => {
     try {
@@ -201,8 +334,8 @@ const EmployeeDashboard = () => {
       accentColorClass: "text-blue-600 dark:text-blue-400"
     },
     {
-      title: "View My Posts",
-      description: "Review and manage the posts you've previously submitted.",
+      title: "View Posts",
+      description: "Browse all anonymous posts within your organization",
       buttonText: "View Posts",
       onClick: () => {
         fetchPosts();
@@ -240,7 +373,7 @@ const EmployeeDashboard = () => {
             <select
               value={newPost.postType}
               onChange={(e) => setNewPost({ ...newPost, postType: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700"
+              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
             >
               {['feedback', 'complaint', 'suggestion', 'public'].map(type => (
                 <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
@@ -250,21 +383,21 @@ const EmployeeDashboard = () => {
               value={newPost.content}
               onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
               placeholder="Write your post content..."
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 h-32"
+              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 h-32 dark:text-white"
             />
             <input
               type="text"
               placeholder="Region (optional)"
               value={newPost.region}
               onChange={(e) => setNewPost({ ...newPost, region: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700"
+              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
             />
             <input
               type="text"
               placeholder="Department (optional)"
               value={newPost.department}
               onChange={(e) => setNewPost({ ...newPost, department: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700"
+              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
             />
             <label className="flex items-center mb-4">
               <input
@@ -284,36 +417,52 @@ const EmployeeDashboard = () => {
                   onChange={handleFileUpload}
                   className="mt-2 block w-full"
                   disabled={isUploading}
+                  accept="image/*,video/*"
                 />
               </label>
-              {isUploading && <p className="text-gray-500">Uploading...</p>}
-              <div className="flex flex-wrap gap-2 mt-2">
+              {isUploading && (
+                <p className="text-gray-500 dark:text-slate-400">
+                  Uploading... ({newPost.mediaUrls.length} files attached)
+                </p>
+              )}
+              <div className="grid grid-cols-3 gap-2 mt-2">
                 {newPost.mediaUrls.map((url, index) => (
-                  <img
-                    key={index}
-                    src={url}
-                    alt="Media preview"
-                    className="h-20 w-20 object-cover rounded"
-                  />
+                  <div key={index} className="relative group">
+                    <img
+                      src={url}
+                      alt="Media preview"
+                      className="w-full h-24 object-cover rounded-lg"
+                    />
+                    <button
+                      onClick={() => setNewPost(prev => ({
+                        ...prev,
+                        mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
+                      }))}
+                      className="absolute top-1 right-1 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <XCircleIcon className="h-4 w-4 text-white" />
+                    </button>
+                  </div>
                 ))}
               </div>
             </div>
             <div className="flex gap-4">
               <button
                 onClick={() => setViewMode('dashboard')}
-                className="px-4 py-2 bg-gray-500 text-white rounded"
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
                 Cancel
               </button>
               <button
                 onClick={handleCreatePost}
-                className="px-4 py-2 bg-blue-600 text-white rounded"
+                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
               >
                 Submit Post
               </button>
             </div>
           </motion.div>
         );
+
       case 'view':
         return (
           <motion.div
@@ -322,10 +471,10 @@ const EmployeeDashboard = () => {
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
             <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold dark:text-white">Your Posts</h2>
+              <h2 className="text-xl font-bold dark:text-white">Posts</h2>
               <button
                 onClick={() => setViewMode('dashboard')}
-                className="px-4 py-2 bg-gray-500 text-white rounded"
+                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
               >
                 Back to Dashboard
               </button>
@@ -336,28 +485,51 @@ const EmployeeDashboard = () => {
               <div className="space-y-4">
                 {posts.map(post => (
                   <div key={post._id} className="border-b pb-4 dark:border-slate-700">
-                    <h3 className="font-semibold dark:text-white">
-                      {post.postType} • {new Date(post.createdAt).toLocaleDateString()}
-                    </h3>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="font-semibold dark:text-white">
+                        {post.postType.charAt(0).toUpperCase() + post.postType.slice(1)}
+                      </span>
+                      <span className="text-sm text-gray-500 dark:text-slate-400">
+                        {new Date(post.createdAt).toLocaleDateString()}
+                      </span>
+                      {post.isAnonymous && (
+                        <span className="text-sm text-gray-500 dark:text-slate-400">• Anonymous</span>
+                      )}
+                    </div>
                     <p className="dark:text-white mt-2">{post.content}</p>
+                    
                     {post.mediaUrls.length > 0 && (
-                      <div className="flex gap-2 mt-2">
+                      <div className="grid grid-cols-3 gap-2 mt-3">
                         {post.mediaUrls.map((url, index) => (
                           <img
                             key={index}
                             src={url}
                             alt="Post media"
-                            className="h-20 w-20 object-cover rounded"
+                            className="w-full h-32 object-cover rounded-lg"
                           />
                         ))}
                       </div>
                     )}
+
+                    <div className="flex flex-wrap gap-2 mt-3">
+                      {Object.entries(post.reactions).map(([type, {count}]) => (
+                        <ReactionButton
+                          key={type}
+                          type={type}
+                          count={count}
+                          postId={post._id}
+                        />
+                      ))}
+                    </div>
+
+                    <CommentSection postId={post._id} comments={post.comments} />
                   </div>
                 ))}
               </div>
             )}
           </motion.div>
         );
+
       default:
         return (
           <>
@@ -389,7 +561,6 @@ const EmployeeDashboard = () => {
 
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
-      {/* Sidebar */}
       <aside className="w-16 md:w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
         <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
           <BuildingOfficeIcon className="h-7 w-7 md:h-8" />
@@ -418,7 +589,6 @@ const EmployeeDashboard = () => {
         </div>
       </aside>
 
-      {/* Main Content Area */}
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center">

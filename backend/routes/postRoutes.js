@@ -1,5 +1,6 @@
 // backend/routes/postRoutes.js
 const express = require('express');
+const router = express.Router();
 const {
   createPost,
   reactToPost,
@@ -13,20 +14,17 @@ const {
   deletePost
 } = require('../controllers/postController');
 
-const router = express.Router();
+const auth = require('../middleware/auth');
 
-router.post('/', createPost);
-router.post('/:postId/like', reactToPost);
-router.post('/:postId/comment', commentOnPost);
-router.post('/:postId/comment/:commentId/react', reactToComment);
-
-router.put('/:postId', editPost);
-router.delete('/:postId', deletePost);
-
-router.put('/:postId/comment/:commentId', editComment);
-router.delete('/:postId/comment/:commentId', deleteComment);
-
-router.get('/stats/:orgId', getPostStats);
-router.get('/:orgId', getPostsByOrg);
+router.post('/', auth, createPost);
+router.get('/stats/:orgId', auth, getPostStats);
+router.get('/:orgId', auth, getPostsByOrg);
+router.post('/:postId/like', auth, reactToPost);
+router.post('/:postId/comment', auth, commentOnPost);
+router.delete('/:postId/comment/:commentId', auth, deleteComment);
+router.put('/:postId/comment/:commentId', auth, editComment);
+router.post('/:postId/comment/:commentId/react', auth, reactToComment);
+router.put('/:postId', auth, editPost);
+router.delete('/:postId', auth, deletePost);
 
 module.exports = router;
