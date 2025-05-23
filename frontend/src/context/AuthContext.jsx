@@ -42,6 +42,11 @@ export const AuthProvider = ({ children }) => {
       });
       const { token, user } = response.data;
       localStorage.setItem('token', token);
+      localStorage.setItem('email', email); // Store email in localStorage
+      localStorage.setItem('role', user.role); // Store role in localStorage
+      if (user.organizationId) {
+        localStorage.setItem('orgId', user.organizationId); // Store orgId if exists
+      }
       setUser(user);
       return user;
     } catch (error) {
@@ -61,6 +66,11 @@ export const AuthProvider = ({ children }) => {
       });
       const { token, user } = response.data;
       localStorage.setItem('token', token);
+      localStorage.setItem('email', email); // Store email in localStorage
+      localStorage.setItem('role', role); // Store role in localStorage
+      if (organizationId) {
+        localStorage.setItem('orgId', organizationId); // Store orgId if exists
+      }
       setUser(user);
       return user;
     } catch (error) {
@@ -80,7 +90,11 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Clear all auth-related localStorage items
       localStorage.removeItem('token');
+      localStorage.removeItem('email');
+      localStorage.removeItem('role');
+      localStorage.removeItem('orgId');
       setUser(null);
     }
   };

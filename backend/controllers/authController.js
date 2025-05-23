@@ -2,6 +2,31 @@ const User = require('../models/User');
 const Organization = require('../models/Organization');
 const jwt = require('jsonwebtoken');
 
+// Get current user
+exports.getCurrentUser = async (req, res) => {
+  try {
+    // The user is attached to the request by the auth middleware
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ error: 'Not authenticated' });
+    }
+    
+    // Return user data without sensitive information
+    const userData = {
+      id: user._id,
+      email: user.email,
+      role: user.role,
+      organizationId: user.organizationId,
+      isVerified: user.verified
+    };
+    
+    res.status(200).json(userData);
+  } catch (error) {
+    console.error('Error getting current user:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
 exports.registerUser = async (req, res) => {
   try {
     const { email, password, role, organizationId } = req.body;

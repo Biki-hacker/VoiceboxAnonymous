@@ -4,10 +4,12 @@ const router = express.Router();
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 const User = require('../models/User');
+const authMiddleware = require('../middleware/auth');
 const {
   registerUser,
   verifyEmployee,
-  checkVerificationStatus 
+  checkVerificationStatus,
+  getCurrentUser
 } = require('../controllers/authController');
 
 // Initialize Supabase client
@@ -67,6 +69,9 @@ router.post('/login', async (req, res) => {
     });
   }
 });
+
+// Get current user
+router.get('/me', authMiddleware, getCurrentUser);
 
 // Direct registration (after Supabase signup)
 router.post('/register', registerUser);
