@@ -472,8 +472,7 @@ const EmployeeDashboard = () => {
     content: '',
     mediaUrls: [], // Will store objects with file, preview, url, isUploading, progress
     region: '',
-    department: '',
-    isAnonymous: false
+    department: ''
   });
   
   // Clean up object URLs when component unmounts or mediaUrls changes
@@ -731,7 +730,6 @@ const EmployeeDashboard = () => {
         mediaUrls: validMediaUrls, // Now this is an array of strings
         region: newPost.region,
         department: newPost.department,
-        isAnonymous: newPost.isAnonymous,
         orgId: organizationId
       });
 
@@ -751,8 +749,7 @@ const EmployeeDashboard = () => {
         content: '',
         mediaUrls: [],
         region: '',
-        department: '',
-        isAnonymous: false
+        department: ''
       });
       
       setViewMode('dashboard');
@@ -892,15 +889,7 @@ const EmployeeDashboard = () => {
               onChange={(e) => setNewPost({ ...newPost, department: e.target.value })}
               className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
             />
-            <label className="flex items-center mb-4">
-              <input
-                type="checkbox"
-                checked={newPost.isAnonymous}
-                onChange={(e) => setNewPost({ ...newPost, isAnonymous: e.target.checked })}
-                className="mr-2"
-              />
-              <span className="dark:text-white">Post Anonymously</span>
-            </label>
+            {/* All posts are anonymous */}
             <div className="mb-4">
               <label className="block mb-2 dark:text-white">
                 Upload Media:
