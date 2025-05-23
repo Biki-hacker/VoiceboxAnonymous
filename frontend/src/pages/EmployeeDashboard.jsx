@@ -1,5 +1,5 @@
 // src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { api } from '../api/axios';
@@ -20,8 +20,12 @@ import {
   FaceFrownIcon as EmojiSadIcon,
   XCircleIcon,
   ChatBubbleLeftIcon,
-  TrashIcon
+  TrashIcon,
+  XMarkIcon,
+  PaperClipIcon,
+  PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
+import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 
 // --- Theme Hook ---
 const useTheme = () => {
@@ -366,6 +370,91 @@ const ActionCard = ({
   </motion.div>
 );
 
+// --- Media Viewer Modal Component ---
+const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
+  const modalRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Close modal when clicking outside the content
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(console.log);
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+      <div className="relative w-full h-full flex items-center justify-center">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
+          aria-label="Close media viewer"
+        >
+          <XCircleIcon className="h-8 w-8" />
+        </button>
+        {/* Fullscreen button removed as per user request */}
+        
+        <div 
+          ref={modalRef} 
+          className="relative max-w-full max-h-full flex items-center justify-center"
+        >
+          {mediaType === 'image' ? (
+            <img
+              src={mediaUrl}
+              alt="Full size media"
+              className="max-w-full max-h-[90vh] object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <video
+              src={mediaUrl}
+              className="max-w-full max-h-[90vh]"
+              controls
+              autoPlay
+              controlsList="nodownload"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
@@ -374,16 +463,30 @@ const EmployeeDashboard = () => {
   const [organizationId, setOrganizationId] = useState("");
   const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
+  const [selectedPost, setSelectedPost] = useState(null);
+  const [viewingMedia, setViewingMedia] = useState({ isOpen: false, url: null, type: null });
   const [loading, setLoading] = useState({ posts: false, create: false });
   const [error, setError] = useState(null);
   const [newPost, setNewPost] = useState({
     postType: 'feedback',
     content: '',
-    mediaUrls: [],
+    mediaUrls: [], // Will store objects with file, preview, url, isUploading, progress
     region: '',
     department: '',
     isAnonymous: false
   });
+  
+  // Clean up object URLs when component unmounts or mediaUrls changes
+  useEffect(() => {
+    const mediaUrls = newPost.mediaUrls;
+    return () => {
+      mediaUrls.forEach(media => {
+        if (media?.preview) {
+          URL.revokeObjectURL(media.preview);
+        }
+      });
+    };
+  }, [newPost.mediaUrls]);
   const [uploadProgress, setUploadProgress] = useState(0);
 
   // --- Authentication Effect ---
@@ -445,13 +548,62 @@ const EmployeeDashboard = () => {
 
     try {
       const storedToken = localStorage.getItem('token');
+      
+      // Use the correct endpoint format with organization ID as URL parameter
       const response = await api.get(`/posts/${organizationId}`, {
-        headers: { Authorization: `Bearer ${storedToken}` }
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`
+        }
       });
-      setPosts(response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+      
+      // Handle successful response
+      let postsData = [];
+      
+      // Handle different response formats
+      if (Array.isArray(response.data)) {
+        postsData = response.data;
+      } else if (response.data && Array.isArray(response.data.posts)) {
+        postsData = response.data.posts;
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        postsData = response.data.data;
+      } else {
+        console.warn('Unexpected response format, using empty array');
+      }
+
+      // Sort posts by creation date (newest first)
+      const sortedPosts = [...postsData].sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      );
+      
+      setPosts(sortedPosts);
+      
     } catch (err) {
-      console.error('Error fetching posts:', err);
-      setError(err.response?.data?.message || 'Failed to fetch posts. Please try again.');
+      console.error('Error fetching posts:', {
+        error: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          headers: err.config?.headers
+        }
+      });
+      
+      // Set a more user-friendly error message
+      let errorMessage = 'Failed to fetch posts. Please try again later.';
+      if (err.response) {
+        if (err.response.status === 401) {
+          errorMessage = 'Session expired. Please sign in again.';
+          // Optionally redirect to login
+          navigate('/signin');
+        } else if (err.response.data?.message) {
+          errorMessage = err.response.data.message;
+        }
+      }
+      
+      setError(errorMessage);
+      setPosts([]); // Ensure posts is always an array
     } finally {
       setLoading(prev => ({ ...prev, posts: false }));
     }
@@ -462,37 +614,88 @@ const EmployeeDashboard = () => {
     const files = Array.from(e.target.files);
     if (files.length === 0) return;
 
+    // Reset file input
+    e.target.value = '';
+    
     setLoading(prev => ({ ...prev, create: true }));
-    setUploadProgress(0);
+    setError(null);
 
     try {
-      const uploadedUrls = await Promise.all(
-        files.map(async (file) => {
-          const formData = new FormData();
-          formData.append('file', file);
+      // Filter out files that are too large (>10MB)
+      const validFiles = files.filter(file => file.size <= 10 * 1024 * 1024);
+      
+      if (validFiles.length < files.length) {
+        setError('Some files were too large (max 10MB) and were not uploaded.');
+      }
 
-          const response = await api.post('/upload', formData, {
-            headers: { 'Content-Type': 'multipart/form-data' },
-            onUploadProgress: (progressEvent) => {
-              const progress = (progressEvent.loaded / progressEvent.total) * 100;
-              setUploadProgress(progress);
-            }
-          });
+      if (validFiles.length === 0) {
+        setLoading(prev => ({ ...prev, create: false }));
+        return;
+      }
 
-          return response.data.url;
-        })
-      );
+      // Create preview URLs for immediate display
+      const previewFiles = validFiles.map(file => ({
+        id: URL.createObjectURL(file), // Use URL as unique ID
+        file,
+        preview: URL.createObjectURL(file),
+        isUploading: true,
+        progress: 0,
+        error: null
+      }));
 
+      // Add to mediaUrls with preview
       setNewPost(prev => ({
         ...prev,
-        mediaUrls: [...prev.mediaUrls, ...uploadedUrls]
+        mediaUrls: [...prev.mediaUrls, ...previewFiles]
       }));
+
+      // Upload files one by one to track progress for each
+      for (const item of previewFiles) {
+        try {
+          const url = await uploadMedia(item.file, (progress) => {
+            setNewPost(prev => ({
+              ...prev,
+              mediaUrls: prev.mediaUrls.map(m => 
+                m.id === item.id ? { ...m, progress } : m
+              )
+            }));
+          });
+
+          // Update with final URL and mark as uploaded
+          setNewPost(prev => ({
+            ...prev,
+            mediaUrls: prev.mediaUrls.map(m => 
+              m.id === item.id 
+                ? { ...m, url, isUploading: false, progress: 100 }
+                : m
+            )
+          }));
+        } catch (err) {
+          console.error('Error uploading file:', err);
+          
+          // Mark the upload as failed
+          setNewPost(prev => ({
+            ...prev,
+            mediaUrls: prev.mediaUrls.map(m => 
+              m.id === item.id 
+                ? { 
+                    ...m, 
+                    isUploading: false, 
+                    error: 'Upload failed',
+                    progress: 0
+                  } 
+                : m
+            )
+          }));
+          
+          setError('Failed to upload some files. Please try again.');
+        }
+      }
     } catch (err) {
-      console.error('Error uploading files:', err);
-      setError(err.response?.data?.message || 'Failed to upload files. Please try again.');
+      console.error('Error processing files:', err);
+      setError('Failed to process files. Please try again.');
     } finally {
       setLoading(prev => ({ ...prev, create: false }));
-      setUploadProgress(0);
     }
   };
 
@@ -503,16 +706,46 @@ const EmployeeDashboard = () => {
       return;
     }
 
+    // Check if any uploads are still in progress
+    const uploadsInProgress = newPost.mediaUrls.some(media => media.isUploading);
+    if (uploadsInProgress) {
+      setError('Please wait for all files to finish uploading');
+      return;
+    }
+
     setLoading(prev => ({ ...prev, create: true }));
     setError(null);
 
     try {
+      // Filter out any failed uploads and get just the URLs
+      const validMediaUrls = newPost.mediaUrls
+        .filter(media => !media.error && (media.url || media.preview))
+        .map(media => media.url || media.preview)
+        .filter(Boolean); // Remove any null/undefined entries
+
+      console.log('Creating post with media URLs:', validMediaUrls);
+
       const response = await api.post('/posts', {
-        ...newPost,
+        content: newPost.content.trim(),
+        postType: newPost.postType,
+        mediaUrls: validMediaUrls, // Now this is an array of strings
+        region: newPost.region,
+        department: newPost.department,
+        isAnonymous: newPost.isAnonymous,
         orgId: organizationId
       });
 
-      setPosts(prev => [response.data, ...prev]);
+      console.log('Post created successfully:', response.data);
+
+      // Clean up object URLs after successful post
+      newPost.mediaUrls.forEach(media => {
+        if (media.preview) URL.revokeObjectURL(media.preview);
+      });
+
+      // Fetch fresh posts to ensure we have the latest data
+      await fetchPosts();
+      
+      // Reset form
       setNewPost({
         postType: 'feedback',
         content: '',
@@ -521,10 +754,23 @@ const EmployeeDashboard = () => {
         department: '',
         isAnonymous: false
       });
+      
       setViewMode('dashboard');
     } catch (err) {
-      console.error('Error creating post:', err);
-      setError(err.response?.data?.message || 'Failed to create post. Please try again.');
+      console.error('Error creating post:', {
+        error: err,
+        response: err.response?.data,
+        status: err.response?.status
+      });
+      
+      let errorMessage = 'Failed to create post. Please try again.';
+      if (err.response?.data?.message) {
+        errorMessage = err.response.data.message;
+      } else if (err.message) {
+        errorMessage = err.message;
+      }
+      
+      setError(errorMessage);
     } finally {
       setLoading(prev => ({ ...prev, create: false }));
     }
@@ -662,35 +908,71 @@ const EmployeeDashboard = () => {
                   type="file"
                   multiple
                   onChange={handleFileUpload}
-                  className="mt-2 block w-full"
+                  className="mt-2 block w-full text-sm text-gray-500
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-full file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-blue-50 file:text-blue-700
+                    hover:file:bg-blue-100
+                    dark:file:bg-blue-900/30 dark:file:text-blue-300
+                    dark:hover:file:bg-blue-900/50"
                   disabled={loading.create}
                   accept="image/*,video/*"
                 />
               </label>
-              {loading.create && (
-                <p className="text-gray-500 dark:text-slate-400">
-                  Uploading... ({uploadProgress.toFixed(2)}% complete)
-                </p>
-              )}
-              <div className="grid grid-cols-3 gap-2 mt-2">
-                {newPost.mediaUrls.map((url, index) => (
-                  <div key={index} className="relative group">
-                    <img
-                      src={url}
-                      alt="Media preview"
-                      className="w-full h-24 object-cover rounded-lg"
-                    />
-                    <button
-                      onClick={() => setNewPost(prev => ({
-                        ...prev,
-                        mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
-                      }))}
-                      className="absolute top-1 right-1 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                    >
-                      <XCircleIcon className="h-4 w-4 text-white" />
-                    </button>
-                  </div>
-                ))}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
+                {newPost.mediaUrls.map((media, index) => {
+                  const isImage = media.file?.type?.startsWith('image/') || 
+                                (media.preview && !media.preview.endsWith('.mp4'));
+                  const src = media.url || media.preview || media;
+                  
+                  return (
+                    <div key={index} className="relative group rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700 aspect-square">
+                      {media.isUploading ? (
+                        <div className="w-full h-full flex items-center justify-center">
+                          <div className="text-center">
+                            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
+                            <p className="text-xs mt-2 text-gray-600 dark:text-gray-300">
+                              {Math.round(media.progress)}%
+                            </p>
+                          </div>
+                        </div>
+                      ) : isImage ? (
+                        <img
+                          src={src}
+                          alt="Preview"
+                          className="w-full h-full object-cover"
+                          onLoad={() => {
+                            if (media.preview) {
+                              URL.revokeObjectURL(media.preview);
+                            }
+                          }}
+                        />
+                      ) : (
+                        <video
+                          src={src}
+                          className="w-full h-full object-cover"
+                          controls
+                        />
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          setNewPost(prev => ({
+                            ...prev,
+                            mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
+                          }));
+                        }}
+                        className="absolute top-1 right-1 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
+                        aria-label="Remove media"
+                      >
+                        <XCircleIcon className="h-4 w-4 text-white" />
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </div>
             <div className="flex gap-4">
@@ -758,6 +1040,84 @@ const EmployeeDashboard = () => {
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
                       {post.content}
                     </p>
+                    
+                    {/* Media Display */}
+                    {post.mediaUrls && post.mediaUrls.length > 0 && (
+                      <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                        {post.mediaUrls.map((media, idx) => {
+                          // Handle both string and object formats
+                          const mediaUrl = typeof media === 'string' ? media : (media.url || media.preview);
+                          
+                          if (!mediaUrl) return null;
+                          
+                          // Determine if it's an image or video
+                          const isImage = typeof mediaUrl === 'string' && 
+                                        mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
+                          
+                          const isVideo = typeof mediaUrl === 'string' && 
+                                        mediaUrl.match(/\.(mp4|webm|ogg)$/i);
+                          
+                          const handleMediaClick = (e) => {
+                            e.stopPropagation();
+                            setViewingMedia({
+                              isOpen: true,
+                              url: mediaUrl,
+                              type: isImage ? 'image' : 'video'
+                            });
+                          };
+                          
+                          return isImage ? (
+                            <div 
+                              key={`${post._id}-media-${idx}`} 
+                              className="relative group cursor-pointer"
+                              onClick={handleMediaClick}
+                            >
+                              <img
+                                src={mediaUrl}
+                                alt={`Media ${idx + 1}`}
+                                className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
+                                onError={(e) => {
+                                  console.error('Error loading image:', mediaUrl);
+                                  e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found';
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-200 rounded-lg" />
+                              <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                <div className="bg-black bg-opacity-50 rounded-full p-2">
+                                  <ArrowsPointingOutIcon className="h-5 w-5 text-white" />
+                                </div>
+                              </div>
+                            </div>
+                          ) : isVideo ? (
+                            <div 
+                              key={`${post._id}-media-${idx}`} 
+                              className="relative group cursor-pointer"
+                              onClick={handleMediaClick}
+                            >
+                              <video
+                                src={mediaUrl}
+                                className="w-full h-32 object-cover rounded-lg"
+                                onError={(e) => {
+                                  console.error('Error loading video:', mediaUrl);
+                                  e.target.parentElement.innerHTML = `
+                                    <div class="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                                      <span class="text-gray-500">Video not available</span>
+                                    </div>
+                                  `;
+                                }}
+                              />
+                              <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                                <div className="bg-black bg-opacity-50 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M8 5v14l11-7z" />
+                                  </svg>
+                                </div>
+                              </div>
+                            </div>
+                          ) : null;
+                        })}
+                      </div>
+                    )}
                     <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1">
                       <span>By: {post.createdBy || 'Anonymous'}</span>
                       <span>|</span>
@@ -866,6 +1226,15 @@ const EmployeeDashboard = () => {
           {renderContent()}
         </main>
       </div>
+      
+      {/* Media Viewer Modal */}
+      {viewingMedia.isOpen && (
+        <MediaViewer
+          mediaUrl={viewingMedia.url}
+          mediaType={viewingMedia.type}
+          onClose={() => setViewingMedia({ isOpen: false, url: null, type: null })}
+        />
+      )}
     </div>
   );
 };
