@@ -90,7 +90,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       try {
         const storedToken = localStorage.getItem('token');
         const endpoint = commentId 
-          ? `/posts/${postId}/comment/${commentId}/reactions`
+          ? `/posts/${postId}/comments/${commentId}/reactions`
           : `/posts/${postId}/reactions`;
 
         const response = await api.get(endpoint, {
@@ -101,10 +101,12 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         });
 
         // Update local state with server data
-        const reactionData = response.data[type];
-        if (reactionData) {
-          setIsReacted(reactionData.hasReacted);
-          setCurrentCount(reactionData.count);
+        if (response.data?.success && response.data?.data) {
+          const reactionData = response.data.data[type];
+          if (reactionData) {
+            setIsReacted(reactionData.hasReacted);
+            setCurrentCount(reactionData.count);
+          }
         }
       } catch (error) {
         console.error('Error fetching reaction status:', error);
@@ -128,8 +130,8 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     try {
       const storedToken = localStorage.getItem('token');
       const endpoint = commentId 
-        ? `/posts/${postId}/comment/${commentId}/react`
-        : `/posts/${postId}/like`;
+        ? `/posts/${postId}/comments/${commentId}/reactions`
+        : `/posts/${postId}/reactions`;
 
       const response = await api.post(
         endpoint, 
@@ -143,12 +145,13 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       );
       
       // Update with server response
-      setIsReacted(response.data.hasReacted);
-      setCurrentCount(response.data.count);
-      
-      // Update local storage to persist the reaction state
-      toggleReaction(commentId || postId, type);
-      
+      if (response.data?.success && response.data?.reaction) {
+        setIsReacted(response.data.reaction.hasReacted);
+        setCurrentCount(response.data.reaction.count);
+        
+        // Update local storage to persist the reaction state
+        toggleReaction(commentId || postId, type);
+      }
     } catch (error) {
       console.error('Error updating reaction:', error);
       // Revert optimistic updates on error
@@ -203,8 +206,11 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
     try {
       const storedToken = localStorage.getItem('token');
       const response = await api.post(
-        `/posts/${postId}/comment`,
-        { text: newComment },
+        `/posts/${postId}/comments`,
+        { 
+          text: newComment,
+          createdBy: localStorage.getItem('name') || 'Anonymous'
+        },
         { 
           headers: { 
             'Content-Type': 'application/json',
@@ -213,7 +219,7 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
         }
       );
       
-      if (response.data) {
+      if (response.data?.success) {
         // The backend returns the updated post with all comments
         setLocalComments(response.data.comments || []);
         setNewComment('');
@@ -233,7 +239,7 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
     try {
       const storedToken = localStorage.getItem('token');
       await api.delete(
-        `/posts/${postId}/comment/${commentId}`,
+        `/posts/${postId}/comments/${commentId}`,
         { 
           headers: { 
             'Content-Type': 'application/json',
@@ -253,43 +259,10 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
     }
   };
   
-  const handleReaction = async (commentId, type) => {
-    try {
-      const storedToken = localStorage.getItem('token');
-      const response = await api.post(
-        `/posts/${postId}/comment/${commentId}/react`,
-        { type },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
-      
-      // Update the specific comment's reactions
-      setLocalComments(prev => 
-        prev.map(comment => 
-          comment._id === commentId 
-            ? { 
-                ...comment, 
-                reactions: {
-                  ...comment.reactions,
-                  [type]: {
-                    count: response.data.count,
-                    users: response.data.hasReacted 
-                      ? [...(comment.reactions[type]?.users || []), 'current-user'] 
-                      : (comment.reactions[type]?.users || []).filter(id => id !== 'current-user')
-                  }
-                }
-              } 
-            : comment
-        )
-      );
-    } catch (error) {
-      console.error('Error reacting to comment:', error);
-      setError('Failed to update reaction');
-    }
+  const handleReaction = (commentId, reactionType) => {
+    // This function is no longer needed as we're using the ReactionButton component
+    // which handles its own state and API calls
+    console.log('Reaction handled by ReactionButton component');
   };
 
   return (
@@ -316,78 +289,43 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
         </button>
       </div>
 
-      {localComments.map(comment => {
-        // Initialize reactions with default values if not present
-        const reactions = {
-          like: { count: 0, users: [] },
-          love: { count: 0, users: [] },
-          laugh: { count: 0, users: [] },
-          angry: { count: 0, users: [] },
-          ...(comment.reactions || {})
-        };
-
-        // Check if current user has reacted to this comment
-        const hasReacted = (type) => {
-          const reaction = reactions[type];
-          return reaction?.users?.includes('current-user') || false;
-        };
-
-        // Get the appropriate icon for a reaction type
-        const getReactionIcon = (type) => {
-          switch(type) {
-            case 'like': return <ThumbUpIcon className="h-3.5 w-3.5" />;
-            case 'love': return <HeartIcon className="h-3.5 w-3.5 text-red-500" />;
-            case 'laugh': return <EmojiHappyIcon className="h-3.5 w-3.5 text-yellow-500" />;
-            case 'angry': return <XCircleIcon className="h-3.5 w-3.5 text-orange-500" />;
-            default: return <ThumbUpIcon className="h-3.5 w-3.5" />;
-          }
-        };
-
-        return (
-          <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium dark:text-white">
-                  {comment.createdBy || 'Anonymous'}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-slate-400">
-                  {new Date(comment.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              <button
-                onClick={() => handleCommentDelete(comment._id)}
-                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                disabled={isLoading}
-                title="Delete comment"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
+      {localComments.map(comment => (
+        <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium dark:text-white">
+                Anonymous
+              </span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {new Date(comment.createdAt).toLocaleDateString()}
+              </span>
             </div>
-            
-            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
-            
-            {/* Reaction buttons */}
-            <div className="flex gap-2 flex-wrap">
-              {Object.entries(reactions).map(([type, reaction]) => (
-                <button
-                  key={type}
-                  onClick={() => handleReaction(comment._id, type)}
-                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
-                    hasReacted(type) 
-                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' 
-                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
-                  } transition-colors`}
-                  disabled={isLoading}
-                  title={`${reaction.count} ${type}${reaction.count !== 1 ? 's' : ''}`}
-                >
-                  {getReactionIcon(type)}
-                  <span>{reaction.count || 0}</span>
-                </button>
-              ))}
-            </div>
+            <button
+              onClick={() => handleCommentDelete(comment._id)}
+              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+              disabled={isLoading}
+              title="Delete comment"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
           </div>
-        );
-      })}
+          
+          <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
+          
+          {/* Use the same ReactionButton component as posts */}
+          <div className="flex gap-2">
+            {['like', 'love', 'laugh', 'angry'].map((type) => (
+              <ReactionButton
+                key={type}
+                type={type}
+                postId={postId}
+                commentId={comment._id}
+                count={comment.reactions?.[type]?.count || 0}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </div>
   );
 };

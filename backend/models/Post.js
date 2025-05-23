@@ -16,6 +16,20 @@ const reactionDetailSchema = new mongoose.Schema({
 }, { _id: false });  // Prevent automatic _id for subdocuments
 
 // Sub-schema for a comment
+// Middleware to initialize reactions before saving a comment
+const initializeReactions = function(next) {
+  // Only initialize if this is a new comment or reactions are not set
+  if (this.isNew || !this.reactions) {
+    this.reactions = {
+      like: { count: 0, users: [] },
+      love: { count: 0, users: [] },
+      laugh: { count: 0, users: [] },
+      angry: { count: 0, users: [] }
+    };
+  }
+  next();
+};
+
 const commentSchema = new mongoose.Schema({
   _id: {
     type: mongoose.Schema.Types.ObjectId,
@@ -23,27 +37,84 @@ const commentSchema = new mongoose.Schema({
   },
   text: {
     type: String,
-    required: true
+    required: true,
+    trim: true
   },
   createdAt: {
     type: Date,
     default: Date.now
   },
   updatedAt: {
-    type: Date
+    type: Date,
+    default: Date.now
   },
   reactions: {
-    like: reactionDetailSchema,
-    love: reactionDetailSchema,
-    laugh: reactionDetailSchema,
-    angry: reactionDetailSchema
+    type: Map,
+    of: reactionDetailSchema,
+    default: () => ({
+      like: { count: 0, users: [] },
+      love: { count: 0, users: [] },
+      laugh: { count: 0, users: [] },
+      angry: { count: 0, users: [] }
+    })
   },
   author: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
     required: true
+  },
+  createdBy: {
+    type: String,
+    required: true
   }
-});
+}, { timestamps: true });
+
+// Add pre-save middleware to initialize reactions
+commentSchema.pre('save', initializeReactions);
+
+// Add a method to safely add a reaction to a comment
+commentSchema.methods.addReaction = async function(userId, reactionType) {
+  // Convert to string if it's an ObjectId
+  const userIdStr = userId.toString();
+  
+  // Initialize reactions if they don't exist
+  if (!this.reactions) {
+    this.reactions = new Map([
+      ['like', { count: 0, users: [] }],
+      ['love', { count: 0, users: [] }],
+      ['laugh', { count: 0, users: [] }],
+      ['angry', { count: 0, users: [] }]
+    ]);
+  }
+
+  // Ensure the reaction type exists
+  if (!this.reactions.has(reactionType)) {
+    throw new Error(`Invalid reaction type: ${reactionType}`);
+  }
+
+  const reaction = this.reactions.get(reactionType);
+  
+  // Check if user already reacted
+  const userIndex = reaction.users.findIndex(id => id.toString() === userIdStr);
+  
+  if (userIndex === -1) {
+    // Add reaction
+    reaction.users.push(userId);
+    reaction.count += 1;
+  } else {
+    // Remove reaction
+    reaction.users.splice(userIndex, 1);
+    reaction.count = Math.max(0, reaction.count - 1);
+  }
+
+  // Update the reactions map
+  this.reactions.set(reactionType, reaction);
+  
+  // Mark the reactions map as modified
+  this.markModified('reactions');
+  
+  return this.save();
+};
 
 // Main Post schema
 const postSchema = new mongoose.Schema(

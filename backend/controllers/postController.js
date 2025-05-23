@@ -74,29 +74,96 @@ const getReactionStatus = (reactions, userId) => {
   return status;
 };
 
-// Get user's reaction status for a post
+// Helper function to convert reactions map to object with hasReacted status
+const formatReactions = (reactions, userId) => {
+  const result = {};
+  
+  // Handle both Map and plain object formats
+  if (reactions instanceof Map) {
+    for (const [type, data] of reactions.entries()) {
+      result[type] = {
+        count: data.count || 0,
+        hasReacted: data.users?.some(id => id.equals(userId)) || false
+      };
+    }
+  } else if (typeof reactions === 'object' && reactions !== null) {
+    for (const [type, data] of Object.entries(reactions)) {
+      if (data && typeof data === 'object') {
+        result[type] = {
+          count: data.count || 0,
+          hasReacted: data.users?.some(id => id.equals(userId)) || false
+        };
+      }
+    }
+  }
+  
+  return result;
+};
+
+// Get user's reaction status for a post or comment
 exports.getReactionStatus = async (req, res) => {
   try {
     const { postId, commentId } = req.params;
     const userId = req.user._id;
 
-    const post = await Post.findById(postId).select('reactions comments.reactions');
-    if (!post) return res.status(404).json({ message: 'Post not found' });
-
-    let result;
-    
-    if (commentId) {
-      const comment = post.comments.id(commentId);
-      if (!comment) return res.status(404).json({ message: 'Comment not found' });
-      result = getReactionStatus(comment.reactions, userId);
-    } else {
-      result = getReactionStatus(post.reactions, userId);
+    if (!postId) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Post ID is required' 
+      });
     }
 
-    res.status(200).json(result);
+    let query = Post.findById(postId);
+    
+    // Only select necessary fields to improve performance
+    if (commentId) {
+      query = query.select({
+        'comments._id': 1,
+        'comments.reactions': 1
+      });
+    } else {
+      query = query.select('reactions');
+    }
+
+    const post = await query.lean();
+    
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found' 
+      });
+    }
+
+    let reactions;
+    
+    if (commentId) {
+      const comment = post.comments?.find(c => c._id.toString() === commentId);
+      if (!comment) {
+        return res.status(404).json({ 
+          success: false,
+          message: 'Comment not found' 
+        });
+      }
+      reactions = comment.reactions;
+    } else {
+      reactions = post.reactions;
+    }
+
+    // Format the response
+    const formattedReactions = formatReactions(reactions, userId);
+    
+    res.status(200).json({
+      success: true,
+      data: formattedReactions
+    });
+    
   } catch (err) {
     console.error('Get reaction status error:', err);
-    res.status(500).json({ message: 'Error getting reaction status' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Error getting reaction status',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   }
 };
 
@@ -220,6 +287,11 @@ exports.reactToComment = async (req, res) => {
     const { type } = req.body;
     const userId = req.user._id;
 
+    if (!type) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Reaction type is required' });
+    }
+
     const post = await Post.findById(postId).session(session);
     if (!post) {
       await session.abortTransaction();
@@ -232,38 +304,58 @@ exports.reactToComment = async (req, res) => {
       return res.status(404).json({ message: 'Comment not found' });
     }
 
-    if (!comment.reactions[type]) {
-      await session.abortTransaction();
-      return res.status(400).json({ message: 'Invalid reaction type' });
+    // Ensure createdBy is preserved when updating the comment
+    if (!comment.createdBy) {
+      comment.createdBy = comment.author.toString();
     }
-
-    const reaction = comment.reactions[type];
-    const userIndex = reaction.users.findIndex(id => id.equals(userId));
-
-    if (userIndex === -1) {
-      // Add reaction
-      reaction.users.push(userId);
-      reaction.count += 1;
-    } else {
-      // Remove reaction
-      reaction.users.splice(userIndex, 1);
-      reaction.count = Math.max(0, reaction.count - 1);
-    }
-
+    
+    // Use the comment's addReaction method
+    await comment.addReaction(userId, type);
+    
+    // Mark the comment as modified to ensure it gets saved
     post.markModified('comments');
+    
     await post.save({ session });
     await session.commitTransaction();
     
-    // Return updated reaction status
+    // Get updated reaction status
+    const updatedComment = await Post.findOne(
+      { _id: postId, 'comments._id': commentId },
+      { 'comments.$': 1 }
+    );
+    
+    if (!updatedComment) {
+      return res.status(404).json({ message: 'Failed to update comment reaction' });
+    }
+    
+    const updatedReaction = updatedComment.comments[0].reactions.get(type) || { count: 0, users: [] };
+    const hasReacted = updatedReaction.users.some(id => id.equals(userId));
+    
     res.status(200).json({
-      type,
-      count: reaction.count,
-      hasReacted: userIndex === -1  // If userIndex was -1, now they have reacted
+      success: true,
+      reaction: {
+        type,
+        count: updatedReaction.count || 0,
+        hasReacted
+      },
+      message: hasReacted ? 'Reaction added successfully' : 'Reaction removed successfully'
     });
   } catch (err) {
     await session.abortTransaction();
     console.error('Comment reaction error:', err);
-    res.status(500).json({ message: 'Error reacting to comment' });
+    
+    if (err.message.startsWith('Invalid reaction type')) {
+      return res.status(400).json({ 
+        success: false,
+        message: err.message 
+      });
+    }
+    
+    res.status(500).json({ 
+      success: false,
+      message: 'Error updating comment reaction',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+    });
   } finally {
     session.endSession();
   }

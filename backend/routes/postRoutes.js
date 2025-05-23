@@ -17,17 +17,33 @@ const {
 
 const auth = require('../middleware/auth');
 
-router.post('/', auth, createPost);
-router.get('/stats/:orgId', auth, getPostStats);
-router.get('/:orgId', auth, getPostsByOrg);
-router.get('/:postId/reactions', auth, getReactionStatus); // Get reaction status for a post
-router.get('/:postId/comment/:commentId/reactions', auth, getReactionStatus); // Get reaction status for a comment
-router.post('/:postId/like', auth, reactToPost);
-router.post('/:postId/comment', auth, commentOnPost);
-router.delete('/:postId/comment/:commentId', auth, deleteComment);
-router.put('/:postId/comment/:commentId', auth, editComment);
-router.post('/:postId/comment/:commentId/react', auth, reactToComment);
-router.put('/:postId', auth, editPost);
-router.delete('/:postId', auth, deletePost);
+// Apply auth middleware to all routes
+router.use(auth);
+
+// Post routes
+router.post('/', createPost);
+router.get('/stats/:orgId', getPostStats);
+router.get('/:orgId', getPostsByOrg);
+router.put('/:postId', editPost);
+router.delete('/:postId', deletePost);
+
+// Post reactions
+router.route('/:postId/reactions')
+  .get(getReactionStatus) // Get post reactions
+  .post(reactToPost);      // React to post
+
+// Comments
+router.route('/:postId/comments')
+  .post(commentOnPost);    // Create comment
+
+// Comment-specific routes
+router.route('/:postId/comments/:commentId')
+  .put(editComment)        // Edit comment
+  .delete(deleteComment);   // Delete comment
+
+// Comment reactions
+router.route('/:postId/comments/:commentId/reactions')
+  .get(getReactionStatus)  // Get comment reactions
+  .post(reactToComment);    // React to comment
 
 module.exports = router;
