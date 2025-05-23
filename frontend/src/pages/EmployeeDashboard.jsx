@@ -14,9 +14,10 @@ import {
   EyeIcon,
   CheckBadgeIcon,
   BuildingOfficeIcon,
-  HandThumbUpIcon,
+  HandThumbUpIcon as ThumbUpIcon,
   HeartIcon,
-  FaceSmileIcon,
+  FaceSmileIcon as EmojiHappyIcon,
+  FaceFrownIcon as EmojiSadIcon,
   XCircleIcon,
   ChatBubbleLeftIcon,
   TrashIcon
@@ -79,38 +80,92 @@ const ThemeToggle = ({ theme, toggleTheme }) => (
 
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {
-  const [isReacted, setIsReacted] = useState(hasReacted(commentId || postId, type));
+  const [isReacted, setIsReacted] = useState(false);
   const [currentCount, setCurrentCount] = useState(count);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch reaction status on mount and when postId/commentId/type changes
+  useEffect(() => {
+    const fetchReactionStatus = async () => {
+      try {
+        const storedToken = localStorage.getItem('token');
+        const endpoint = commentId 
+          ? `/posts/${postId}/comment/${commentId}/reactions`
+          : `/posts/${postId}/reactions`;
+
+        const response = await api.get(endpoint, {
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          }
+        });
+
+        // Update local state with server data
+        const reactionData = response.data[type];
+        if (reactionData) {
+          setIsReacted(reactionData.hasReacted);
+          setCurrentCount(reactionData.count);
+        }
+      } catch (error) {
+        console.error('Error fetching reaction status:', error);
+      }
+    };
+
+    fetchReactionStatus();
+  }, [postId, commentId, type]);
 
   const handleReaction = async () => {
+    if (isLoading) return;
+    
+    const wasReacted = isReacted;
+    const newIsReacted = !wasReacted;
+    
+    // Optimistic UI updates
+    setIsLoading(true);
+    setIsReacted(newIsReacted);
+    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
+    
     try {
+      const storedToken = localStorage.getItem('token');
       const endpoint = commentId 
         ? `/posts/${postId}/comment/${commentId}/react`
-        : `/posts/${postId}/react`;
+        : `/posts/${postId}/like`;
 
-      const response = await api.post(endpoint, { type });
+      const response = await api.post(
+        endpoint, 
+        { type },
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
       
-      // Update counts based on response
-      if (commentId) {
-        setCurrentCount(response.data.comments.find(c => c._id === commentId).reactions[type].count);
-      } else {
-        setCurrentCount(response.data.reactions[type].count);
-      }
+      // Update with server response
+      setIsReacted(response.data.hasReacted);
+      setCurrentCount(response.data.count);
       
+      // Update local storage to persist the reaction state
       toggleReaction(commentId || postId, type);
-      setIsReacted(!isReacted);
+      
     } catch (error) {
       console.error('Error updating reaction:', error);
+      // Revert optimistic updates on error
+      setIsReacted(wasReacted);
+      setCurrentCount(count);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const getIcon = () => {
     switch(type) {
-      case 'like': return <HandThumbUpIcon className="h-5 w-5" />;
+      case 'like': return <ThumbUpIcon className="h-5 w-5" />;
       case 'love': return <HeartIcon className="h-5 w-5 text-red-500" />;
-      case 'laugh': return <FaceSmileIcon className="h-5 w-5 text-yellow-500" />;
+      case 'laugh': return <EmojiHappyIcon className="h-5 w-5 text-yellow-500" />;
       case 'angry': return <XCircleIcon className="h-5 w-5 text-orange-500" />;
-      default: return <HandThumbUpIcon className="h-5 w-5" />;
+      default: return <ThumbUpIcon className="h-5 w-5" />;
     }
   };
 
@@ -120,6 +175,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       className={`flex items-center gap-1 px-2 py-1 rounded-full ${
         isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
       }`}
+      title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
     >
       {getIcon()}
       <span className="text-sm">{currentCount}</span>
@@ -128,43 +184,111 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 };
 
 // --- Comment Section Component ---
-const CommentSection = ({ postId, comments = [] }) => {
+const CommentSection = ({ postId, comments: initialComments = [] }) => {
   const [newComment, setNewComment] = useState('');
-  const [localComments, setLocalComments] = useState(comments || []);
+  const [localComments, setLocalComments] = useState(initialComments || []);
   const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Update local comments when initialComments prop changes
+  useEffect(() => {
+    setLocalComments(initialComments || []);
+  }, [initialComments]);
 
   const handleCommentSubmit = async () => {
-    if (!newComment.trim()) return;
+    if (!newComment.trim() || isLoading) return;
+    setIsLoading(true);
+    setError(null);
 
     try {
       const storedToken = localStorage.getItem('token');
-      const response = await api.post(`/posts/${postId}/comment`, 
+      const response = await api.post(
+        `/posts/${postId}/comment`,
         { text: newComment },
-        { headers: { Authorization: `Bearer ${storedToken}` } }
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
       );
       
-      if (response.data && response.data.comments) {
-        setLocalComments([...localComments, response.data.comments.slice(-1)[0]]);
+      if (response.data) {
+        // The backend returns the updated post with all comments
+        setLocalComments(response.data.comments || []);
         setNewComment('');
-        setError(null);
       }
     } catch (error) {
       console.error('Error posting comment:', error);
       setError(error.response?.data?.message || 'Failed to post comment');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const handleCommentDelete = async (commentId) => {
+    if (!window.confirm('Are you sure you want to delete this comment?') || isLoading) return;
+    setIsLoading(true);
+    
     try {
       const storedToken = localStorage.getItem('token');
-      await api.delete(`/posts/${postId}/comment/${commentId}`, {
-        headers: { Authorization: `Bearer ${storedToken}` }
-      });
-      setLocalComments(localComments.filter(c => c._id !== commentId));
+      await api.delete(
+        `/posts/${postId}/comment/${commentId}`,
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
+      
+      // Optimistic update
+      setLocalComments(prev => prev.filter(c => c._id !== commentId));
       setError(null);
     } catch (error) {
       console.error('Error deleting comment:', error);
       setError(error.response?.data?.message || 'Failed to delete comment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleReaction = async (commentId, type) => {
+    try {
+      const storedToken = localStorage.getItem('token');
+      const response = await api.post(
+        `/posts/${postId}/comment/${commentId}/react`,
+        { type },
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
+      
+      // Update the specific comment's reactions
+      setLocalComments(prev => 
+        prev.map(comment => 
+          comment._id === commentId 
+            ? { 
+                ...comment, 
+                reactions: {
+                  ...comment.reactions,
+                  [type]: {
+                    count: response.data.count,
+                    users: response.data.hasReacted 
+                      ? [...(comment.reactions[type]?.users || []), 'current-user'] 
+                      : (comment.reactions[type]?.users || []).filter(id => id !== 'current-user')
+                  }
+                }
+              } 
+            : comment
+        )
+      );
+    } catch (error) {
+      console.error('Error reacting to comment:', error);
+      setError('Failed to update reaction');
     }
   };
 
@@ -192,40 +316,78 @@ const CommentSection = ({ postId, comments = [] }) => {
         </button>
       </div>
 
-      {localComments.map(comment => (
-        <div key={comment._id} className="flex gap-3 items-start">
-          <div className="flex-1 bg-gray-100 dark:bg-slate-700 p-3 rounded-lg">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="text-sm font-medium dark:text-white">
-                {comment.createdBy || 'Anonymous'}
-              </span>
-              <span className="text-xs text-gray-500 dark:text-slate-400">
-                {new Date(comment.createdAt).toLocaleDateString()}
-              </span>
-            </div>
-            <p className="text-gray-800 dark:text-slate-200">{comment.text}</p>
-            {comment.reactions && Object.entries(comment.reactions).length > 0 && (
-              <div className="flex gap-2 mt-2">
-                {Object.entries(comment.reactions).map(([type, {count}]) => (
-                  <ReactionButton
-                    key={type}
-                    type={type}
-                    count={count || 0}
-                    postId={postId}
-                    commentId={comment._id}
-                  />
-                ))}
+      {localComments.map(comment => {
+        // Initialize reactions with default values if not present
+        const reactions = {
+          like: { count: 0, users: [] },
+          love: { count: 0, users: [] },
+          laugh: { count: 0, users: [] },
+          angry: { count: 0, users: [] },
+          ...(comment.reactions || {})
+        };
+
+        // Check if current user has reacted to this comment
+        const hasReacted = (type) => {
+          const reaction = reactions[type];
+          return reaction?.users?.includes('current-user') || false;
+        };
+
+        // Get the appropriate icon for a reaction type
+        const getReactionIcon = (type) => {
+          switch(type) {
+            case 'like': return <ThumbUpIcon className="h-3.5 w-3.5" />;
+            case 'love': return <HeartIcon className="h-3.5 w-3.5 text-red-500" />;
+            case 'laugh': return <EmojiHappyIcon className="h-3.5 w-3.5 text-yellow-500" />;
+            case 'angry': return <XCircleIcon className="h-3.5 w-3.5 text-orange-500" />;
+            default: return <ThumbUpIcon className="h-3.5 w-3.5" />;
+          }
+        };
+
+        return (
+          <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium dark:text-white">
+                  {comment.createdBy || 'Anonymous'}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-slate-400">
+                  {new Date(comment.createdAt).toLocaleDateString()}
+                </span>
               </div>
-            )}
+              <button
+                onClick={() => handleCommentDelete(comment._id)}
+                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                disabled={isLoading}
+                title="Delete comment"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            </div>
+            
+            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
+            
+            {/* Reaction buttons */}
+            <div className="flex gap-2 flex-wrap">
+              {Object.entries(reactions).map(([type, reaction]) => (
+                <button
+                  key={type}
+                  onClick={() => handleReaction(comment._id, type)}
+                  className={`flex items-center gap-1 px-2 py-1 rounded-full text-xs ${
+                    hasReacted(type) 
+                      ? 'bg-blue-100 dark:bg-blue-900/50 text-blue-600 dark:text-blue-400' 
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
+                  } transition-colors`}
+                  disabled={isLoading}
+                  title={`${reaction.count} ${type}${reaction.count !== 1 ? 's' : ''}`}
+                >
+                  {getReactionIcon(type)}
+                  <span>{reaction.count || 0}</span>
+                </button>
+              ))}
+            </div>
           </div>
-          <button
-            onClick={() => handleCommentDelete(comment._id)}
-            className="p-1 text-red-500 hover:text-red-600"
-          >
-            <TrashIcon className="h-4 w-4" />
-          </button>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -679,9 +841,9 @@ const EmployeeDashboard = () => {
                         ))}
                       </div>
                     )}
-                    {post.comments && post.comments.length > 0 && (
-                      <CommentSection postId={post._id} comments={post.comments} />
-                    )}
+                    <div className="mt-3">
+                      <CommentSection postId={post._id} comments={post.comments || []} />
+                    </div>
                   </motion.div>
                 ))}
               </div>

@@ -5,13 +5,15 @@ const mongoose = require('mongoose');
 const reactionDetailSchema = new mongoose.Schema({
   count: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0  // Ensure count never goes below 0
   },
   users: [{
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User',
+    index: true  // Add index for faster lookups
   }]
-});
+}, { _id: false });  // Prevent automatic _id for subdocuments
 
 // Sub-schema for a comment
 const commentSchema = new mongoose.Schema({

@@ -62,36 +62,94 @@ exports.getPostsByOrg = async (req, res) => {
   }
 };
 
-exports.reactToPost = async (req, res) => {
-  try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
+// Get reaction status for a post or comment
+const getReactionStatus = (reactions, userId) => {
+  const status = {};
+  Object.keys(reactions).forEach(type => {
+    status[type] = {
+      count: reactions[type].count,
+      hasReacted: reactions[type].users.some(id => id.equals(userId))
+    };
+  });
+  return status;
+};
 
-    const reactionType = req.body.type;
+// Get user's reaction status for a post
+exports.getReactionStatus = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
     const userId = req.user._id;
 
-    if (!post.reactions.hasOwnProperty(reactionType)) {
-        return res.status(400).json({ message: 'Invalid reaction type' });
+    const post = await Post.findById(postId).select('reactions comments.reactions');
+    if (!post) return res.status(404).json({ message: 'Post not found' });
+
+    let result;
+    
+    if (commentId) {
+      const comment = post.comments.id(commentId);
+      if (!comment) return res.status(404).json({ message: 'Comment not found' });
+      result = getReactionStatus(comment.reactions, userId);
+    } else {
+      result = getReactionStatus(post.reactions, userId);
     }
 
-    const reactionUsers = post.reactions[reactionType].users;
-    const userIndex = reactionUsers.indexOf(userId);
+    res.status(200).json(result);
+  } catch (err) {
+    console.error('Get reaction status error:', err);
+    res.status(500).json({ message: 'Error getting reaction status' });
+  }
+};
+
+// Toggle reaction on a post
+exports.reactToPost = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
+  try {
+    const { postId } = req.params;
+    const { type } = req.body;
+    const userId = req.user._id;
+
+    const post = await Post.findById(postId).session(session);
+    if (!post) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Post not found' });
+    }
+
+    if (!post.reactions[type]) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Invalid reaction type' });
+    }
+
+    const reaction = post.reactions[type];
+    const userIndex = reaction.users.findIndex(id => id.equals(userId));
 
     if (userIndex === -1) {
-      // User has not reacted, add reaction
-      reactionUsers.push(userId);
-      post.reactions[reactionType].count += 1;
+      // Add reaction
+      reaction.users.push(userId);
+      reaction.count += 1;
     } else {
-      // User has reacted, remove reaction
-      reactionUsers.splice(userIndex, 1);
-      post.reactions[reactionType].count -= 1;
+      // Remove reaction
+      reaction.users.splice(userIndex, 1);
+      reaction.count = Math.max(0, reaction.count - 1);
     }
 
-    await post.save();
-    res.status(200).json(post);
+    post.markModified('reactions');
+    await post.save({ session });
+    await session.commitTransaction();
+    
+    // Return updated reaction status
+    res.status(200).json({
+      type,
+      count: reaction.count,
+      hasReacted: userIndex === -1  // If userIndex was -1, now they have reacted
+    });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Reaction error:', err);
     res.status(500).json({ message: 'Error reacting to post' });
+  } finally {
+    session.endSession();
   }
 };
 
@@ -152,39 +210,62 @@ exports.deleteComment = async (req, res) => {
   }
 };
 
+// Toggle reaction on a comment
 exports.reactToComment = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
-
-    const comment = post.comments.id(req.params.commentId);
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
-
-    const reactionType = req.body.type;
+    const { postId, commentId } = req.params;
+    const { type } = req.body;
     const userId = req.user._id;
 
-     if (!comment.reactions.hasOwnProperty(reactionType)) {
-        return res.status(400).json({ message: 'Invalid reaction type' });
+    const post = await Post.findById(postId).session(session);
+    if (!post) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Post not found' });
     }
 
-    const reactionUsers = comment.reactions[reactionType].users;
-    const userIndex = reactionUsers.indexOf(userId);
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    if (!comment.reactions[type]) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Invalid reaction type' });
+    }
+
+    const reaction = comment.reactions[type];
+    const userIndex = reaction.users.findIndex(id => id.equals(userId));
 
     if (userIndex === -1) {
-      // User has not reacted, add reaction
-      reactionUsers.push(userId);
-      comment.reactions[reactionType].count += 1;
+      // Add reaction
+      reaction.users.push(userId);
+      reaction.count += 1;
     } else {
-      // User has reacted, remove reaction
-      reactionUsers.splice(userIndex, 1);
-      comment.reactions[reactionType].count -= 1;
+      // Remove reaction
+      reaction.users.splice(userIndex, 1);
+      reaction.count = Math.max(0, reaction.count - 1);
     }
 
-    await post.save();
-    res.status(200).json(post);
+    post.markModified('comments');
+    await post.save({ session });
+    await session.commitTransaction();
+    
+    // Return updated reaction status
+    res.status(200).json({
+      type,
+      count: reaction.count,
+      hasReacted: userIndex === -1  // If userIndex was -1, now they have reacted
+    });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Comment reaction error:', err);
     res.status(500).json({ message: 'Error reacting to comment' });
+  } finally {
+    session.endSession();
   }
 };
 
