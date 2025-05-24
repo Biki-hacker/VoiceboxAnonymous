@@ -113,7 +113,8 @@ commentSchema.methods.addReaction = async function(userId, reactionType) {
   // Mark the reactions map as modified
   this.markModified('reactions');
   
-  return this.save();
+  // Don't save the subdocument directly, let the parent handle it
+  return this;
 };
 
 // Main Post schema

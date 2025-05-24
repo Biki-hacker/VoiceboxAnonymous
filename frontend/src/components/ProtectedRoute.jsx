@@ -43,10 +43,18 @@ const ProtectedRoute = ({ children, requiredRole }) => {
           return;
         }
 
+        const email = localStorage.getItem('email');
+        if (!email) {
+          console.log('[ProtectedRoute] No email found in localStorage, cannot verify');
+          if (isMounted) setIsAuthorized(false);
+          return;
+        }
+
         console.log('[ProtectedRoute] Sending /auth/verify-status request...');
         // Verify with backend
         const response = await api.get('/auth/verify-status', {
           signal: controller.signal,
+          params: { email },
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache'

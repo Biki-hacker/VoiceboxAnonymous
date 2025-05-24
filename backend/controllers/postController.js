@@ -312,23 +312,15 @@ exports.reactToComment = async (req, res) => {
     // Use the comment's addReaction method
     await comment.addReaction(userId, type);
     
-    // Mark the comment as modified to ensure it gets saved
+    // Mark the comments array as modified
     post.markModified('comments');
     
-    await post.save({ session });
+    // Save the parent document (post) which will save the comment
+    await post.save({ session, validateModifiedOnly: true });
     await session.commitTransaction();
     
-    // Get updated reaction status
-    const updatedComment = await Post.findOne(
-      { _id: postId, 'comments._id': commentId },
-      { 'comments.$': 1 }
-    );
-    
-    if (!updatedComment) {
-      return res.status(404).json({ message: 'Failed to update comment reaction' });
-    }
-    
-    const updatedReaction = updatedComment.comments[0].reactions.get(type) || { count: 0, users: [] };
+    // Get the updated reaction directly from the comment we just modified
+    const updatedReaction = comment.reactions.get(type) || { count: 0, users: [] };
     const hasReacted = updatedReaction.users.some(id => id.equals(userId));
     
     res.status(200).json({

@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../api/axios'; // Your axios instance
 import { supabase } from '../supabaseClient';
@@ -14,8 +14,10 @@ import {
     UserCircleIcon, ChevronDownIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
-    LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon
+    LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
+    HandThumbUpIcon, HeartIcon, XCircleIcon
 } from '@heroicons/react/24/outline';
+import { FaceSmileIcon as EmojiHappyIcon } from '@heroicons/react/24/outline';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -143,6 +145,11 @@ const AdminDashboard = () => {
     const [theme, toggleTheme, setTheme] = useTheme();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
+    const [viewingMedia, setViewingMedia] = useState({
+        isOpen: false,
+        url: '',
+        type: 'image' // 'image' or 'video'
+    });
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -416,13 +423,208 @@ const AdminDashboard = () => {
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditParamsModal} title="Edit Verification Parameters" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><PencilSquareIcon className="h-4 w-4"/> <span>Edit Params</span></button></div></div>
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-3">Verification Parameters</h3>{(selectedOrg.verificationFields && selectedOrg.verificationFields.length > 0) ? (<ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-slate-300">{selectedOrg.verificationFields.map((param, i) => <li key={i}>{param}</li>)}</ul>) : ( <NothingToShow message="No verification parameters set." /> )}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
-                                <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3><div className="mb-6 bg-gray-50 dark:bg-slate-800/50 p-3 sm:p-4 rounded-md border border-gray-200 dark:border-slate-700"><div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4"><CustomSelect label="Type" value={selectedType} onChange={setSelectedType} options={typeOptions} icon={TagIcon} /><CustomSelect label="Region" value={selectedRegion} onChange={setSelectedRegion} options={regionOptions} icon={MapPinIcon} disabled={uniqueRegions.length === 0} /><CustomSelect label="Department" value={selectedDepartment} onChange={setSelectedDepartment} options={departmentOptions} icon={BuildingLibraryIcon} disabled={uniqueDepartments.length === 0} /></div></div>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : filteredPosts.length === 0 ? ( <NothingToShow message={posts.length === 0 ? "No posts found for this organization." : "No posts match the current filters."} /> ) : (<div className="space-y-4">{filteredPosts.map((post, i) => ( <motion.div key={post._id} className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.03 }}><div className="flex justify-between items-start mb-1 sm:mb-2"><span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${ post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' : post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' : post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' : 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'}`}>{post.postType}</span><button onClick={() => handleDeletePost(post._id, post.content)} className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" title="Delete Post"><TrashIcon className="h-4 w-4" /></button></div><p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">{post.content}</p><div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1"><span>By: {post.createdBy || 'Anonymous'}</span><span>|</span><span>{new Date(post.createdAt).toLocaleString()}</span> <span className="hidden sm:inline">|</span> <span className="block sm:inline mt-1 sm:mt-0">Region: {post.region || 'N/A'}</span> <span className="hidden sm:inline">|</span> <span className="block sm:inline">Dept: {post.department || 'N/A'}</span></div></motion.div> ))}</div>) }</DashboardCard>
+                                <DashboardCard className="p-4 sm:p-6">
+                                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
+                                    <div className="mb-6 bg-gray-50 dark:bg-slate-800/50 p-3 sm:p-4 rounded-md border border-gray-200 dark:border-slate-700">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                                            <CustomSelect 
+                                                label="Type" 
+                                                value={selectedType} 
+                                                onChange={setSelectedType} 
+                                                options={typeOptions} 
+                                                icon={TagIcon} 
+                                            />
+                                            <CustomSelect 
+                                                label="Region" 
+                                                value={selectedRegion} 
+                                                onChange={setSelectedRegion} 
+                                                options={regionOptions} 
+                                                icon={MapPinIcon} 
+                                                disabled={uniqueRegions.length === 0} 
+                                            />
+                                            <CustomSelect 
+                                                label="Department" 
+                                                value={selectedDepartment} 
+                                                onChange={setSelectedDepartment} 
+                                                options={departmentOptions} 
+                                                icon={BuildingLibraryIcon} 
+                                                disabled={uniqueDepartments.length === 0} 
+                                            />
+                                        </div>
+                                    </div>
+                                    {loading.orgDetails ? (
+                                        <div className="text-center py-10">
+                                            <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                                                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
+                                            </svg>
+                                        </div>
+                                    ) : filteredPosts.length === 0 ? (
+                                        <NothingToShow message={posts.length === 0 ? "No posts found for this organization." : "No posts match the current filters."} />
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {filteredPosts.map((post, i) => (
+                                                <motion.div 
+                                                    key={post._id} 
+                                                    className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
+                                                    initial={{ opacity: 0, y: 10 }}
+                                                    animate={{ opacity: 1, y: 0 }}
+                                                    transition={{ delay: i * 0.03 }}
+                                                >
+                                                    <div className="flex justify-between items-start mb-1 sm:mb-2">
+                                                        <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
+                                                            post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
+                                                            post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
+                                                            post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
+                                                            'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
+                                                        }`}>
+                                                            {post.postType}
+                                                        </span>
+                                                        <button 
+                                                            onClick={() => handleDeletePost(post._id, post.content)} 
+                                                            className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
+                                                            title="Delete Post"
+                                                        >
+                                                            <TrashIcon className="h-4 w-4" />
+                                                        </button>
+                                                    </div>
+                                                    <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
+                                                        {post.content}
+                                                    </p>
+                                                    
+                                                    {/* Media Display */}
+                                                    {post.mediaUrls && post.mediaUrls.length > 0 && (
+                                                        <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                                            {post.mediaUrls.map((media, idx) => {
+                                                                // Handle both string and object formats
+                                                                const mediaUrl = typeof media === 'string' ? media : (media.url || media.preview);
+                                                                if (!mediaUrl) return null;
+                                                                
+                                                                // Determine if it's an image or video
+                                                                const isImage = typeof mediaUrl === 'string' && 
+                                                                    mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
+                                                                
+                                                                const isVideo = typeof mediaUrl === 'string' && 
+                                                                    mediaUrl.match(/\.(mp4|webm|ogg)$/i);
+                                                                
+                                                                const handleMediaClick = (e) => {
+                                                                    e.stopPropagation();
+                                                                    setViewingMedia({
+                                                                        isOpen: true,
+                                                                        url: mediaUrl,
+                                                                        type: isImage ? 'image' : 'video'
+                                                                    });
+                                                                };
+                                                                
+                                                                return isImage ? (
+                                                                    <div 
+                                                                        key={`${post._id}-media-${idx}`} 
+                                                                        className="relative group cursor-pointer"
+                                                                        onClick={handleMediaClick}
+                                                                    >
+                                                                        <img
+                                                                            src={mediaUrl}
+                                                                            alt={`Media ${idx + 1}`}
+                                                                            className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
+                                                                            onError={(e) => {
+                                                                                console.error('Error loading image:', mediaUrl);
+                                                                                e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found';
+                                                                            }}
+                                                                        />
+                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-200 rounded-lg" />
+                                                                        <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                            <div className="bg-black bg-opacity-50 rounded-full p-2">
+                                                                                <ArrowsPointingOutIcon className="h-5 w-5 text-white" />
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : isVideo ? (
+                                                                    <div 
+                                                                        key={`${post._id}-media-${idx}`} 
+                                                                        className="relative group cursor-pointer"
+                                                                        onClick={handleMediaClick}
+                                                                    >
+                                                                        <video
+                                                                            src={mediaUrl}
+                                                                            className="w-full h-32 object-cover rounded-lg"
+                                                                            onError={(e) => {
+                                                                                console.error('Error loading video:', mediaUrl);
+                                                                                e.target.parentElement.innerHTML = `
+                                                                                    <div class="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                                                                                        <span class="text-gray-500">Video not available</span>
+                                                                                    </div>
+                                                                                `;
+                                                                            }}
+                                                                        />
+                                                                        <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
+                                                                            <div className="bg-black bg-opacity-50 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                                                <svg className="w-8 h-8 text-white" fill="currentColor" viewBox="0 0 24 24">
+                                                                                    <path d="M8 5v14l11-7z" />
+                                                                                </svg>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                ) : null;
+                                                            })}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1">
+                                                        <span>By: {post.createdBy || 'Anonymous'}</span>
+                                                        <span>|</span>
+                                                        <span>{new Date(post.createdAt).toLocaleString()}</span>
+                                                        {post.region && (
+                                                            <>
+                                                                <span className="hidden sm:inline">|</span>
+                                                                <span className="block sm:inline mt-1 sm:mt-0">Region: {post.region}</span>
+                                                            </>
+                                                        )}
+                                                        {post.department && (
+                                                            <>
+                                                                <span className="hidden sm:inline">|</span>
+                                                                <span className="block sm:inline">Dept: {post.department}</span>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                    
+                                                    {/* Reactions */}
+                                                    {post.reactions && Object.entries(post.reactions).length > 0 && (
+                                                        <div className="flex flex-wrap gap-2 mt-3">
+                                                            {Object.entries(post.reactions).map(([type, {count}]) => (
+                                                                <ReactionButton
+                                                                    key={type}
+                                                                    type={type}
+                                                                    count={count || 0}
+                                                                    postId={post._id}
+                                                                />
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                    
+                                                    {/* Comments Section */}
+                                                    <div className="mt-3">
+                                                        <CommentSection postId={post._id} comments={post.comments || []} />
+                                                    </div>
+                                                </motion.div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </DashboardCard>
                             </motion.div>
                         ) : null }
                     </AnimatePresence>
                 </main>
             </div>
         </div>
+
+        {/* Media Viewer Modal */}
+        {viewingMedia.isOpen && (
+            <MediaViewer
+                mediaUrl={viewingMedia.url}
+                mediaType={viewingMedia.type}
+                onClose={() => setViewingMedia({...viewingMedia, isOpen: false})}
+            />
+        )}
 
         {/* Modals */}
         <Modal isOpen={isAddOrgModalOpen} onClose={() => setIsAddOrgModalOpen(false)} title="Add New Organization">{/* ... Add Org Modal Content ... */}<div className="space-y-4"><div><label htmlFor="orgName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Organization Name</label><input type="text" id="orgName" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder="Enter organization name" disabled={loading.modal} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setIsAddOrgModalOpen(false)} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmAddOrg} disabled={loading.modal || !newOrgName.trim()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[80px]">{loading.modal ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Add'}</button></div></div></Modal>
@@ -433,6 +635,342 @@ const AdminDashboard = () => {
     );
 };
 
+// --- Reaction Button Component ---
+const ReactionButton = ({ type, count, postId, commentId = null }) => {
+  const [isReacted, setIsReacted] = useState(false);
+  const [currentCount, setCurrentCount] = useState(count);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch reaction status on mount and when postId/commentId/type changes
+  useEffect(() => {
+    const fetchReactionStatus = async () => {
+      try {
+        const storedToken = localStorage.getItem('token');
+        const endpoint = commentId 
+          ? `/posts/${postId}/comments/${commentId}/reactions`
+          : `/posts/${postId}/reactions`;
+
+        const response = await api.get(endpoint, {
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          }
+        });
+
+        // Update local state with server data
+        if (response.data?.success && response.data?.data) {
+          const reactionData = response.data.data[type];
+          if (reactionData) {
+            setIsReacted(reactionData.hasReacted);
+            setCurrentCount(reactionData.count);
+          }
+        }
+      } catch (error) {
+        console.error('Error fetching reaction status:', error);
+      }
+    };
+
+    fetchReactionStatus();
+  }, [postId, commentId, type]);
+
+  const handleReaction = async () => {
+    if (isLoading) return;
+    
+    const wasReacted = isReacted;
+    const newIsReacted = !wasReacted;
+    
+    // Optimistic UI updates
+    setIsLoading(true);
+    setIsReacted(newIsReacted);
+    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
+    
+    try {
+      const storedToken = localStorage.getItem('token');
+      const endpoint = commentId 
+        ? `/posts/${postId}/comments/${commentId}/reactions`
+        : `/posts/${postId}/reactions`;
+
+      const response = await api.post(
+        endpoint, 
+        { type },
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
+      
+      // Update with server response
+      if (response.data?.success && response.data?.reaction) {
+        setIsReacted(response.data.reaction.hasReacted);
+        setCurrentCount(response.data.reaction.count);
+      }
+    } catch (error) {
+      console.error('Error updating reaction:', error);
+      // Revert optimistic updates on error
+      setIsReacted(wasReacted);
+      setCurrentCount(count);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const getIcon = () => {
+    switch(type) {
+      case 'like': return <HandThumbUpIcon className="h-5 w-5" />;
+      case 'love': return <HeartIcon className="h-5 w-5 text-red-500" />;
+      case 'laugh': return <EmojiHappyIcon className="h-5 w-5 text-yellow-500" />;
+      case 'angry': return <XCircleIcon className="h-5 w-5 text-orange-500" />;
+      default: return <HandThumbUpIcon className="h-5 w-5" />;
+    }
+  };
+
+  return (
+    <button
+      onClick={handleReaction}
+      className={`flex items-center gap-1 px-2 py-1 rounded-full ${
+        isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
+      }`}
+      title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
+    >
+      {getIcon()}
+      <span className="text-sm">{currentCount}</span>
+    </button>
+  );
+};
+
+// --- Comment Section Component ---
+const CommentSection = ({ postId, comments: initialComments = [] }) => {
+  const [newComment, setNewComment] = useState('');
+  const [localComments, setLocalComments] = useState(initialComments || []);
+  const [error, setError] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Update local comments when initialComments prop changes
+  useEffect(() => {
+    setLocalComments(initialComments || []);
+  }, [initialComments]);
+
+  const handleCommentSubmit = async () => {
+    if (!newComment.trim() || isLoading) return;
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const storedToken = localStorage.getItem('token');
+      const response = await api.post(
+        `/posts/${postId}/comments`,
+        { 
+          text: newComment,
+          createdBy: localStorage.getItem('name') || 'Anonymous'
+        },
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
+      
+      if (response.data?.success) {
+        // The backend returns the updated post with all comments
+        setLocalComments(response.data.comments || []);
+        setNewComment('');
+      }
+    } catch (error) {
+      console.error('Error posting comment:', error);
+      setError(error.response?.data?.message || 'Failed to post comment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleCommentDelete = async (commentId) => {
+    if (!window.confirm('Are you sure you want to delete this comment?') || isLoading) return;
+    setIsLoading(true);
+    
+    try {
+      const storedToken = localStorage.getItem('token');
+      await api.delete(
+        `/posts/${postId}/comments/${commentId}`,
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
+        }
+      );
+      
+      // Optimistic update
+      setLocalComments(prev => prev.filter(c => c._id !== commentId));
+      setError(null);
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      setError(error.response?.data?.message || 'Failed to delete comment');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  const handleReaction = (commentId, reactionType) => {
+    // This function is no longer needed as we're using the ReactionButton component
+    // which handles its own state and API calls
+    console.log('Reaction handled by ReactionButton component');
+  };
+
+  return (
+    <div className="mt-4 space-y-4">
+      {error && (
+        <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
+          {error}
+        </div>
+      )}
+      
+      <div className="flex gap-2">
+        <input
+          type="text"
+          value={newComment}
+          onChange={(e) => setNewComment(e.target.value)}
+          placeholder="Write a comment..."
+          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
+          onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
+        />
+        <button
+          onClick={handleCommentSubmit}
+          disabled={!newComment.trim() || isLoading}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          {isLoading ? 'Posting...' : 'Post'}
+        </button>
+      </div>
+
+      {localComments.map(comment => (
+        <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-medium dark:text-white">
+                Anonymous
+              </span>
+              <span className="text-xs text-gray-500 dark:text-slate-400">
+                {new Date(comment.createdAt).toLocaleString()}
+              </span>
+            </div>
+            <button
+              onClick={() => handleCommentDelete(comment._id)}
+              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+              disabled={isLoading}
+              title="Delete comment"
+            >
+              <TrashIcon className="h-4 w-4" />
+            </button>
+          </div>
+          
+          <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
+          
+          {/* Use the same ReactionButton component as posts */}
+          <div className="flex gap-2">
+            {['like', 'love', 'laugh', 'angry'].map((type) => (
+              <ReactionButton
+                key={type}
+                type={type}
+                postId={postId}
+                commentId={comment._id}
+                count={comment.reactions?.[type]?.count || 0}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
+
+// --- Media Viewer Modal Component ---
+const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
+  const modalRef = useRef(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Close modal when clicking outside the content
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (modalRef.current && !modalRef.current.contains(event.target)) {
+        onClose();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [onClose]);
+
+  // Handle keyboard events
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [onClose]);
+
+  // Toggle fullscreen
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(console.log);
+      setIsFullscreen(true);
+    } else {
+      if (document.exitFullscreen) {
+        document.exitFullscreen();
+        setIsFullscreen(false);
+      }
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
+      <div className="relative w-full h-full flex items-center justify-center">
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
+          aria-label="Close media viewer"
+        >
+          <XCircleIcon className="h-8 w-8" />
+        </button>
+        
+        <div 
+          ref={modalRef} 
+          className="relative max-w-full max-h-full flex items-center justify-center"
+        >
+          {mediaType === 'image' ? (
+            <img
+              src={mediaUrl}
+              alt="Full size media"
+              className="max-w-full max-h-[90vh] object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <video
+              src={mediaUrl}
+              className="max-w-full max-h-[90vh]"
+              controls
+              autoPlay
+              controlsList="nodownload"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const fadeInUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -10 }, transition: { duration: 0.3, ease: "easeOut" } };
+
 
 export default AdminDashboard;
