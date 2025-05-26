@@ -953,14 +953,8 @@ const EmployeeDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
-            <div className="flex justify-between items-center mb-6">
+            <div className="mb-6">
               <h2 className="text-xl font-bold dark:text-white">Posts</h2>
-              <button
-                onClick={() => setViewMode('dashboard')}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-              >
-                Back to Dashboard
-              </button>
             </div>
             {posts.length === 0 ? (
               <p className="dark:text-white">No posts found.</p>
@@ -1178,7 +1172,21 @@ const EmployeeDashboard = () => {
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center">
-            <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100">Employee Dashboard</h1>
+            {(viewMode === 'create' || viewMode === 'view') ? (
+              <button
+                onClick={() => setViewMode('dashboard')}
+                className="flex items-center text-gray-600 dark:text-slate-300 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M9.707 16.707a1 1 0 01-1.414 0l-6-6a1 1 0 010-1.414l6-6a1 1 0 011.414 1.414L5.414 9H17a1 1 0 110 2H5.414l4.293 4.293a1 1 0 010 1.414z" clipRule="evenodd" />
+                </svg>
+                <span>Back to Dashboard</span>
+              </button>
+            ) : (
+              <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100">
+                Employee Dashboard
+              </h1>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
