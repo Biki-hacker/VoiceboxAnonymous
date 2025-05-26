@@ -15,10 +15,10 @@ const {
   getReactionStatus
 } = require('../controllers/postController');
 
-const auth = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 // Apply auth middleware to all routes
-router.use(auth);
+router.use(authMiddleware);
 
 // Post routes
 router.post('/', createPost);

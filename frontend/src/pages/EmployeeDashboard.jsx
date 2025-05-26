@@ -192,48 +192,100 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 };
 
 // --- Comment Section Component ---
-const CommentSection = ({ postId, comments: initialComments = [] }) => {
+const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded }) => {
   const [newComment, setNewComment] = useState('');
   const [localComments, setLocalComments] = useState(initialComments || []);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
     setLocalComments(initialComments || []);
   }, [initialComments]);
 
+  // Function to fetch the post with its comments
+  const fetchPostWithComments = async () => {
+    try {
+      const storedToken = localStorage.getItem('token');
+      const orgId = localStorage.getItem('orgId');
+      
+      if (!storedToken || !orgId) {
+        console.error('Authentication token or organization ID not found');
+        return;
+      }
+      
+      console.log('Fetching post with comments. Post ID:', postId, 'Org ID:', orgId);
+      
+      // First, get the post with its comments
+      const response = await api.get(`/posts/${orgId}?postId=${postId}`);
+      
+      console.log('Received post data:', response.data);
+      
+      if (response.data) {
+        // Handle different response formats
+        let posts = [];
+        if (Array.isArray(response.data)) {
+          posts = response.data;
+        } else if (response.data.posts) {
+          posts = response.data.posts;
+        } else if (response.data.data) {
+          posts = response.data.data.posts || [];
+        }
+        
+        // Find the specific post we're interested in
+        const post = posts.find(p => p._id === postId);
+        const updatedComments = post?.comments || [];
+        
+        console.log('Updated comments:', updatedComments);
+        setLocalComments(updatedComments);
+        
+        if (onCommentAdded) {
+          onCommentAdded(updatedComments);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching post with comments:', error);
+    }
+  };
+
   const handleCommentSubmit = async () => {
-    if (!newComment.trim() || isLoading) return;
-    setIsLoading(true);
+    const commentText = newComment.trim();
+    if (!commentText || isSubmitting) return;
+    
+    setIsSubmitting(true);
     setError(null);
+    
+    // Clear input immediately for better UX
+    setNewComment('');
 
     try {
       const storedToken = localStorage.getItem('token');
+      if (!storedToken) {
+        throw new Error('No authentication token found');
+      }
+      
+      console.log('Posting comment to post:', postId);
       const response = await api.post(
         `/posts/${postId}/comments`,
         { 
-          text: newComment,
-          createdBy: localStorage.getItem('name') || 'Anonymous'
-        },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
+          text: commentText
         }
       );
       
-      if (response.data?.success) {
-        // The backend returns the updated post with all comments
-        setLocalComments(response.data.comments || []);
-        setNewComment('');
-      }
+      console.log('Comment posted successfully, response:', response.data);
+      
+      // Immediately fetch the updated comments from the backend
+      await fetchPostWithComments();
     } catch (error) {
-      console.error('Error posting comment:', error);
-      setError(error.response?.data?.message || 'Failed to post comment');
+      console.error('Error submitting comment:', error);
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to post comment';
+      console.error('Error details:', errorMessage);
+      setError(errorMessage);
+      // Restore the comment text so user can try again
+      setNewComment(commentText);
     } finally {
-      setIsLoading(false);
+      setIsSubmitting(false);
     }
   };
 
@@ -254,8 +306,14 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
       );
       
       // Optimistic update
-      setLocalComments(prev => prev.filter(c => c._id !== commentId));
+      const updatedComments = localComments.filter(c => c._id !== commentId);
+      setLocalComments(updatedComments);
       setError(null);
+      
+      // Notify parent component about the deleted comment
+      if (onCommentAdded) {
+        onCommentAdded(updatedComments);
+      }
     } catch (error) {
       console.error('Error deleting comment:', error);
       setError(error.response?.data?.message || 'Failed to delete comment');
@@ -282,15 +340,27 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
           type="text"
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
+          onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
           placeholder="Write a comment..."
-          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
+          disabled={isSubmitting}
+          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white disabled:opacity-50"
         />
         <button
           onClick={handleCommentSubmit}
-          disabled={!newComment.trim()}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled={!newComment.trim() || isSubmitting}
+          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
         >
-          Post
+          {isSubmitting ? (
+            <>
+              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Posting...
+            </>
+          ) : (
+            'Post'
+          )}
         </button>
       </div>
 
@@ -509,8 +579,14 @@ const EmployeeDashboard = () => {
           headers: { Authorization: `Bearer ${storedToken}` }
         });
 
+        console.log('Verification status response:', response.data); // Debug log
+
         if (response.data.success) {
-          if (!response.data.verified) {
+          // Check the verified status from the nested data object
+          const isVerified = response.data.data?.verified;
+          console.log('Is user verified?', isVerified); // Debug log
+          
+          if (!isVerified) {
             // If not verified, redirect to verification page
             navigate('/employee/verify', { 
               state: { 
@@ -784,18 +860,9 @@ const EmployeeDashboard = () => {
   };
 
   // --- Handle Comment Submit ---
+  // This function is no longer needed as CommentSection handles its own submission
   const handleCommentSubmit = async (postId, text) => {
-    if (!text.trim()) return;
-
-    try {
-      const response = await api.post(`/posts/${postId}/comment`, { text });
-      setPosts(prev => prev.map(post => 
-        post._id === postId ? response.data : post
-      ));
-    } catch (err) {
-      console.error('Error posting comment:', err);
-      setError(err.response?.data?.message || 'Failed to post comment. Please try again.');
-    }
+    console.log('Comment submission is now handled by the CommentSection component');
   };
 
   // --- Handle Comment Delete ---
@@ -1027,7 +1094,20 @@ const EmployeeDashboard = () => {
                       </div>
                     )}
                     <div className="mt-3">
-                      <CommentSection postId={post._id} comments={post.comments || []} />
+                      <CommentSection 
+                        postId={post._id} 
+                        comments={post.comments || []} 
+                        onCommentAdded={(updatedComments) => {
+                          // Update the posts state with the new comments
+                          setPosts(prevPosts => 
+                            prevPosts.map(p => 
+                              p._id === post._id 
+                                ? { ...p, comments: updatedComments } 
+                                : p
+                            )
+                          );
+                        }}
+                      />
                     </div>
                   </motion.div>
                 ))}

@@ -44,7 +44,7 @@ function App() {
           }
         />
         <Route
-          path="/verify"
+          path="/employee/verify"
           element={
             <ProtectedRoute requiredRole="employee">
               <EmployeeVerification />

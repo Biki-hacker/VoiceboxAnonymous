@@ -15,7 +15,7 @@ const mailRoutes = require('./routes/mailRoutes');
 
 // Middlewares
 const errorHandler = require('./middleware/errorHandler');
-const authMiddleware = require('./middleware/auth');
+const { authMiddleware } = require('./middleware/auth');
 const logger = require('./middleware/logger');
 
 const app = express();
@@ -72,14 +72,23 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// --- Protected Routes ---
+// --- API Routes ---
 app.use('/api/auth', authRoutes);
-app.use('/api/organizations', authMiddleware, orgRoutes);
-app.use('/api/posts', authMiddleware, postRoutes);
+app.use('/api/organizations', orgRoutes); // authMiddleware is applied in the router
+app.use('/api/posts', postRoutes); // authMiddleware is applied in the router
 app.use('/api/mail', mailRoutes);
 
 // --- Error Handling ---
 app.use(errorHandler);
+
+// --- Request Timeout Middleware ---
+app.use((req, res, next) => {
+  req.setTimeout(30000, () => {
+    console.error(`Request timeout for ${req.method} ${req.originalUrl}`);
+    res.status(504).json({ message: 'Request timeout' });
+  });
+  next();
+});
 
 // --- Database Connection & Server Start ---
 const MONGO_URI = process.env.MONGO_URI;
@@ -88,13 +97,42 @@ if (!MONGO_URI) {
   process.exit(1);
 }
 
-mongoose.connect(MONGO_URI, {
-  serverSelectionTimeoutMS: 10000
-})
-.then(() => {
-  console.log('✅ MongoDB Connected Successfully');
+// MongoDB connection options
+const mongoOptions = {
+  serverSelectionTimeoutMS: 10000,
+  socketTimeoutMS: 45000,
+  connectTimeoutMS: 10000,
+  maxPoolSize: 10,
+  retryWrites: true,
+  w: 'majority'
+};
+
+// MongoDB connection with retry logic
+const connectWithRetry = async () => {
+  try {
+    await mongoose.connect(MONGO_URI, mongoOptions);
+    console.log('✅ MongoDB Connected Successfully');
+  } catch (err) {
+    console.error('❌ MongoDB Connection Error:', err.message);
+    console.log('Retrying connection in 5 seconds...');
+    setTimeout(connectWithRetry, 5000);
+  }
+};
+
+// Handle MongoDB connection events
+mongoose.connection.on('error', (err) => {
+  console.error('MongoDB connection error:', err);
+});
+
+mongoose.connection.on('disconnected', () => {
+  console.log('MongoDB disconnected. Attempting to reconnect...');
+  connectWithRetry();
+});
+
+// Start server after MongoDB connection is established
+mongoose.connection.once('open', () => {
   const PORT = process.env.PORT || 5000;
-  app.listen(PORT, () => {
+  const server = app.listen(PORT, () => {
     console.log(`✅ Server running on port ${PORT}`);
     console.log(`🔒 Authentication required for protected routes`);
     console.log(`🌐 Allowed origins: ${allowedOrigins.join(', ')}`);
@@ -103,16 +141,30 @@ mongoose.connect(MONGO_URI, {
     console.log(`✉️  Contact form emails will be sent from: ${process.env.BREVO_SENDER_EMAIL || 'Not configured'}`);
     console.log(`✉️  Contact form emails will be sent to: ${process.env.YOUR_RECEIVING_EMAIL || 'Not configured'}`);
   });
-})
-.catch((err) => {
-  console.error('❌ MongoDB Connection Error:', err.message);
-  process.exit(1);
+
+  // Handle server errors
+  server.on('error', (err) => {
+    console.error('Server error:', err);
+    process.exit(1);
+  });
+
+  // Graceful shutdown
+  process.on('SIGTERM', () => {
+    console.log('SIGTERM received. Shutting down gracefully...');
+    server.close(() => {
+      console.log('Process terminated');
+      process.exit(0);
+    });
+  });
 });
 
-// --- Handle Uncaught Exceptions ---
+// Initialize MongoDB connection
+connectWithRetry();
+
+// --- Handle Uncaught Exceptions and Rejections ---
 process.on('uncaughtException', (err) => {
   console.error('🚨 Uncaught Exception:', err);
-  process.exit(1);
+  // Don't exit immediately, let the process end naturally
 });
 
 process.on('unhandledRejection', (reason, promise) => {

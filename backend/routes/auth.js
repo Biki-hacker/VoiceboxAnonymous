@@ -38,36 +38,154 @@ router.post('/register', async (req, res) => {
   }
 });
 
-// Login user
+// Login user with Supabase
 router.post('/login', async (req, res) => {
+  console.log('Login request received:', { 
+    body: { ...req.body, supabaseToken: req.body.supabaseToken ? '***' : 'missing' },
+    headers: req.headers
+  });
+
   try {
-    const { email, password } = req.body;
+    const { email, supabaseToken } = req.body;
 
-    // Find user
-    const user = await User.findOne({ email });
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    if (!email || !supabaseToken) {
+      console.error('Missing required fields:', { email, hasToken: !!supabaseToken });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Email and Supabase token are required',
+        code: 'MISSING_FIELDS'
+      });
     }
 
-    // Check password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    console.log('Verifying Supabase token...');
+    try {
+      // Verify the Supabase token
+      const { createClient } = require('@supabase/supabase-js');
+      
+      if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+        console.error('Missing Supabase environment variables');
+        return res.status(500).json({
+          success: false,
+          error: 'Server configuration error',
+          code: 'SERVER_CONFIG_ERROR'
+        });
+      }
+
+      const supabase = createClient(
+        process.env.SUPABASE_URL,
+        process.env.SUPABASE_ANON_KEY
+      );
+
+      // Get the user from Supabase
+      console.log('Getting user from Supabase...');
+      const { data: supabaseData, error: supabaseError } = await supabase.auth.getUser(supabaseToken);
+      
+      if (supabaseError || !supabaseData?.user) {
+        console.error('Supabase auth error:', {
+          error: supabaseError,
+          hasUser: !!supabaseData?.user,
+          email
+        });
+        return res.status(401).json({ 
+          success: false,
+          error: 'Invalid or expired authentication token',
+          code: 'INVALID_AUTH_TOKEN'
+        });
+      }
+
+      console.log('Supabase user verified:', { 
+        userId: supabaseData.user.id,
+        email: supabaseData.user.email
+      });
+
+      // Check if user exists in our database
+      console.log('Looking up local user:', email);
+      const localUser = await User.findOne({ email });
+      
+      if (!localUser) {
+        console.error('Local user not found:', email);
+        return res.status(404).json({ 
+          success: false,
+          error: 'User not found. Please register first.',
+          code: 'USER_NOT_FOUND'
+        });
+      }
+
+      console.log('Local user found:', { 
+        userId: localUser._id,
+        role: localUser.role,
+        verified: localUser.verified
+      });
+
+      // Generate JWT token
+      const token = jwt.sign(
+        { userId: localUser._id },
+        process.env.JWT_SECRET || 'default-secret-key', // Fallback for development only
+        { expiresIn: '24h' }
+      );
+
+      // Update last login
+      localUser.lastLogin = new Date();
+      await localUser.save();
+
+      // Return user data without sensitive information
+      const userData = {
+        _id: localUser._id,
+        email: localUser.email,
+        role: localUser.role,
+        organizationId: localUser.organizationId,
+        verified: localUser.verified
+      };
+
+      console.log('Login successful for user:', { 
+        userId: localUser._id,
+        email: localUser.email,
+        role: localUser.role
+      });
+
+      // Return response in the format expected by the frontend
+      return res.json({
+        success: true,
+        token,
+        role: localUser.role,
+        verified: localUser.verified,
+        orgId: localUser.organizationId,
+        user: {
+          _id: localUser._id,
+          email: localUser.email,
+          role: localUser.role,
+          organizationId: localUser.organizationId,
+          verified: localUser.verified
+        }
+      });
+
+    } catch (supabaseError) {
+      console.error('Error during Supabase authentication:', {
+        error: supabaseError.message,
+        stack: supabaseError.stack
+      });
+      return res.status(500).json({
+        success: false,
+        error: 'Error during authentication',
+        code: 'AUTH_ERROR',
+        details: process.env.NODE_ENV === 'development' ? supabaseError.message : undefined
+      });
     }
-
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '24h' }
-    );
-
-    user.lastLogin = new Date();
-    await user.save();
-
-    res.json({ user, token });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Unexpected error in login route:', {
+      error: error.message,
+      stack: error.stack,
+      request: {
+        body: req.body,
+        headers: req.headers
+      }
+    });
+    return res.status(500).json({
+      success: false,
+      error: 'An unexpected error occurred',
+      code: 'INTERNAL_SERVER_ERROR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 });
 

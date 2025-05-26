@@ -1,8 +1,8 @@
 // src/pages/SignIn.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
 import { supabase } from '../supabaseClient';
-import { api } from '../api/axios';
 
 export default function SignIn() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -49,18 +49,69 @@ export default function SignIn() {
         return;
       }
 
-      // 3) Get backend JWT token
-      const backendResponse = await api.post('/auth/login', {
-        email,
-        supabaseToken: signInData.session.access_token
-      });
+      // 3) Get backend JWT token using the full API URL
+      console.log('Attempting to authenticate with backend...');
+      console.log('API URL:', `${import.meta.env.VITE_API_URL}/api/auth/login`);
+      
+      let backendResponse;
+      try {
+        backendResponse = await axios.post(
+          `${import.meta.env.VITE_API_URL}/api/auth/login`,
+          {
+            email,
+            supabaseToken: signInData.session.access_token
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json'
+            },
+            timeout: 10000 // 10 second timeout
+          }
+        );
+        console.log('Backend response:', JSON.stringify(backendResponse.data, null, 2));
+      } catch (err) {
+        console.error('Backend authentication error:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status,
+          headers: err.response?.headers,
+          config: {
+            url: err.config?.url,
+            method: err.config?.method,
+            headers: err.config?.headers
+          }
+        });
+        throw new Error(`Backend authentication failed: ${err.message}`);
+      }
+
+      if (!backendResponse?.data) {
+        console.error('No data in backend response');
+        throw new Error('No data received from authentication server');
+      }
 
       const { token, role, verified, orgId } = backendResponse.data;
+      
+      if (!token || role === undefined || verified === undefined) {
+        console.error('Invalid response data:', backendResponse.data);
+        throw new Error('Invalid authentication response received');
+      }
+
+      console.log('Authentication successful for user:', { email, role, verified });
+      
+      // Create a user object in the expected format
+      const user = {
+        _id: email, // Using email as ID since _id is not provided
+        email,
+        role,
+        organizationId: orgId,
+        verified
+      };
 
       // Store user data in localStorage
       localStorage.setItem('email', email);
       localStorage.setItem('role', role);
-      localStorage.setItem('verified', verified);
+      localStorage.setItem('verified', verified || false);
       localStorage.setItem('orgId', orgId || '');
       localStorage.setItem('token', token);
       localStorage.setItem('supabaseToken', signInData.session.access_token);

@@ -3,38 +3,58 @@ const Organization = require('../models/Organization');
 const jwt = require('jsonwebtoken');
 
 // Get current user
-exports.getCurrentUser = async (req, res) => {
+const getCurrentUser = async (req, res, next) => {
   try {
     // The user is attached to the request by the auth middleware
     const user = req.user;
     if (!user) {
-      return res.status(401).json({ error: 'Not authenticated' });
+      return res.status(401).json({ 
+        success: false,
+        message: 'Not authenticated',
+        code: 'NOT_AUTHENTICATED'
+      });
     }
     
     // Return user data without sensitive information
     const userData = {
-      id: user._id,
-      email: user.email,
-      role: user.role,
-      organizationId: user.organizationId,
-      isVerified: user.verified
+      success: true,
+      data: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        isVerified: user.verified
+      }
     };
     
-    res.status(200).json(userData);
+    return res.status(200).json(userData);
   } catch (error) {
     console.error('Error getting current user:', error);
-    res.status(500).json({ error: 'Internal server error' });
+    next(error);
   }
 };
 
-exports.registerUser = async (req, res) => {
+const registerUser = async (req, res, next) => {
   try {
     const { email, password, role, organizationId } = req.body;
+
+    // Validate input
+    if (!email || !password || !role) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email, password, and role are required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Email already registered',
+        code: 'EMAIL_EXISTS'
+      });
     }
 
     // Create new user
@@ -47,27 +67,52 @@ exports.registerUser = async (req, res) => {
 
     await user.save();
 
-    // Generate token
-    const token = jwt.sign(
-      { userId: user._id },
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
-      { expiresIn: '24h' }
+      { expiresIn: '15m' }
     );
 
-    res.status(201).json({ user, token });
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + '_refresh',
+      { expiresIn: '7d' }
+    );
+
+    // Set refresh token as HTTP-only cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        accessToken
+      }
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Registration error:', error);
+    next(error);
   }
 };
 
-exports.verifyEmployee = async (req, res) => {
+const verifyEmployee = async (req, res, next) => {
   try {
-    const { organizationId, verificationParams, email } = req.body;
+    const { email, organizationId, verificationParams } = req.body;
     
     if (!email || !organizationId) {
       return res.status(400).json({ 
         success: false, 
-        message: 'Missing email or organization ID' 
+        message: 'Missing email or organization ID',
+        code: 'VALIDATION_ERROR'
       });
     }
     
@@ -76,8 +121,9 @@ exports.verifyEmployee = async (req, res) => {
     
     if (!user || !organization) {
       return res.status(404).json({ 
-        success: false, 
-        message: 'User or organization not found' 
+        success: false,
+        message: 'User or organization not found',
+        code: 'USER_OR_ORGANIZATION_NOT_FOUND'
       });
     }
 
@@ -99,51 +145,95 @@ exports.verifyEmployee = async (req, res) => {
     user.verified = true;
     await user.save();
     
-    // Generate JWT token after successful verification
-    const token = jwt.sign(
-      { userId: user._id },
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
+      { expiresIn: '15m' }
+    );
+
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + '_refresh',
       { expiresIn: '7d' }
     );
     
-    return res.status(200).json({ 
-      success: true, 
-      userId: user._id,
-      token,
-      role: user.role,
-      organizationId: user.organizationId
+    // Set refresh token as HTTP-only cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
     });
-  } catch (err) {
-    console.error('Verification error:', err);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+    
+    return res.json({ 
+      success: true,
+      data: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        verified: user.verified,
+        accessToken
+      }
+    });
+  } catch (error) {
+    console.error('Verification error:', error);
+    throw new Error('Verification failed');
   }
 };
 
-exports.checkVerificationStatus = async (req, res) => {
+const checkVerificationStatus = async (req, res, next) => {
   try {
     const { email } = req.query;
-    if (!email) return res.status(400).json({ success: false, message: 'Email required' });
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email is required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
     
     const user = await User.findOne({ email });
-    if (!user) return res.status(404).json({ success: false, message: 'User not found' });
+    if (!user) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
     
-    // Generate new token if user is verified
-    const token = user.verified ? jwt.sign(
-      { userId: user._id },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    ) : null;
+    // Only generate a token if the user is verified
+    let accessToken = null;
+    if (user.verified) {
+      accessToken = jwt.sign(
+        { userId: user._id, role: user.role },
+        process.env.JWT_SECRET,
+        { expiresIn: '15m' }
+      );
+    }
     
     return res.status(200).json({
       success: true,
-      verified: user.verified,
-      orgId: user.organizationId,
-      role: user.role,
-      userId: user._id,
-      token
+      data: {
+        verified: user.verified,
+        organizationId: user.organizationId,
+        role: user.role,
+        userId: user._id,
+        accessToken
+      }
     });
-  } catch (err) {
-    console.error('Status check error:', err);
-    return res.status(500).json({ success: false, message: 'Internal server error' });
+  } catch (error) {
+    console.error('Status check error:', error);
+    next(error);
   }
+};
+
+// Export all controller functions
+module.exports = {
+  getCurrentUser,
+  registerUser,
+  verifyEmployee,
+  checkVerificationStatus
 };

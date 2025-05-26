@@ -232,6 +232,7 @@ exports.commentOnPost = async (req, res) => {
     const newComment = {
       text: req.body.text,
       author: req.user._id,
+      createdBy: req.user._id, // Add the createdBy field
       // Initialize comment reactions
       reactions: {
         like: { count: 0, users: [] },
