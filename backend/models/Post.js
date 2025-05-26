@@ -63,7 +63,7 @@ const commentSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
-  createdBy: {
+  createdByRole: {
     type: String,
     required: true
   }
@@ -155,7 +155,16 @@ const postSchema = new mongoose.Schema(
       laugh: reactionDetailSchema,
       angry: reactionDetailSchema
     },
-    comments: [commentSchema]
+    comments: [commentSchema],
+    author: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    createdByRole: {
+      type: String,
+      required: true
+    }
   },
   { timestamps: true } // Adds createdAt and updatedAt
 );

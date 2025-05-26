@@ -955,36 +955,38 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
         throw new Error('No organization selected');
       }
       
+      if (!postId) {
+        throw new Error('No post ID provided');
+      }
+      
       console.log('Fetching comments for post:', postId, 'in org:', orgId);
       
       try {
-        // First, get all posts for the organization
-        const response = await api.get(`/posts/${orgId}`);
+        // Get the specific post with comments and author info populated
+        const response = await api.get(`/posts/${orgId}?postId=${postId}`);
         
         if (!response.data) {
           throw new Error('No data received from server');
         }
         
-        // Handle different response formats
-        let posts = [];
-        if (Array.isArray(response.data)) {
-          posts = response.data;
-        } else if (response.data.posts && Array.isArray(response.data.posts)) {
-          posts = response.data.posts;
-        } else if (response.data.data && Array.isArray(response.data.data)) {
-          posts = response.data.data;
-        }
-        
-        // Find the specific post by ID
-        const post = posts.find(p => p._id === postId);
+        const post = response.data;
         
         if (!post) {
           throw new Error('Post not found');
         }
         
-        // Get comments from the post
-        const updatedComments = Array.isArray(post.comments) ? post.comments : [];
-        console.log('Fetched comments:', updatedComments);
+        // Get comments from the post and ensure they have proper author info
+        const updatedComments = Array.isArray(post.comments) 
+          ? post.comments.map(comment => ({
+              ...comment,
+              // Ensure we have author info and default to empty object if not available
+              author: comment.author || { _id: comment.author, role: 'user' },
+              // For backward compatibility, check createdByRole first, then fall back to author.role
+              createdByRole: comment.createdByRole || (comment.author?.role || 'user')
+            }))
+          : [];
+        
+        console.log('Fetched comments with author info:', updatedComments);
         
         setLocalComments(updatedComments);
         

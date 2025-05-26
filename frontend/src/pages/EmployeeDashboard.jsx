@@ -207,46 +207,59 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
 
   // Function to fetch the post with its comments
   const fetchPostWithComments = async () => {
+    const storedToken = localStorage.getItem('token');
+    const orgId = localStorage.getItem('orgId');
+    
+    if (!storedToken || !orgId) {
+      console.error('Authentication token or organization ID not found');
+      return;
+    }
+    
+    if (!postId) {
+      console.error('No post ID provided');
+      return;
+    }
+    
+    console.log('Fetching post with comments. Post ID:', postId, 'Org ID:', orgId);
+    
     try {
-      const storedToken = localStorage.getItem('token');
-      const orgId = localStorage.getItem('orgId');
-      
-      if (!storedToken || !orgId) {
-        console.error('Authentication token or organization ID not found');
-        return;
-      }
-      
-      console.log('Fetching post with comments. Post ID:', postId, 'Org ID:', orgId);
-      
-      // First, get the post with its comments
+      // Get the specific post with comments and author info populated
       const response = await api.get(`/posts/${orgId}?postId=${postId}`);
       
       console.log('Received post data:', response.data);
       
-      if (response.data) {
-        // Handle different response formats
-        let posts = [];
-        if (Array.isArray(response.data)) {
-          posts = response.data;
-        } else if (response.data.posts) {
-          posts = response.data.posts;
-        } else if (response.data.data) {
-          posts = response.data.data.posts || [];
-        }
-        
-        // Find the specific post we're interested in
-        const post = posts.find(p => p._id === postId);
-        const updatedComments = post?.comments || [];
-        
-        console.log('Updated comments:', updatedComments);
-        setLocalComments(updatedComments);
-        
-        if (onCommentAdded) {
-          onCommentAdded(updatedComments);
-        }
+      if (!response.data) {
+        console.error('No data received from server');
+        return;
+      }
+      
+      const post = response.data;
+      
+      if (!post) {
+        console.error('Post not found');
+        return;
+      }
+      
+      // Process comments to ensure they have proper author info
+      const updatedComments = Array.isArray(post.comments)
+        ? post.comments.map(comment => ({
+            ...comment,
+            // Ensure we have author info and default to empty object if not available
+            author: comment.author || { _id: comment.author, role: 'user' },
+            // For backward compatibility, check createdByRole first, then fall back to author.role
+            createdByRole: comment.createdByRole || (comment.author?.role || 'user')
+          }))
+        : [];
+      
+      console.log('Updated comments with author info:', updatedComments);
+      setLocalComments(updatedComments);
+      
+      if (onCommentAdded) {
+        onCommentAdded(updatedComments);
       }
     } catch (error) {
       console.error('Error fetching post with comments:', error);
+      setError('Failed to fetch post. Please try again.');
     }
   };
 

@@ -15,12 +15,12 @@ exports.createPost = async (req, res) => {
       orgId,
       postType,
       content,
-      author: req.user._id,
-      mediaUrls: mediaUrls || [],
-      region: region || null,
-      department: department || null,
-      isAnonymous: isAnonymous !== false,
-      // Initialize reactions with empty users array and count 0
+      mediaUrls,
+      region,
+      department,
+      isAnonymous,
+      author: req.user._id, // Save the user's ID as the author
+      createdByRole: req.user.role, // Save the user's role
       reactions: {
         like: { count: 0, users: [] },
         love: { count: 0, users: [] },
@@ -40,21 +40,40 @@ exports.createPost = async (req, res) => {
 
 exports.getPostsByOrg = async (req, res) => {
   try {
+    const { orgId } = req.params;
+    const { postId } = req.query;
+    
     // For admin users, check if they created this organization
     if (req.user.role === 'admin') {
-      const organization = await Organization.findById(req.params.orgId);
+      const organization = await Organization.findById(orgId);
       if (!organization || organization.adminEmail !== req.user.email) {
         return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
       }
     } else {
       // For employees, check if this is their verified organization
-      if (!req.user.organizationId || req.user.organizationId.toString() !== req.params.orgId.toString()) {
+      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
         return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
       }
     }
 
-    const posts = await Post.find({ orgId: req.params.orgId })
-      .sort({ createdAt: -1 });
+    // If postId is provided, return just that post
+    if (postId) {
+      const post = await Post.findOne({ _id: postId, orgId })
+        .populate('author', 'name role')
+        .populate('comments.author', 'name role');
+      
+      if (!post) {
+        return res.status(404).json({ message: 'Post not found' });
+      }
+      
+      return res.status(200).json(post);
+    }
+
+    // Otherwise, return all posts for the organization
+    const posts = await Post.find({ orgId })
+      .sort({ createdAt: -1 })
+      .populate('author', 'name role');
+      
     res.status(200).json(posts);
   } catch (err) {
     console.error('Fetch posts error:', err);
@@ -230,18 +249,18 @@ exports.commentOnPost = async (req, res) => {
     }
 
     const newComment = {
+      _id: new mongoose.Types.ObjectId(),
       text: req.body.text,
-      author: req.user._id,
-      createdBy: req.user._id, // Add the createdBy field
-      // Initialize comment reactions
+      author: req.user._id, // User's ID as the comment author
+      createdByRole: req.user.role, // User's role
+      createdAt: new Date(),
+      updatedAt: new Date(),
       reactions: {
         like: { count: 0, users: [] },
         love: { count: 0, users: [] },
         laugh: { count: 0, users: [] },
         angry: { count: 0, users: [] }
-      },
-      createdAt: new Date(),
-      updatedAt: new Date()
+      }
     };
 
     post.comments.push(newComment);
@@ -255,21 +274,46 @@ exports.commentOnPost = async (req, res) => {
 
 exports.deleteComment = async (req, res) => {
   try {
-    const post = await Post.findById(req.params.postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
-
+    const postId = req.params.postId;
     const commentId = req.params.commentId;
-    const comment = post.comments.id(commentId);
+    const userId = req.user._id;
 
-    if (!comment) return res.status(404).json({ message: 'Comment not found' });
+    // Atomically find the post and pull the comment if the user is the author
+    const result = await Post.updateOne(
+      { 
+        _id: postId,
+        // Ensure the comment exists and the user is the author before pulling
+        // This also implicitly checks if the post itself exists.
+        'comments._id': commentId,
+        'comments.author': userId 
+      },
+      { 
+        $pull: { 
+          comments: { 
+            _id: commentId,
+            author: userId // Redundant but ensures we only pull the specific comment by the author
+          } 
+        } 
+      }
+    );
 
-    // Check if the authenticated user is the author of the comment
-    if (comment.author.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Unauthorized to delete this comment' });
+    if (result.matchedCount === 0) {
+      // This means either the post wasn't found, or the comment wasn't found, 
+      // or the user was not authorized to delete that specific comment.
+      // We can check the post first to give a more specific error.
+      const postExists = await Post.findById(postId);
+      if (!postExists) {
+        return res.status(404).json({ message: 'Post not found' });
+      }
+      // If post exists, then the comment was not found or user not authorized for that comment
+      return res.status(404).json({ message: 'Comment not found or user not authorized to delete this comment' });
     }
 
-    post.comments.pull(commentId);
-    await post.save();
+    if (result.modifiedCount === 0 && result.matchedCount > 0) {
+      // This case should ideally not happen if matchedCount > 0 and the $pull condition is specific enough.
+      // It might indicate the comment was already deleted or some other race condition.
+      return res.status(404).json({ message: 'Comment not found or already deleted' });
+    }
 
     res.status(200).json({ message: 'Comment deleted successfully' });
   } catch (err) {
@@ -362,7 +406,8 @@ exports.deletePost = async (req, res) => {
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
     // Check if the authenticated user is the author of the post
-    if (post.author.toString() !== req.user._id.toString()) {
+    // If post.author is undefined, we'll treat it as unauthorized
+    if (!post.author || post.author.toString() !== req.user._id.toString()) {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     }
 
