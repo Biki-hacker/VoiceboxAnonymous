@@ -23,7 +23,8 @@ import {
   TrashIcon,
   XMarkIcon,
   PaperClipIcon,
-  PaperAirplaneIcon
+  PaperAirplaneIcon,
+  Bars3Icon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import PostCreation from '../components/PostCreation';
@@ -558,6 +559,7 @@ const EmployeeDashboard = () => {
     };
   }, [newPost.mediaUrls]);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // --- Authentication Effect ---
   useEffect(() => {
@@ -1141,7 +1143,90 @@ const EmployeeDashboard = () => {
 
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
-      <aside className="w-16 md:w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
+      {/* Mobile sidebar overlay */}
+      <AnimatePresence>
+        {isMobileSidebarOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 bg-black/50 z-40 md:hidden"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Mobile sidebar */}
+      <AnimatePresence>
+        {isMobileSidebarOpen && (
+          <motion.aside
+            initial={{ x: '-100%' }}
+            animate={{ x: 0 }}
+            exit={{ x: '-100%' }}
+            transition={{ type: 'tween', duration: 0.2 }}
+            className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col z-50 md:hidden"
+          >
+            <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
+              <div className="flex items-center space-x-2">
+                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
+                  <BuildingOfficeIcon className="h-6 w-6" />
+                </div>
+                <span className="font-semibold text-gray-800 dark:text-white">VoiceBox</span>
+              </div>
+              <button
+                onClick={() => setIsMobileSidebarOpen(false)}
+                className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700"
+              >
+                <XMarkIcon className="h-6 w-6" />
+              </button>
+            </div>
+            <nav className="flex-1 overflow-y-auto py-4 px-2">
+              <div className="space-y-1">
+                {actions.map((action) => (
+                  <button
+                    key={action.title}
+                    onClick={() => {
+                      action.onClick();
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                  >
+                    <action.icon className="h-5 w-5 mr-3" />
+                    {action.title}
+                  </button>
+                ))}
+              </div>
+            </nav>
+            <div className="p-4 border-t border-gray-200 dark:border-slate-700">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center">
+                  <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500 mr-2" />
+                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
+                    {user.name}
+                  </span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+                  <button
+                    onClick={() => {
+                      handleLogout();
+                      setIsMobileSidebarOpen(false);
+                    }}
+                    className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
+                    title="Logout"
+                  >
+                    <ArrowLeftOnRectangleIcon className="h-5 w-5" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </motion.aside>
+        )}
+      </AnimatePresence>
+
+      {/* Desktop sidebar */}
+      <aside className="hidden md:flex w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
         <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
           <BuildingOfficeIcon className="h-7 w-7 md:h-8" />
         </div>
@@ -1172,6 +1257,14 @@ const EmployeeDashboard = () => {
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
           <div className="flex items-center">
+            {/* Mobile menu button */}
+            <button
+              type="button"
+              className="mr-2 p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 md:hidden"
+              onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+            >
+              <Bars3Icon className="h-6 w-6" aria-hidden="true" />
+            </button>
             {(viewMode === 'create' || viewMode === 'view') ? (
               <button
                 onClick={() => setViewMode('dashboard')}
