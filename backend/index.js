@@ -83,7 +83,7 @@ app.use(errorHandler);
 
 // --- Request Timeout Middleware ---
 app.use((req, res, next) => {
-  req.setTimeout(30000, () => {
+  req.setTimeout(60000, () => {
     console.error(`Request timeout for ${req.method} ${req.originalUrl}`);
     res.status(504).json({ message: 'Request timeout' });
   });
