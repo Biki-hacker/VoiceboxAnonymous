@@ -365,43 +365,55 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
         </button>
       </div>
 
-      {localComments.map(comment => (
-        <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium dark:text-white">
-                Anonymous
-              </span>
-              <span className="text-xs text-gray-500 dark:text-slate-400">
-                {new Date(comment.createdAt).toLocaleDateString()}
-              </span>
+      {localComments.map(comment => {
+        console.log('Comment data:', comment);
+        const isAdmin = comment.createdByRole === 'admin' || (comment.author && comment.author.role === 'admin');
+        
+        return (
+          <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-sm font-medium dark:text-white">
+                  {comment.author?.name || 'Anonymous'}
+                </span>
+                <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
+                  isAdmin 
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                }`}>
+                  {isAdmin ? 'Admin' : 'User'}
+                </span>
+                <span className="text-xs text-gray-500 dark:text-slate-400">
+                  {new Date(comment.createdAt).toLocaleDateString()}
+                </span>
+              </div>
+              <button
+                onClick={() => handleCommentDelete(comment._id)}
+                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                disabled={isLoading}
+                title="Delete comment"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
             </div>
-            <button
-              onClick={() => handleCommentDelete(comment._id)}
-              className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-              disabled={isLoading}
-              title="Delete comment"
-            >
-              <TrashIcon className="h-4 w-4" />
-            </button>
+            
+            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
+            
+            {/* Use the same ReactionButton component as posts */}
+            <div className="flex gap-2">
+              {['like', 'love', 'laugh', 'angry'].map((type) => (
+                <ReactionButton
+                  key={type}
+                  type={type}
+                  postId={postId}
+                  commentId={comment._id}
+                  count={comment.reactions?.[type]?.count || 0}
+                />
+              ))}
+            </div>
           </div>
-          
-          <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
-          
-          {/* Use the same ReactionButton component as posts */}
-          <div className="flex gap-2">
-            {['like', 'love', 'laugh', 'angry'].map((type) => (
-              <ReactionButton
-                key={type}
-                type={type}
-                postId={postId}
-                commentId={comment._id}
-                count={comment.reactions?.[type]?.count || 0}
-              />
-            ))}
-          </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 };
@@ -971,14 +983,23 @@ const EmployeeDashboard = () => {
                     transition={{ delay: i * 0.03 }}
                   >
                     <div className="flex justify-between items-start mb-1 sm:mb-2">
-                      <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
-                        post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
-                        post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
-                        post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
-                        'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
-                      }`}>
-                        {post.postType}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
+                          post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
+                          post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
+                          post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
+                          'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
+                        }`}>
+                          {post.postType}
+                        </span>
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                          post.createdByRole === 'admin' || (post.author && post.author.role === 'admin')
+                            ? 'bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300'
+                            : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
+                        }`}>
+                          {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : 'User'}
+                        </span>
+                      </div>
                       <button
                         onClick={() => handleCommentDelete(post._id, post.comments[0]._id)}
                         className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -1068,8 +1089,13 @@ const EmployeeDashboard = () => {
                         })}
                       </div>
                     )}
-                    <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1">
-                      <span>By: {post.createdBy || 'Anonymous'}</span>
+                    <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1 items-center">
+                      <span>By: {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : (post.createdBy || 'User')}</span>
+                      {(post.createdByRole === 'admin' || (post.author && post.author.role === 'admin')) && (
+                        <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full">
+                          Admin
+                        </span>
+                      )}
                       <span>|</span>
                       <span>{new Date(post.createdAt).toLocaleString()}</span>
                       <span className="hidden sm:inline">|</span>
