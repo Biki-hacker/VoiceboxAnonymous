@@ -60,7 +60,7 @@ const authMiddleware = async (req, res, next) => {
 
       // Find user in database
       const user = await User.findById(decoded.userId)
-        .select('_id email role organizationId verified lastLogin')
+        .select('_id email role organizationId verified lastLogin lastPasswordChange')
         .lean();
 
       if (!user) {

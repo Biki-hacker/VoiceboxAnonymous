@@ -179,7 +179,7 @@ const verifyEmployee = async (req, res, next) => {
     });
   } catch (error) {
     console.error('Verification error:', error);
-    throw new Error('Verification failed');
+    next(error);
   }
 };
 
@@ -204,24 +204,13 @@ const checkVerificationStatus = async (req, res, next) => {
       });
     }
     
-    // Only generate a token if the user is verified
-    let accessToken = null;
-    if (user.verified) {
-      accessToken = jwt.sign(
-        { userId: user._id, role: user.role },
-        process.env.JWT_SECRET,
-        { expiresIn: '15m' }
-      );
-    }
-    
     return res.status(200).json({
       success: true,
       data: {
         verified: user.verified,
         organizationId: user.organizationId,
         role: user.role,
-        userId: user._id,
-        accessToken
+        userId: user._id
       }
     });
   } catch (error) {
