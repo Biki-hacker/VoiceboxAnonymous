@@ -26,6 +26,7 @@ import {
   PaperAirplaneIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
+import PostCreation from '../components/PostCreation';
 
 // --- Theme Hook ---
 const useTheme = () => {
@@ -699,16 +700,9 @@ const EmployeeDashboard = () => {
   };
 
   // --- Handle Create Post ---
-  const handleCreatePost = async () => {
-    if (!newPost.content.trim()) {
-      setError('Post content is required');
-      return;
-    }
-
-    // Check if any uploads are still in progress
-    const uploadsInProgress = newPost.mediaUrls.some(media => media.isUploading);
-    if (uploadsInProgress) {
-      setError('Please wait for all files to finish uploading');
+  const handleCreatePost = async (postData) => {
+    if (!postData.content.trim() && (!postData.media || postData.media.length === 0)) {
+      setError('Post content or media is required');
       return;
     }
 
@@ -716,43 +710,52 @@ const EmployeeDashboard = () => {
     setError(null);
 
     try {
-      // Filter out any failed uploads and get just the URLs
-      const validMediaUrls = newPost.mediaUrls
-        .filter(media => !media.error && (media.url || media.preview))
-        .map(media => media.url || media.preview)
-        .filter(Boolean); // Remove any null/undefined entries
+      // First, upload all media files if any
+      let mediaUrls = [];
+      
+      if (postData.media && postData.media.length > 0) {
+        try {
+          // Upload each media file using the uploadMedia utility
+          for (const mediaItem of postData.media) {
+            const fileUrl = await uploadMedia(mediaItem.file, (progress) => {
+              console.log(`Upload progress for ${mediaItem.file.name}: ${progress}%`);
+            });
+            if (fileUrl) {
+              mediaUrls.push(fileUrl);
+            }
+          }
+        } catch (uploadError) {
+          console.error('Error uploading media:', uploadError);
+          setError(`Failed to upload media: ${uploadError.message}`);
+          throw uploadError;
+        }
+      }
 
-      console.log('Creating post with media URLs:', validMediaUrls);
-
+      // Create the post with the uploaded media URLs
       const response = await api.post('/posts', {
-        content: newPost.content.trim(),
-        postType: newPost.postType,
-        mediaUrls: validMediaUrls, // Now this is an array of strings
-        region: newPost.region,
-        department: newPost.department,
-        orgId: organizationId
+        content: postData.content.trim(),
+        postType: postData.postType,
+        mediaUrls,
+        region: postData.region || '',
+        department: postData.department || '',
+        orgId: organizationId,
+        isAnonymous: true
       });
 
       console.log('Post created successfully:', response.data);
 
       // Clean up object URLs after successful post
-      newPost.mediaUrls.forEach(media => {
+      postData.media.forEach(media => {
         if (media.preview) URL.revokeObjectURL(media.preview);
       });
 
       // Fetch fresh posts to ensure we have the latest data
       await fetchPosts();
       
-      // Reset form
-      setNewPost({
-        postType: 'feedback',
-        content: '',
-        mediaUrls: [],
-        region: '',
-        department: ''
-      });
-      
+      // Switch back to dashboard view
       setViewMode('dashboard');
+      
+      return response.data; // Return the created post data
     } catch (err) {
       console.error('Error creating post:', {
         error: err,
@@ -768,6 +771,7 @@ const EmployeeDashboard = () => {
       }
       
       setError(errorMessage);
+      throw err; // Re-throw to allow the PostCreation component to handle the error
     } finally {
       setLoading(prev => ({ ...prev, create: false }));
     }
@@ -857,127 +861,21 @@ const EmployeeDashboard = () => {
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
+            className="w-full max-w-2xl mx-auto"
           >
-            <h2 className="text-xl font-bold mb-4 dark:text-white">Create New Post</h2>
-            <select
-              value={newPost.postType}
-              onChange={(e) => setNewPost({ ...newPost, postType: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
-            >
-              {['feedback', 'complaint', 'suggestion', 'public'].map(type => (
-                <option key={type} value={type}>{type.charAt(0).toUpperCase() + type.slice(1)}</option>
-              ))}
-            </select>
-            <textarea
-              value={newPost.content}
-              onChange={(e) => setNewPost({ ...newPost, content: e.target.value })}
-              placeholder="Write your post content..."
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 h-32 dark:text-white"
+            <PostCreation
+              onSend={handleCreatePost}
+              onCancel={() => setViewMode('dashboard')}
+              showRegionDepartment={true}
+              initialRegion={newPost.region}
+              initialDepartment={newPost.department}
+              postTypes={['feedback', 'complaint', 'suggestion', 'public']}
+              initialPostType={newPost.postType}
+              onPostTypeChange={(type) => setNewPost(prev => ({ ...prev, postType: type }))}
+              className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
+              buttonText={loading.create ? 'Posting...' : 'Post'}
+              disabled={loading.create}
             />
-            <input
-              type="text"
-              placeholder="Region (optional)"
-              value={newPost.region}
-              onChange={(e) => setNewPost({ ...newPost, region: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
-            />
-            <input
-              type="text"
-              placeholder="Department (optional)"
-              value={newPost.department}
-              onChange={(e) => setNewPost({ ...newPost, department: e.target.value })}
-              className="w-full p-2 mb-4 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
-            />
-            {/* All posts are anonymous */}
-            <div className="mb-4">
-              <label className="block mb-2 dark:text-white">
-                Upload Media:
-                <input
-                  type="file"
-                  multiple
-                  onChange={handleFileUpload}
-                  className="mt-2 block w-full text-sm text-gray-500
-                    file:mr-4 file:py-2 file:px-4
-                    file:rounded-full file:border-0
-                    file:text-sm file:font-semibold
-                    file:bg-blue-50 file:text-blue-700
-                    hover:file:bg-blue-100
-                    dark:file:bg-blue-900/30 dark:file:text-blue-300
-                    dark:hover:file:bg-blue-900/50"
-                  disabled={loading.create}
-                  accept="image/*,video/*"
-                />
-              </label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-3">
-                {newPost.mediaUrls.map((media, index) => {
-                  const isImage = media.file?.type?.startsWith('image/') || 
-                                (media.preview && !media.preview.endsWith('.mp4'));
-                  const src = media.url || media.preview || media;
-                  
-                  return (
-                    <div key={index} className="relative group rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700 aspect-square">
-                      {media.isUploading ? (
-                        <div className="w-full h-full flex items-center justify-center">
-                          <div className="text-center">
-                            <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto"></div>
-                            <p className="text-xs mt-2 text-gray-600 dark:text-gray-300">
-                              {Math.round(media.progress)}%
-                            </p>
-                          </div>
-                        </div>
-                      ) : isImage ? (
-                        <img
-                          src={src}
-                          alt="Preview"
-                          className="w-full h-full object-cover"
-                          onLoad={() => {
-                            if (media.preview) {
-                              URL.revokeObjectURL(media.preview);
-                            }
-                          }}
-                        />
-                      ) : (
-                        <video
-                          src={src}
-                          className="w-full h-full object-cover"
-                          controls
-                        />
-                      )}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          setNewPost(prev => ({
-                            ...prev,
-                            mediaUrls: prev.mediaUrls.filter((_, i) => i !== index)
-                          }));
-                        }}
-                        className="absolute top-1 right-1 p-1 bg-red-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-600"
-                        aria-label="Remove media"
-                      >
-                        <XCircleIcon className="h-4 w-4 text-white" />
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={() => setViewMode('dashboard')}
-                className="px-4 py-2 bg-gray-500 text-white rounded hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleCreatePost}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Submit Post
-              </button>
-            </div>
           </motion.div>
         );
 
