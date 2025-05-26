@@ -603,7 +603,11 @@ const AdminDashboard = () => {
                                                     
                                                     {/* Comments Section */}
                                                     <div className="mt-3">
-                                                        <CommentSection postId={post._id} comments={post.comments || []} />
+                                                        <CommentSection 
+                                                            postId={post._id} 
+                                                            comments={post.comments || []} 
+                                                            selectedOrg={selectedOrg}
+                                                        />
                                                     </div>
                                                 </motion.div>
                                             ))}
@@ -640,15 +644,18 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const [isReacted, setIsReacted] = useState(false);
   const [currentCount, setCurrentCount] = useState(count);
   const [isLoading, setIsLoading] = useState(false);
+  const orgId = localStorage.getItem('orgId');
 
   // Fetch reaction status on mount and when postId/commentId/type changes
   useEffect(() => {
     const fetchReactionStatus = async () => {
+      if (!orgId) return;
+      
       try {
         const storedToken = localStorage.getItem('token');
         const endpoint = commentId 
-          ? `/posts/${postId}/comments/${commentId}/reactions`
-          : `/posts/${postId}/reactions`;
+          ? `/posts/${orgId}/${postId}/comments/${commentId}/reactions`
+          : `/posts/${orgId}/${postId}/reactions`;
 
         const response = await api.get(endpoint, {
           headers: { 
@@ -667,11 +674,37 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         }
       } catch (error) {
         console.error('Error fetching reaction status:', error);
+        // Fallback to the non-org specific endpoint if the org-specific one fails
+        if (error.response?.status === 404) {
+          try {
+            const storedToken = localStorage.getItem('token');
+            const fallbackEndpoint = commentId 
+              ? `/posts/${postId}/comments/${commentId}/reactions`
+              : `/posts/${postId}/reactions`;
+
+            const fallbackResponse = await api.get(fallbackEndpoint, {
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              }
+            });
+
+            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
+              const reactionData = fallbackResponse.data.data[type];
+              if (reactionData) {
+                setIsReacted(reactionData.hasReacted);
+                setCurrentCount(reactionData.count);
+              }
+            }
+          } catch (fallbackError) {
+            console.error('Fallback endpoint also failed:', fallbackError);
+          }
+        }
       }
     };
 
     fetchReactionStatus();
-  }, [postId, commentId, type]);
+  }, [postId, commentId, type, orgId]);
 
   const handleReaction = async () => {
     if (isLoading) return;
@@ -687,24 +720,53 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     try {
       const storedToken = localStorage.getItem('token');
       const endpoint = commentId 
-        ? `/posts/${postId}/comments/${commentId}/reactions`
-        : `/posts/${postId}/reactions`;
+        ? `/posts/${orgId || ''}/${postId}/comments/${commentId}/reactions`
+        : `/posts/${orgId || ''}/${postId}/reactions`;
 
-      const response = await api.post(
-        endpoint, 
-        { type },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
+      // First try with orgId in the path
+      try {
+        const response = await api.post(
+          endpoint, 
+          { type },
+          { 
+            headers: { 
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${storedToken}` 
+            } 
+          }
+        );
+        
+        // Update with server response
+        if (response.data?.success && response.data?.reaction) {
+          setIsReacted(response.data.reaction.hasReacted);
+          setCurrentCount(response.data.reaction.count);
+          return;
         }
-      );
-      
-      // Update with server response
-      if (response.data?.success && response.data?.reaction) {
-        setIsReacted(response.data.reaction.hasReacted);
-        setCurrentCount(response.data.reaction.count);
+      } catch (error) {
+        if (error.response?.status === 404 && orgId) {
+          // If the org-specific endpoint fails, try the non-org specific endpoint
+          const fallbackEndpoint = commentId 
+            ? `/posts/${postId}/comments/${commentId}/reactions`
+            : `/posts/${postId}/reactions`;
+
+          const fallbackResponse = await api.post(
+            fallbackEndpoint,
+            { type },
+            { 
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              } 
+            }
+          );
+
+          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
+            setIsReacted(fallbackResponse.data.reaction.hasReacted);
+            setCurrentCount(fallbackResponse.data.reaction.count);
+            return;
+          }
+        }
+        throw error; // Re-throw the error if we couldn't handle it
       }
     } catch (error) {
       console.error('Error updating reaction:', error);
@@ -733,6 +795,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
       }`}
       title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
+      disabled={isLoading}
     >
       {getIcon()}
       <span className="text-sm">{currentCount}</span>
@@ -741,82 +804,152 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 };
 
 // --- Comment Section Component ---
-const CommentSection = ({ postId, comments: initialComments = [] }) => {
+const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, onCommentAdded }) => {
   const [newComment, setNewComment] = useState('');
   const [localComments, setLocalComments] = useState(initialComments || []);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
     setLocalComments(initialComments || []);
   }, [initialComments]);
 
-  const handleCommentSubmit = async () => {
-    if (!newComment.trim() || isLoading) return;
+  // Function to fetch the post with its comments
+  const fetchPostWithComments = async () => {
     setIsLoading(true);
     setError(null);
-
+    
     try {
       const storedToken = localStorage.getItem('token');
-      const response = await api.post(
-        `/posts/${postId}/comments`,
-        { 
-          text: newComment,
-          createdBy: localStorage.getItem('name') || 'Anonymous'
-        },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
+      if (!storedToken) {
+        throw new Error('No authentication token found');
+      }
       
-      if (response.data?.success) {
-        // The backend returns the updated post with all comments
-        setLocalComments(response.data.comments || []);
-        setNewComment('');
+      const orgId = selectedOrg?._id;
+      if (!orgId) {
+        throw new Error('No organization selected');
+      }
+      
+      console.log('Fetching comments for post:', postId, 'in org:', orgId);
+      
+      try {
+        // First, get all posts for the organization
+        const response = await api.get(`/posts/${orgId}`);
+        
+        if (!response.data) {
+          throw new Error('No data received from server');
+        }
+        
+        // Handle different response formats
+        let posts = [];
+        if (Array.isArray(response.data)) {
+          posts = response.data;
+        } else if (response.data.posts && Array.isArray(response.data.posts)) {
+          posts = response.data.posts;
+        } else if (response.data.data && Array.isArray(response.data.data)) {
+          posts = response.data.data;
+        }
+        
+        // Find the specific post by ID
+        const post = posts.find(p => p._id === postId);
+        
+        if (!post) {
+          throw new Error('Post not found');
+        }
+        
+        // Get comments from the post
+        const updatedComments = Array.isArray(post.comments) ? post.comments : [];
+        console.log('Fetched comments:', updatedComments);
+        
+        setLocalComments(updatedComments);
+        
+        if (onCommentAdded) {
+          onCommentAdded(updatedComments);
+        }
+      } catch (error) {
+        console.error('Error fetching post:', error);
+        setError('Failed to load comments. Please try again.');
       }
     } catch (error) {
-      console.error('Error posting comment:', error);
-      setError(error.response?.data?.message || 'Failed to post comment');
+      console.error('Error fetching comments:', error);
+      setError(error.response?.data?.message || error.message || 'Failed to fetch comments');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleCommentDelete = async (commentId) => {
-    if (!window.confirm('Are you sure you want to delete this comment?') || isLoading) return;
-    setIsLoading(true);
+  const handleCommentSubmit = async () => {
+    const commentText = newComment.trim();
+    if (!commentText || isSubmitting) return;
     
+    setIsSubmitting(true);
+    setError(null);
+    
+    // Clear input immediately for better UX
+    setNewComment('');
+
     try {
       const storedToken = localStorage.getItem('token');
-      await api.delete(
-        `/posts/${postId}/comments/${commentId}`,
-        { 
-          headers: { 
+      if (!storedToken) {
+        throw new Error('No authentication token found');
+      }
+
+      // Post the comment
+      const response = await api.post(
+        `/posts/${postId}/comments`,
+        { text: commentText },
+        {
+          headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
+            'Authorization': `Bearer ${storedToken}`
+          }
         }
       );
-      
-      // Optimistic update
-      setLocalComments(prev => prev.filter(c => c._id !== commentId));
-      setError(null);
+
+      // Refresh comments after successful submission
+      await fetchPostWithComments();
+    } catch (error) {
+      console.error('Error submitting comment:', error);
+      setError(error.response?.data?.message || 'Failed to post comment');
+      // Restore the comment text if there was an error
+      setNewComment(commentText);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleCommentDelete = async (commentId) => {
+    if (!commentId || isLoading) return;
+    
+    if (!window.confirm('Are you sure you want to delete this comment?')) {
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) {
+        throw new Error('No authentication token found');
+      }
+
+      await api.delete(`/posts/${postId}/comments/${commentId}`, {
+        headers: {
+          'Authorization': `Bearer ${storedToken}`
+        }
+      });
+
+      // Refresh comments after successful deletion
+      await fetchPostWithComments();
     } catch (error) {
       console.error('Error deleting comment:', error);
       setError(error.response?.data?.message || 'Failed to delete comment');
     } finally {
       setIsLoading(false);
     }
-  };
-  
-  const handleReaction = (commentId, reactionType) => {
-    // This function is no longer needed as we're using the ReactionButton component
-    // which handles its own state and API calls
-    console.log('Reaction handled by ReactionButton component');
   };
 
   return (
@@ -838,10 +971,10 @@ const CommentSection = ({ postId, comments: initialComments = [] }) => {
         />
         <button
           onClick={handleCommentSubmit}
-          disabled={!newComment.trim() || isLoading}
+          disabled={!newComment.trim() || isSubmitting}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {isLoading ? 'Posting...' : 'Post'}
+          {isSubmitting ? 'Posting...' : 'Post'}
         </button>
       </div>
 

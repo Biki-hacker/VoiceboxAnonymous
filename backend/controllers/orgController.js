@@ -3,17 +3,19 @@ const Organization = require('../models/Organization');
 
 exports.getOrgByAdminId = async (req, res) => {
   try {
-    // Get admin email from query params (as used in the frontend)
-    const adminEmail = req.query.email || req.params.adminEmail;
-    
-    if (!adminEmail) {
-      return res.status(400).json({ message: 'Admin email is required' });
+    const loggedInAdminEmail = req.user.email;
+
+    // For the legacy route /admin/:adminEmail, or if ?email=... is provided on /by-admin
+    if (req.params.adminEmail && req.params.adminEmail !== loggedInAdminEmail) {
+      return res.status(403).json({ message: 'Access denied: You can only fetch your own organizations.' });
+    }
+    if (req.query.email && req.query.email !== loggedInAdminEmail) {
+      return res.status(403).json({ message: 'Access denied: You can only fetch your own organizations.' });
     }
 
-    const orgs = await Organization.find({ adminEmail });
+    // If we reach here, we use the logged-in user's email
+    const orgs = await Organization.find({ adminEmail: loggedInAdminEmail });
     
-    // Return empty array instead of 404 when no organizations found
-    // This aligns with the frontend expectation to handle empty states
     return res.json(orgs);
   } catch (err) {
     console.error('Error fetching organizations:', err);
@@ -23,16 +25,17 @@ exports.getOrgByAdminId = async (req, res) => {
 
 exports.createOrganization = async (req, res) => {
   try {
-    const { name, adminEmail } = req.body;
+    const { name } = req.body; // adminEmail will be taken from authenticated user
+    const adminEmail = req.user.email; // Set adminEmail from authenticated user
     
-    if (!name || !adminEmail) {
-      return res.status(400).json({ message: 'Name and admin email are required' });
+    if (!name) { // Only name is required from body now
+      return res.status(400).json({ message: 'Organization name is required' });
     }
     
     const newOrg = new Organization({
       name,
-      adminEmail,
-      verificationFields: [] // Initialize with empty array
+      adminEmail, // Use authenticated user's email
+      verificationFields: []
     });
     
     const savedOrg = await newOrg.save();
@@ -40,7 +43,6 @@ exports.createOrganization = async (req, res) => {
   } catch (err) {
     console.error('Error creating organization:', err);
     
-    // Handle duplicate organization name error
     if (err.code === 11000) {
       return res.status(400).json({ message: 'An organization with this name already exists' });
     }
@@ -53,15 +55,34 @@ exports.updateOrganization = async (req, res) => {
   try {
     const { orgId } = req.params;
     const updates = req.body;
+
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
+      return res.status(404).json({ message: 'Organization not found' });
+    }
+
+    // Authorization check
+    if (organization.adminEmail !== req.user.email) {
+      return res.status(403).json({ message: 'Access denied: You are not authorized to update this organization.' });
+    }
     
+    // Prevent adminEmail from being updated directly via this route for now
+    // If adminEmail change is needed, it should be a separate, more controlled process.
+    if (updates.adminEmail && updates.adminEmail !== organization.adminEmail) {
+        delete updates.adminEmail; // Or return an error, e.g., res.status(400).json({ message: 'Cannot change adminEmail via this endpoint.' });
+    }
+
     const updatedOrg = await Organization.findByIdAndUpdate(
       orgId,
       updates,
       { new: true, runValidators: true }
     );
     
+    // findByIdAndUpdate returns null if not found, but we already checked.
+    // However, it's good practice to keep this check in case of race conditions or other issues.
     if (!updatedOrg) {
-      return res.status(404).json({ message: 'Organization not found' });
+        // This case should ideally not be hit if the first check passed and no deletion happened in between.
+        return res.status(404).json({ message: 'Organization not found during update.' });
     }
     
     res.json(updatedOrg);
@@ -74,12 +95,18 @@ exports.updateOrganization = async (req, res) => {
 exports.deleteOrganization = async (req, res) => {
   try {
     const { orgId } = req.params;
-    
-    const deletedOrg = await Organization.findByIdAndDelete(orgId);
-    
-    if (!deletedOrg) {
+
+    const organization = await Organization.findById(orgId);
+    if (!organization) {
       return res.status(404).json({ message: 'Organization not found' });
     }
+
+    // Authorization check
+    if (organization.adminEmail !== req.user.email) {
+      return res.status(403).json({ message: 'Access denied: You are not authorized to delete this organization.' });
+    }
+    
+    await Organization.findByIdAndDelete(orgId);
     
     res.json({ message: 'Organization deleted successfully' });
   } catch (err) {
@@ -92,7 +119,8 @@ exports.getOrganizationById = async (req, res) => {
   try {
     const { orgId } = req.params;
     
-    const org = await Organization.findById(orgId);
+    // Fetch the organization but exclude the adminEmail field
+    const org = await Organization.findById(orgId).select('-adminEmail');
     
     if (!org) {
       return res.status(404).json({ message: 'Organization not found' });
@@ -143,17 +171,24 @@ exports.searchOrganization = async (req, res) => {
 // Legacy method for backward compatibility
 exports.updateVerificationParams = async (req, res) => {
   try {
-    const { adminEmail } = req.params;
+    const { adminEmail: pathAdminEmail } = req.params; // Email from URL path
+    const loggedInAdminEmail = req.user.email;      // Email of authenticated user
     const { verificationSchema } = req.body;
+
+    // Authorization check: User can only update params for their own organization
+    if (pathAdminEmail !== loggedInAdminEmail) {
+      return res.status(403).json({ message: 'Access denied: You can only update verification parameters for your own organization.' });
+    }
     
     const updated = await Organization.findOneAndUpdate(
-      { adminEmail },
-      { verificationFields: verificationSchema }, // Changed to match frontend field name
+      { adminEmail: loggedInAdminEmail }, // Query by the (now verified) adminEmail
+      { verificationFields: verificationSchema }, 
       { new: true }
     );
     
     if (!updated) {
-      return res.status(404).json({ message: 'Organization not found' });
+      // This implies an organization with loggedInAdminEmail was not found, which is unexpected if the user exists.
+      return res.status(404).json({ message: 'Organization not found for your account.' });
     }
     
     res.json(updated);

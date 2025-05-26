@@ -57,30 +57,64 @@ const ProtectedRoute = ({ children, requiredRole }) => {
           params: { email },
           headers: {
             'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache'
+            'Pragma': 'no-cache',
+            'Authorization': `Bearer ${token}`
           }
         });
         console.log('[ProtectedRoute] /auth/verify-status response:', response);
         
-        if (response.data.success) {
-          // Update last verified timestamp
-          localStorage.setItem('lastVerified', new Date().getTime().toString());
-          
-          // Make sure localStorage is in sync with backend
-          const { role: userRole, orgId, token: newToken } = response.data;
-          
-          if (userRole) localStorage.setItem('role', userRole);
-          if (orgId) localStorage.setItem('orgId', orgId);
-          if (newToken) localStorage.setItem('token', newToken);
-          
-          if (userRole === requiredRole) {
-            if (isMounted) setIsAuthorized(true);
-          } else {
-            console.log('Role mismatch. Required:', requiredRole, 'Got:', userRole);
-            if (isMounted) setIsAuthorized(false);
-          }
+        // Handle different response formats
+        let userData = null;
+        
+        if (response.data.success && response.data.data) {
+          // Format: { success: true, data: { role, userId, verified, organizationId } }
+          userData = response.data.data;
+        } else if (response.data.authenticated && response.data.user) {
+          // Fallback to previous format
+          userData = response.data.user;
+        }
+        
+        if (!userData) {
+          throw new Error('Invalid response format from server');
+        }
+        
+        // Update last verified timestamp
+        localStorage.setItem('lastVerified', new Date().getTime().toString());
+        
+        // Extract user data from response
+        const { role: userRole, organizationId, email: userEmail, verified } = userData;
+        
+        // For admin role, verified should be false
+        if (userRole === 'admin' && verified !== false) {
+          console.warn('[ProtectedRoute] Admin account verification status is invalid');
+          if (isMounted) setIsAuthorized(false);
+          localStorage.clear();
+          return;
+        }
+        
+        console.log('[ProtectedRoute] Backend verification successful. User role:', userRole, 'Required role:', requiredRole);
+        
+        // Update local storage with fresh data
+        if (userRole) {
+          localStorage.setItem('role', userRole);
         } else {
-          console.log('Verification failed:', response.data);
+          console.warn('[ProtectedRoute] No role received from backend');
+        }
+        
+        if (organizationId) localStorage.setItem('orgId', organizationId);
+        if (userEmail) localStorage.setItem('email', userEmail);
+        
+        if (userRole === requiredRole) {
+          console.log('[ProtectedRoute] Role matches, granting access');
+          if (isMounted) setIsAuthorized(true);
+        } else {
+          console.warn(`[ProtectedRoute] Role mismatch. Required: ${requiredRole}, Got: ${userRole || 'undefined'}`);
+          // Clear potentially stale auth data
+          localStorage.removeItem('token');
+          localStorage.removeItem('role');
+          localStorage.removeItem('email');
+          localStorage.removeItem('orgId');
+          localStorage.removeItem('lastVerified');
           if (isMounted) setIsAuthorized(false);
         }
       } catch (error) {
