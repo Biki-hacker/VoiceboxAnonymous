@@ -15,9 +15,10 @@ import {
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon
+    HandThumbUpIcon, HeartIcon, XCircleIcon,
+    FaceSmileIcon as EmojiHappyIcon
 } from '@heroicons/react/24/outline';
-import { FaceSmileIcon as EmojiHappyIcon } from '@heroicons/react/24/outline';
+import PostCreation from '../components/PostCreation';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
@@ -145,11 +146,20 @@ const AdminDashboard = () => {
     const [theme, toggleTheme, setTheme] = useTheme();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
+    const [viewMode, setViewMode] = useState('dashboard');
     const [viewingMedia, setViewingMedia] = useState({
         isOpen: false,
         url: '',
         type: 'image' // 'image' or 'video'
     });
+    const [createPostView, setCreatePostView] = useState(false);
+    const [postContent, setPostContent] = useState('');
+    const [postType, setPostType] = useState('feedback');
+    const [postRegion, setPostRegion] = useState('');
+    const [postDepartment, setPostDepartment] = useState('');
+    const [postTags, setPostTags] = useState([]);
+    const [postMedia, setPostMedia] = useState(null);
+    const [isSubmittingPost, setIsSubmittingPost] = useState(false);
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -361,6 +371,7 @@ const AdminDashboard = () => {
     const sidebarNavItems = [
         { name: 'Add Organization', icon: PlusIcon, action: handleOpenAddOrgModal, current: isAddOrgModalOpen },
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
+        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
     ];
 
     // --- Mobile Sidebar Component ---
@@ -404,13 +415,94 @@ const AdminDashboard = () => {
                 <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
                     <div className="flex items-center">
                         <button onClick={() => setIsMobileSidebarOpen(true)} className="md:hidden mr-3 -ml-1 p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"><Bars3Icon className="h-6 w-6"/><span className="sr-only">Open sidebar</span></button>
-                        <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100 truncate">Admin Dashboard</h1>
+                        {viewMode === 'createPost' ? (
+                            <button
+                                onClick={() => setViewMode('dashboard')}
+                                className="flex items-center text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white transition-colors"
+                            >
+                                <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" />
+                                <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100">Back to Dashboard</h1>
+                            </button>
+                        ) : (
+                            <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100 truncate">Admin Dashboard</h1>
+                        )}
                     </div>
-                    <div className="flex items-center space-x-3"><UserCircleIcon className="h-7 w-7 text-gray-400 dark:text-slate-500"/><span className="text-sm font-medium text-gray-700 dark:text-slate-300 hidden sm:block">{userData?.email}</span></div>
+                    <div className="flex items-center space-x-3">
+                        <UserCircleIcon className="h-7 w-7 text-gray-400 dark:text-slate-500"/>
+                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300 hidden sm:block">{userData?.email}</span>
+                    </div>
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
-                     {error.page && !loading.orgDetails && ( <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="mb-6 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/50 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm flex items-center"><ExclamationCircleIcon className="h-5 w-5 mr-2 flex-shrink-0"/> {error.page}</motion.div> )}
+                    {viewMode === 'createPost' && selectedOrg ? (
+                        <motion.div
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            className="w-full max-w-2xl mx-auto"
+                        >
+                            <PostCreation
+                                onSend={async (postData) => {
+                                    if (!selectedOrg) return;
+                                    
+                                    try {
+                                        const formData = new FormData();
+                                        formData.append('content', postData.content);
+                                        formData.append('postType', postData.postType);
+                                        formData.append('organizationId', selectedOrg._id);
+                                        
+                                        // Append media files if any
+                                        if (postData.media && postData.media.length > 0) {
+                                            postData.media.forEach((media) => {
+                                                formData.append('media', media.file);
+                                            });
+                                        }
+                                        
+                                        const response = await api.post('/posts', formData, {
+                                            headers: {
+                                                'Content-Type': 'multipart/form-data'
+                                            }
+                                        });
+                                        
+                                        // Switch back to dashboard after successful post
+                                        setViewMode('dashboard');
+                                        
+                                        // Refresh posts
+                                        const postsRes = await api.get(`/posts/${selectedOrg._id}`);
+                                        setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+                                        
+                                        // Refresh stats
+                                        const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                                        setStats(statsRes.data);
+                                        
+                                        return { success: true };
+                                    } catch (error) {
+                                        console.error('Error creating post:', error);
+                                        return { 
+                                            success: false, 
+                                            error: error.response?.data?.message || 'Failed to create post' 
+                                        };
+                                    }
+                                }}
+                                placeholder="Share your thoughts..."
+                                buttonText="Create Post"
+                                showHeader={false}
+                                showRegionDepartment={true}
+                                className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
+                                postTypes={['feedback', 'complaint', 'suggestion', 'public']}
+                            />
+                        </motion.div>
+                    ) : (
+                        <>
+                            {error.page && !loading.orgDetails && (
+                                <motion.div 
+                                    initial={{ opacity: 0 }} 
+                                    animate={{ opacity: 1 }} 
+                                    className="mb-6 bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/50 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm flex items-center"
+                                >
+                                    <ExclamationCircleIcon className="h-5 w-5 mr-2 flex-shrink-0"/> 
+                                    {error.page}
+                                </motion.div>
+                            )}
                     <AnimatePresence mode="wait">
                         {loading.orgList && organizations.length === 0 && !selectedOrg ? (
                              <motion.div key="loading-initial" {...fadeInUp} className="text-center py-20"> <svg className="animate-spin h-8 w-8 text-blue-600 dark:text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <p className="text-gray-600 dark:text-slate-400">Loading organizations...</p> </motion.div>
@@ -425,6 +517,7 @@ const AdminDashboard = () => {
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
+                                    
                                     <div className="mb-6 bg-gray-50 dark:bg-slate-800/50 p-3 sm:p-4 rounded-md border border-gray-200 dark:border-slate-700">
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
                                             <CustomSelect 
@@ -617,6 +710,8 @@ const AdminDashboard = () => {
                             </motion.div>
                         ) : null }
                     </AnimatePresence>
+                        </>
+                    )}
                 </main>
             </div>
         </div>

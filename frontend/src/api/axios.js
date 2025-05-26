@@ -19,7 +19,9 @@ export const api = axios.create({
     'Content-Type': 'application/json',
   },
   withCredentials: true, // Important for sending cookies
-  timeout: 30000, // 30 seconds timeout
+  timeout: 60000, // 60 seconds timeout
+  retry: 3, // Number of retries for failed requests
+  retryDelay: 1000, // Initial delay between retries in ms
 });
 
 // Track if a token refresh is in progress
@@ -58,8 +60,22 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     
     // Handle connection errors
-    if (error.code === 'ECONNABORTED' || error.code === 'ECONNRESET' || !error.response) {
-      toast.error('Connection error. Please check your internet connection.');
+    const isNetworkError = error.code === 'ECONNABORTED' || 
+                         error.code === 'ECONNRESET' || 
+                         !error.response ||
+                         error.message === 'Network Error';
+    
+    if (isNetworkError) {
+      // If we have retries left, let the retry interceptor handle it
+      if (originalRequest.retry > 0) {
+        return Promise.reject(error);
+      }
+      
+      // If no retries left, show error
+      toast.error('Connection lost. Attempting to reconnect...', {
+        toastId: 'connection-error',
+        autoClose: 3000,
+      });
       return Promise.reject(error);
     }
     
@@ -140,33 +156,52 @@ api.interceptors.response.use(
 
 // Add retry interceptor for failed requests
 api.interceptors.response.use(undefined, (error) => {
-  const { config, message } = error;
+  const { config, code, message } = error;
   
   // If config doesn't exist or retry option is not set, reject
   if (!config || config.retry === undefined) {
     return Promise.reject(error);
   }
   
-  // Retry on network errors or 5xx errors
-  const shouldRetry = 
-    message.includes('timeout') || 
-    message.includes('Network Error') ||
-    (error.response && error.response.status >= 500);
-    
+  // Check if we should retry
+  const isNetworkError = code === 'ECONNABORTED' || 
+                       code === 'ECONNRESET' ||
+                       message === 'Network Error' ||
+                       !error.response;
+  
+  const isServerError = error.response && error.response.status >= 500;
+  const isTimeout = message.includes('timeout');
+  
+  const shouldRetry = isNetworkError || isServerError || isTimeout;
+  
   if (shouldRetry && config.retry > 0) {
+    // Calculate delay with exponential backoff and jitter
+    const delay = Math.min(
+      (config.retryDelay || 1000) * Math.pow(2, 3 - config.retry),
+      30000 // Max 30 seconds
+    ) + Math.random() * 1000; // Add jitter
+    
     // Decrease retry count
     config.retry--;
     
-    // Create new promise to handle exponential backoff
+    console.log(`Retrying request (${3 - config.retry}/3) in ${Math.round(delay)}ms`);
+    
+    // Create new promise to handle backoff
     const backoff = new Promise(resolve => {
       setTimeout(() => {
         resolve();
-      }, (config.retryDelay || 1000) * (3 - config.retry)); // Exponential backoff
+      }, delay);
     });
     
     // Return the promise in which we'll make the retry
     return backoff.then(() => {
-      return api(config);
+      return api({
+        ...config,
+        // Ensure we don't retry indefinitely
+        retry: config.retry,
+        // Increase timeout for retries
+        timeout: Math.min(config.timeout * 1.5, 60000) // Cap at 60s
+      });
     });
   }
   

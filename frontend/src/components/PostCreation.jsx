@@ -186,37 +186,45 @@ const PostCreation = ({
           </div>
         </div>
         
-        {/* Media preview */}
+        {/* Media preview - Responsive grid */}
         {mediaUrls.length > 0 && (
-          <div className="flex flex-wrap gap-2 mb-3">
+          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2 mb-3">
             {mediaUrls.map((media, index) => (
-              <div key={index} className="relative group">
+              <div key={index} className="relative group aspect-square rounded-lg overflow-hidden bg-gray-100 dark:bg-slate-700">
                 {media.type === 'image' ? (
                   <img
                     src={media.preview}
                     alt={`Preview ${index + 1}`}
-                    className="h-20 w-20 object-cover rounded-md"
+                    className="w-full h-full object-cover"
+                    loading="lazy"
                   />
                 ) : (
                   <video
                     src={media.preview}
-                    className="h-20 w-20 object-cover rounded-md"
-                  />
+                    className="w-full h-full object-cover"
+                    controls
+                  >
+                    <source src={media.preview} type={media.file.type} />
+                    Your browser does not support the video tag.
+                  </video>
                 )}
                 <button
                   type="button"
-                  onClick={() => handleRemoveMedia(index)}
-                  className="absolute -top-2 -right-2 bg-red-500 rounded-full p-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveMedia(index);
+                  }}
+                  className="absolute top-1 right-1 p-1 bg-red-500 text-white rounded-full opacity-75 hover:opacity-100 transition-opacity shadow-md"
                   aria-label="Remove media"
                 >
-                  <XCircleIcon className="h-4 w-4 text-white" />
+                  <XCircleIcon className="h-5 w-5" />
                 </button>
               </div>
             ))}
           </div>
         )}
         
-        <div className="flex items-center justify-between">
+        <div className="flex justify-end items-center mt-4 space-x-3">
           {allowAttachments && (
             <div>
               <input
@@ -248,19 +256,26 @@ const PostCreation = ({
               </label>
             </div>
           )}
-          
           <button
             type="submit"
             disabled={isUploading || (!message.trim() && mediaUrls.length === 0)}
-            className={`inline-flex items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed ${buttonClassName}`}
+            className={`inline-flex items-center justify-center px-4 py-2.5 sm:py-2 border border-transparent text-sm sm:text-base font-medium rounded-lg sm:rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${buttonClassName}`}
           >
             {isUploading ? (
-              'Sending...'
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <span className="hidden sm:inline">Posting</span>
+                <span className="sm:hidden">Posting...</span>
+              </span>
             ) : (
-              <>
-                {buttonText}
-                <PaperAirplaneIcon className="ml-2 h-4 w-4" />
-              </>
+              <span className="flex items-center">
+                <PaperAirplaneIcon className="h-4 w-4 sm:mr-2" />
+                <span className="hidden sm:inline">{buttonText}</span>
+                <span className="sm:hidden">Post</span>
+              </span>
             )}
           </button>
         </div>
