@@ -13,8 +13,6 @@ import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import UpdatePassword from './pages/UpdatePassword';
 import EmployeeVerification from './components/EmployeeVerification';
-import CreatePost from './pages/CreatePost';
-import PostsFeed from './pages/PostsFeed';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -107,22 +105,7 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-      <Route
-        path="/create-post"
-        element={
-          <ProtectedRoute requiredRole="employee">
-            <CreatePost />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/posts"
-        element={
-          <ProtectedRoute requiredRole="employee">
-            <PostsFeed />
-          </ProtectedRoute>
-        }
-      />
+
     </Routes>
   );
 }
