@@ -359,11 +359,38 @@ const AdminDashboard = () => {
             setDeletePasswordConfirm("");
         }
     };
-    const handleDeletePost = (postId, postContent) => { /* ... Delete Post logic ... */
-        if (!selectedOrg || !window.confirm(`Delete this post?\n"${postContent.substring(0, 50)}..."`)) return;
-        api.delete(`/posts/${postId}`)
-            .then(() => { setPosts(prev => prev.filter(p => p._id !== postId)); api.get(`/posts/stats/${selectedOrg._id}`).then(statsRes => setStats(statsRes.data)).catch(err => console.error("Error refreshing stats:", err)); })
-            .catch(err => { console.error('Error deleting post:', err); setError(prev => ({ ...prev, page: 'Failed to delete post.' })); });
+    const handleDeletePost = async (postId, postContent) => {
+        if (!selectedOrg || !window.confirm(`Delete this post?\n"${postContent.substring(0, 50)}..."`)) {
+            return;
+        }
+
+        try {
+            const response = await api.delete(`/posts/${postId}`);
+            
+            // Remove the deleted post from the UI
+            setPosts(prev => prev.filter(p => p._id !== postId));
+            
+            // Show success message
+            const isAdminDelete = response.data?.deletedByAdmin;
+            if (isAdminDelete) {
+                setError(prev => ({ 
+                    ...prev, 
+                    page: 'Post deleted by admin.' 
+                }));
+            }
+            
+            // Refresh stats
+            const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+            setStats(statsRes.data);
+            
+        } catch (err) {
+            console.error('Error deleting post:', err);
+            const errorMessage = err.response?.data?.message || 'Failed to delete post.';
+            setError(prev => ({ 
+                ...prev, 
+                page: errorMessage 
+            }));
+        }
     };
     const handleLogout = () => { localStorage.clear(); navigate('/signin'); };
 
@@ -1144,17 +1171,23 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
         throw new Error('No authentication token found');
       }
 
-      await api.delete(`/posts/${postId}/comments/${commentId}`, {
+      const response = await api.delete(`/posts/${postId}/comments/${commentId}`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
       });
 
+      // Show success message if this was an admin deletion
+      if (response.data?.deletedByAdmin) {
+        setError('Comment deleted by admin.');
+      }
+
       // Refresh comments after successful deletion
       await fetchPostWithComments();
     } catch (error) {
       console.error('Error deleting comment:', error);
-      setError(error.response?.data?.message || 'Failed to delete comment');
+      const errorMessage = error.response?.data?.message || 'Failed to delete comment';
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }

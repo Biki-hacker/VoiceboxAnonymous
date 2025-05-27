@@ -404,45 +404,39 @@ exports.deleteComment = async (req, res) => {
     const postId = req.params.postId;
     const commentId = req.params.commentId;
     const userId = req.user._id;
+    const isAdmin = req.user.role === 'admin';
 
-    // Atomically find the post and pull the comment if the user is the author
-    const result = await Post.updateOne(
-      { 
-        _id: postId,
-        // Ensure the comment exists and the user is the author before pulling
-        // This also implicitly checks if the post itself exists.
-        'comments._id': commentId,
-        'comments.author': userId 
-      },
-      { 
-        $pull: { 
-          comments: { 
-            _id: commentId,
-            author: userId // Redundant but ensures we only pull the specific comment by the author
-          } 
-        } 
-      }
-    );
-
-    if (result.matchedCount === 0) {
-      // This means either the post wasn't found, or the comment wasn't found, 
-      // or the user was not authorized to delete that specific comment.
-      // We can check the post first to give a more specific error.
-      const postExists = await Post.findById(postId);
-      if (!postExists) {
-        return res.status(404).json({ message: 'Post not found' });
-      }
-      // If post exists, then the comment was not found or user not authorized for that comment
-      return res.status(404).json({ message: 'Comment not found or user not authorized to delete this comment' });
+    // First, find the post and the specific comment
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ message: 'Post not found' });
     }
 
-    if (result.modifiedCount === 0 && result.matchedCount > 0) {
-      // This case should ideally not happen if matchedCount > 0 and the $pull condition is specific enough.
-      // It might indicate the comment was already deleted or some other race condition.
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ message: 'Comment not found' });
+    }
+
+    // Check if user is admin or the comment author
+    const isAuthor = comment.author && comment.author.toString() === userId.toString();
+    if (!isAdmin && !isAuthor) {
+      return res.status(403).json({ message: 'Unauthorized to delete this comment' });
+    }
+
+    // Update the post to remove the comment using $pull
+    const result = await Post.updateOne(
+      { _id: postId },
+      { $pull: { comments: { _id: commentId } } }
+    );
+
+    if (result.modifiedCount === 0) {
       return res.status(404).json({ message: 'Comment not found or already deleted' });
     }
 
-    res.status(200).json({ message: 'Comment deleted successfully' });
+    res.status(200).json({ 
+      message: 'Comment deleted successfully',
+      deletedByAdmin: isAdmin && !isAuthor // Indicate if deleted by admin who wasn't the author
+    });
   } catch (err) {
     console.error('Delete comment error:', err);
     res.status(500).json({ message: 'Error deleting comment' });
@@ -532,14 +526,19 @@ exports.deletePost = async (req, res) => {
 
     if (!post) return res.status(404).json({ message: 'Post not found' });
 
-    // Check if the authenticated user is the author of the post
-    // If post.author is undefined, we'll treat it as unauthorized
-    if (!post.author || post.author.toString() !== req.user._id.toString()) {
+    // Allow admin to delete any post, otherwise check if the user is the author
+    const isAdmin = req.user.role === 'admin';
+    const isAuthor = post.author && post.author.toString() === req.user._id.toString();
+    
+    if (!isAdmin && !isAuthor) {
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     }
 
     await Post.findByIdAndDelete(postId);
-    res.status(200).json({ message: 'Post deleted successfully' });
+    res.status(200).json({ 
+      message: 'Post deleted successfully',
+      deletedByAdmin: isAdmin && !isAuthor // Indicate if deleted by admin who wasn't the author
+    });
   } catch (err) {
     console.error('Delete post error:', err);
     res.status(500).json({ message: 'Error deleting post' });
