@@ -2,6 +2,7 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Helmet } from 'react-helmet';
 import { api } from '../api/axios';
 import { uploadMedia } from '../utils/uploadMedia';
 import { hasReacted, toggleReaction } from '../utils/reactions';
@@ -1207,8 +1208,43 @@ const EmployeeDashboard = () => {
     }
   };
 
+  // Generate structured data for the dashboard
+  const structuredData = {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "Employee Dashboard - VoiceBox",
+    "description": "Employee feedback and communication platform for anonymous and transparent workplace feedback.",
+    "applicationCategory": "BusinessApplication",
+    "operatingSystem": "Web",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "publisher": {
+      "@type": "Organization",
+      "name": "VoiceBox"
+    }
+  };
+
   return (
-    <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
+    <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`} itemScope itemType="http://schema.org/WebApplication">
+      {/* SEO Meta Tags */}
+      <Helmet>
+        <title>Employee Dashboard | VoiceBox</title>
+        <meta name="description" content="Access your VoiceBox employee dashboard to submit feedback, view posts, and engage with your workplace community." />
+        <meta name="robots" content="noindex, nofollow" />
+        <meta property="og:title" content="Employee Dashboard | VoiceBox" />
+        <meta property="og:description" content="Access your VoiceBox employee dashboard to submit feedback, view posts, and engage with your workplace community." />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        <meta name="twitter:title" content="Employee Dashboard | VoiceBox" />
+        <meta name="twitter:description" content="Access your VoiceBox employee dashboard to submit feedback, view posts, and engage with your workplace community." />
+        <link rel="canonical" href={window.location.href} />
+        <script type="application/ld+json">
+          {JSON.stringify(structuredData)}
+        </script>
+      </Helmet>
       {/* Mobile sidebar overlay */}
       <AnimatePresence>
         {isMobileSidebarOpen && (

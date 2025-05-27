@@ -1,0 +1,43 @@
+# Local Development Robots.txt for SEO Testing
+# This configuration allows search engines to crawl your local development site
+
+User-agent: *
+Allow: /
+
+# Sitemap for local development
+Sitemap: http://localhost:5173/sitemap.xml
+
+# Allow search engines to crawl all pages for SEO testing
+# Note: In a production environment, you might want to be more restrictive
+
+# Allow access to all static assets
+Allow: /*.css$
+Allow: /*.js$
+Allow: /*.webp$
+Allow: /*.svg$
+Allow: /*.png$
+Allow: /*.jpg$
+Allow: /*.jpeg$
+Allow: /*.gif$
+
+# Block access to sensitive files
+Disallow: /package.json
+Disallow: /README.md
+Disallow: /yarn.lock
+Disallow: /package-lock.json
+Disallow: /*.json$
+Allow: /manifest.json
+Disallow: /*.php$
+
+# Allow access to robots.txt
+Allow: /robots.txt
+
+# Set a reasonable crawl delay to prevent overloading local server
+Crawl-delay: 10
+
+# Host directive (some crawlers support this)
+Host: localhost:5173
+
+# Block access to all .xml files except for sitemap.xml
+Disallow: /*.xml$
+Allow: /sitemap.xml

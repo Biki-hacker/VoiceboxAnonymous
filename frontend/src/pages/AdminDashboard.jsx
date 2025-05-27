@@ -1,6 +1,7 @@
 // src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Helmet } from 'react-helmet';
 import { api } from '../api/axios'; // This is the axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import { Bar, Pie } from 'react-chartjs-2';
@@ -123,6 +124,21 @@ const ThemeToggle = ({ theme, toggleTheme }) => (
 
 // --- Main Dashboard Component ---
 const AdminDashboard = () => {
+    // Structured data for the admin dashboard
+    const structuredData = {
+        "@context": "https://schema.org",
+        "@type": "WebApplication",
+        "name": "Voicebox Anonymous - Admin Dashboard",
+        "description": "Admin dashboard for managing organizations, posts, and user feedback on Voicebox Anonymous platform.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": window.location.href,
+        "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+        }
+    };
     const [organizations, setOrganizations] = useState([]);
     const [selectedOrg, setSelectedOrg] = useState(null);
     const [stats, setStats] = useState([]);
@@ -450,20 +466,38 @@ const AdminDashboard = () => {
     // --- Main Render ---
     return (
         <>
-        <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
+            <Helmet>
+                <title>Admin Dashboard | Voicebox Anonymous</title>
+                <meta name="description" content="Admin dashboard for managing Voicebox Anonymous platform. Monitor and manage organizations, posts, and user feedback." />
+                <meta name="robots" content="noindex, nofollow" />
+                <script type="application/ld+json">
+                    {JSON.stringify(structuredData)}
+                </script>
+            </Helmet>
+            <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
             <MobileSidebar />
             <aside className="hidden md:flex md:w-20 lg:w-24 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-5 shadow-sm flex-shrink-0">
                 <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7 lg:h-8 lg:w-8" /></div>
                 <nav className="flex flex-col space-y-4 items-center">
                     {sidebarNavItems.map((item) => (<button key={item.name} onClick={item.action} title={item.name} className={`p-3 lg:p-3 rounded-lg transition-colors duration-150 ${item.current ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'}`}><item.icon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">{item.name}</span></button>))}
+
                 </nav>
-                <div className="mt-auto flex flex-col items-center space-y-4"><ThemeToggle theme={theme} toggleTheme={toggleTheme} /><button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/30 hover:text-red-600 dark:hover:text-red-400 transition-colors"><ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">Logout</span></button></div>
+                <div className="mt-auto flex flex-col items-center space-y-4">
+                    <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+                    <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/30 hover:text-red-600 dark:hover:text-red-400 transition-colors">
+                        <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
+                        <span className="sr-only">Logout</span>
+                    </button>
+                </div>
             </aside>
 
             <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
                 <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
                     <div className="flex items-center">
-                        <button onClick={() => setIsMobileSidebarOpen(true)} className="md:hidden mr-3 -ml-1 p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"><Bars3Icon className="h-6 w-6"/><span className="sr-only">Open sidebar</span></button>
+                        <button onClick={() => setIsMobileSidebarOpen(true)} className="md:hidden mr-3 -ml-1 p-2 rounded-md text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            <Bars3Icon className="h-6 w-6"/>
+                            <span className="sr-only">Open sidebar</span>
+                        </button>
                         {viewMode === 'createPost' ? (
                             <button
                                 onClick={() => setViewMode('dashboard')}

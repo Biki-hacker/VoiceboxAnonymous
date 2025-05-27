@@ -1,13 +1,60 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="scroll-smooth">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vblogo1.webp" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Voicebox Anonymous</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes" />
+    <meta name="theme-color" content="#0B1122" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    
+    <!-- Preconnect to important domains -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <!-- Preload critical assets -->
+    <link rel="preload" href="/vblogo1.webp" as="image" />
+    
+    <!-- Fallback title and description (will be overridden by React Helmet) -->
+    <title>Voicebox Anonymous - Secure Anonymous Feedback Platform</title>
+    <meta name="description" content="Empower your workforce with secure, anonymous feedback, complaints, and suggestions. Total anonymity guaranteed with advanced security features." />
+    
+    <!-- Favicon and app icons -->
+    <link rel="icon" type="image/webp" href="/vblogo1.webp" />
+    <link rel="apple-touch-icon" href="/vblogo1.webp" />
+    
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    
+    <!-- DNS prefetch -->
+    <link rel="dns-prefetch" href="//fonts.googleapis.com" />
+    <link rel="dns-prefetch" href="//fonts.gstatic.com" />
   </head>
-  <body>
+  <body class="bg-[#040b1d] text-white">
     <div id="root"></div>
     <script type="module" src="/src/main.jsx"></script>
+    
+    <!-- Load web fonts asynchronously -->
+    <script>
+      // Load Google Fonts asynchronously
+      WebFontConfig = {
+        google: { families: ['Inter:300,400,500,600,700'] }
+      };
+      (function(d) {
+        var wf = d.createElement('script'), s = d.scripts[0];
+        wf.src = 'https://ajax.googleapis.com/ajax/libs/webfont/1.6.26/webfont.js';
+        wf.async = true;
+        s.parentNode.insertBefore(wf, s);
+      })(document);
+      
+      // Service Worker Registration
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js')
+            .then(registration => console.log('ServiceWorker registration successful'))
+            .catch(err => console.log('ServiceWorker registration failed: ', err));
+        });
+      }
+    </script>
   </body>
 </html>

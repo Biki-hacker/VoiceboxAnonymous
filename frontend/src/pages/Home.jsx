@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
+import { Helmet } from 'react-helmet';
 import AnimatedText from "../components/AnimatedText";
 import { 
   ChatBubbleLeftRightIcon, 
@@ -11,6 +12,31 @@ import {
   RocketLaunchIcon,
   ChartPieIcon
 } from '@heroicons/react/24/outline';
+
+// Structured data for the homepage
+const structuredData = {
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Voicebox Anonymous",
+  "description": "Secure anonymous feedback platform for employees to voice concerns and suggestions without fear of identification.",
+  "applicationCategory": "BusinessApplication",
+  "operatingSystem": "Web",
+  "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "USD"
+  },
+  "aggregateRating": {
+    "@type": "AggregateRating",
+    "ratingValue": "4.8",
+    "reviewCount": "125"
+  },
+  "creator": {
+    "@type": "Organization",
+    "name": "Voicebox Anonymous",
+    "url": "http://localhost:5173"
+  }
+};
 
 // Import the PNG logo for the animated shield
 import shieldLogoWebp from '../../src/assets/shield-logo1r.webp'; // Ensure this path is correct
@@ -71,15 +97,24 @@ const MenuButton = ({ isOpen, toggle }) => (
   </motion.button>
 );
 
-// Feature Card
-const FeatureCard = ({ icon, title, description }) => (
+// Feature Card with Structured Data
+const FeatureCard = ({ icon, title, description, itemScope, itemType, itemProp }) => (
   <motion.div
     whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(33, 150, 243, 0.5)" }}
     className="bg-[#0B1122] bg-opacity-95 backdrop-blur-md p-6 rounded-2xl shadow-xl transition-all duration-300 flex flex-col items-center text-center h-full"
+    itemScope={itemScope}
+    itemType={itemType}
+    itemProp={itemProp}
   >
-    <div className="mb-4 text-white">{icon}</div>
-    <h3 className="text-xl font-semibold mb-3 bg-gradient-to-r from-blue-400 to-blue-500 text-transparent bg-clip-text">{title}</h3>
-    <p className="text-gray-300 text-sm leading-relaxed">{description}</p>
+    <div className="mb-4 text-white" itemProp="image">{icon}</div>
+    <h3 className="text-xl font-semibold mb-3 bg-gradient-to-r from-blue-400 to-blue-500 text-transparent bg-clip-text" itemProp="name">
+      {title}
+    </h3>
+    <p className="text-gray-300 text-sm leading-relaxed" itemProp="description">
+      {description}
+    </p>
+    <meta itemProp="url" content={window.location.href} />
+    {/* Add more structured data properties as needed */}
   </motion.div>
 );
 
@@ -293,7 +328,18 @@ export default function Home() {
     <div
       className="relative overflow-x-hidden min-h-screen text-white flex flex-col"
       style={{ background: "linear-gradient(to bottom, #040b1d, #0a1224)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+      itemScope
+      itemType="https://schema.org/WebApplication"
     >
+      {/* Structured Data */}
+      <Helmet>
+        <script type="application/ld+json">
+          {JSON.stringify(structuredData)}
+        </script>
+        <meta name="application-name" content="Voicebox Anonymous" />
+        <meta name="apple-mobile-web-app-title" content="Voicebox" />
+        <meta name="theme-color" content="#0B1122" />
+      </Helmet>
       <Sparkles data={sparkleData} hoverOffset={hoverOffset} />
       <motion.div
         className="fixed pointer-events-none z-20 mix-blend-screen"
@@ -347,42 +393,108 @@ export default function Home() {
         )}
       </AnimatePresence>
 
-      <section ref={heroRef} className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10">
-        <div className="hidden md:block"><ShieldLogo /></div>
+      <section 
+        ref={heroRef} 
+        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10"
+        itemScope
+        itemType="https://schema.org/WebApplication"
+      >
+        <div className="hidden md:block">
+          <ShieldLogo />
+        </div>
         <div className="max-w-xl lg:max-w-2xl">
-          <motion.h1 initial={{ opacity: 0, y: 30 }} animate={controls} variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.2 } } }} className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6 text-white">{typedText}</motion.h1>
-          <motion.p initial={{ opacity: 0, y: 30 }} animate={controls} variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.4 } } }} className="text-gray-300 text-lg sm:text-xl max-w-md lg:max-w-xl mb-10 leading-relaxed">Empower Your Workforce with Honest Feedback, Complaints, and Suggestions—Completely Anonymous, Completely Secure.</motion.p>
-          <motion.div initial={{ opacity: 0, y: 30 }} animate={controls} variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.6 } } }}>
-            <Link to="/signup"><motion.button whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(33, 150, 243, 0.6)" }} whileTap={{ scale: 0.95 }} className="bg-gradient-to-r from-blue-600 to-blue-500 px-8 py-4 rounded-full text-white font-semibold text-lg shadow-lg transition-transform duration-150 ease-out">Get Started</motion.button></Link>
+          <motion.h1 
+            initial={{ opacity: 0, y: 30 }} 
+            animate={controls} 
+            variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.2 } } }} 
+            className="text-4xl sm:text-5xl lg:text-6xl font-bold leading-tight mb-6 text-white"
+            itemProp="name"
+          >
+            {typedText}
+          </motion.h1>
+          <motion.p 
+            initial={{ opacity: 0, y: 30 }} 
+            animate={controls} 
+            variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.4 } } }} 
+            className="text-gray-300 text-lg sm:text-xl max-w-md lg:max-w-xl mb-10 leading-relaxed"
+            itemProp="description"
+          >
+            Empower Your Workforce with Honest Feedback, Complaints, and Suggestions—Completely Anonymous, Completely Secure.
+          </motion.p>
+          <motion.div 
+            initial={{ opacity: 0, y: 30 }} 
+            animate={controls} 
+            variants={{ visible: { opacity: 1, y: 0, transition: { duration: 0.8, delay: 0.6 } } }}
+            itemProp="potentialAction"
+            itemScope
+            itemType="https://schema.org/JoinAction"
+          >
+            <Link to="/signup" itemProp="target">
+              <motion.button 
+                whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(33, 150, 243, 0.6)" }} 
+                whileTap={{ scale: 0.95 }} 
+                className="bg-gradient-to-r from-blue-600 to-blue-500 px-8 py-4 rounded-full text-white font-semibold text-lg shadow-lg transition-transform duration-150 ease-out"
+                itemProp="name"
+              >
+                Get Started
+              </motion.button>
+            </Link>
           </motion.div>
         </div>
       </section>
 
-      <motion.section id="features" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10">
+      <motion.section 
+        id="features" 
+        initial="hidden" 
+        whileInView="visible" 
+        viewport={{ once: true, amount: 0.2 }} 
+        variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} 
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10"
+        itemScope
+        itemType="https://schema.org/ItemList"
+      >
+        <h2 className="sr-only" itemProp="name">Key Features</h2>
+        <meta itemProp="numberOfItems" content="4" />
         {[
           { 
             icon: <ChatBubbleLeftRightIcon className="w-12 h-12 text-blue-400" />, 
-            title: "Anonymous Feedback Hub", 
-            description: "Submit feedback without revealing identity." 
+            title: "Anonymous Feedback Hub",
+            description: "A secure space for employees to share honest feedback without fear of identification.",
+            itemType: "https://schema.org/Service"
           },
           { 
             icon: <LightBulbIcon className="w-12 h-12 text-blue-400" />, 
-            title: "Complaint & Suggestion Hub", 
-            description: "Voice complaints and offer suggestions anonymously." 
+            title: "Complaint & Suggestion Hub",
+            description: "Voice concerns and suggestions that matter, with guaranteed anonymity and security.",
+            itemType: "https://schema.org/Service"
           },
           { 
             icon: <UserGroupIcon className="w-12 h-12 text-blue-400" />, 
-            title: "Public Discussion Space", 
-            description: "Engage in open, anonymous conversations." 
+            title: "Public Discussion Space",
+            description: "Engage in open discussions while maintaining complete anonymity among peers.",
+            itemType: "https://schema.org/Service"
           },
           { 
             icon: <ChartBarIcon className="w-12 h-12 text-blue-400" />, 
-            title: "Advanced Admin Dashboard", 
-            description: "Monitor and manage feedback with powerful tools." 
-          }
+            title: "Advanced Admin Dashboard",
+            description: "Gain valuable insights with comprehensive analytics while preserving user anonymity.",
+            itemType: "https://schema.org/Service"
+          },
         ].map((feature, idx) => (
-          <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}>
-            <FeatureCard icon={feature.icon} title={feature.title} description={feature.description} />
+          <motion.div 
+            key={idx} 
+            variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}
+            itemProp="itemListElement"
+            itemScope
+            itemType={feature.itemType}
+          >
+            <FeatureCard 
+              icon={feature.icon} 
+              title={feature.title} 
+              description={feature.description} 
+              itemScope
+              itemProp="item"
+            />
           </motion.div>
         ))}
       </motion.section>

@@ -1,0 +1,39 @@
+{
+  "name": "Voicebox Anonymous",
+  "short_name": "Voicebox",
+  "description": "Secure anonymous feedback platform for employees",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0B1122",
+  "theme_color": "#0B1122",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/vblogo1.webp",
+      "type": "image/webp",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/vblogo1.webp",
+      "type": "image/webp",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "utilities"],
+  "screenshots": [
+    {
+      "src": "/screenshot1.webp",
+      "type": "image/webp",
+      "sizes": "1080x1920",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "/screenshot2.webp",
+      "type": "image/webp",
+      "sizes": "1920x1080",
+      "form_factor": "wide"
+    }
+  ]
+}
