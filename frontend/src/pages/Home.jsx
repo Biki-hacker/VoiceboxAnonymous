@@ -1,7 +1,16 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion";
 import { Link } from "react-router-dom";
-import AnimatedText from "../components/AnimatedText"; // Assuming this path is correct
+import AnimatedText from "../components/AnimatedText";
+import { 
+  ChatBubbleLeftRightIcon, 
+  LightBulbIcon, 
+  UserGroupIcon, 
+  ChartBarIcon, 
+  ShieldCheckIcon,
+  RocketLaunchIcon,
+  ChartPieIcon
+} from '@heroicons/react/24/outline';
 
 // Import the PNG logo for the animated shield
 import shieldLogoWebp from '../../src/assets/shield-logo1r.webp'; // Ensure this path is correct
@@ -68,7 +77,7 @@ const FeatureCard = ({ icon, title, description }) => (
     whileHover={{ scale: 1.05, boxShadow: "0 0 20px rgba(33, 150, 243, 0.5)" }}
     className="bg-[#0B1122] bg-opacity-95 backdrop-blur-md p-6 rounded-2xl shadow-xl transition-all duration-300 flex flex-col items-center text-center h-full"
   >
-    <div className="text-4xl mb-4 text-white">{icon}</div>
+    <div className="mb-4 text-white">{icon}</div>
     <h3 className="text-xl font-semibold mb-3 bg-gradient-to-r from-blue-400 to-blue-500 text-transparent bg-clip-text">{title}</h3>
     <p className="text-gray-300 text-sm leading-relaxed">{description}</p>
   </motion.div>
@@ -350,13 +359,58 @@ export default function Home() {
       </section>
 
       <motion.section id="features" initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10">
-        {[{ icon: "💬", title: "Anonymous Feedback Hub", description: "Submit feedback without revealing identity." },{ icon: "❓", title: "Complaint & Suggestion Hub", description: "Voice complaints and offer suggestions anonymously." },{ icon: "👥", title: "Public Discussion Space", description: "Engage in open, anonymous conversations." },{ icon: "📊", title: "Advanced Admin Dashboard", description: "Monitor and manage feedback with powerful tools." }].map((feature, idx) => ( <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}><FeatureCard icon={feature.icon} title={feature.title} description={feature.description} /></motion.div> ))}
+        {[
+          { 
+            icon: <ChatBubbleLeftRightIcon className="w-12 h-12 text-blue-400" />, 
+            title: "Anonymous Feedback Hub", 
+            description: "Submit feedback without revealing identity." 
+          },
+          { 
+            icon: <LightBulbIcon className="w-12 h-12 text-blue-400" />, 
+            title: "Complaint & Suggestion Hub", 
+            description: "Voice complaints and offer suggestions anonymously." 
+          },
+          { 
+            icon: <UserGroupIcon className="w-12 h-12 text-blue-400" />, 
+            title: "Public Discussion Space", 
+            description: "Engage in open, anonymous conversations." 
+          },
+          { 
+            icon: <ChartBarIcon className="w-12 h-12 text-blue-400" />, 
+            title: "Advanced Admin Dashboard", 
+            description: "Monitor and manage feedback with powerful tools." 
+          }
+        ].map((feature, idx) => (
+          <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}>
+            <FeatureCard icon={feature.icon} title={feature.title} description={feature.description} />
+          </motion.div>
+        ))}
       </motion.section>
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-3 gap-8">
-          {[{ icon: "🛡️", title: "Total Anonymity", description: "No data leaks or identity exposure" },{ icon: "⚙️", title: "Easy Setup", description: "Quick onboarding for admins and employees" },{ icon: "📈", title: "Real Insights", description: "Advanced analytics without compromising privacy" }].map((benefit, idx) => ( <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}><FeatureCard icon={benefit.icon} title={benefit.title} description={benefit.description} /></motion.div> ))}
+          {[
+            { 
+              icon: <ShieldCheckIcon className="w-12 h-12 text-blue-400" />, 
+              title: "Total Anonymity", 
+              description: "No data leaks or identity exposure" 
+            },
+            { 
+              icon: <RocketLaunchIcon className="w-12 h-12 text-blue-400" />, 
+              title: "Easy Setup", 
+              description: "Quick onboarding for admins and employees" 
+            },
+            { 
+              icon: <ChartPieIcon className="w-12 h-12 text-blue-400" />, 
+              title: "Real Insights", 
+              description: "Advanced analytics without compromising privacy" 
+            }
+          ].map((benefit, idx) => (
+            <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}>
+              <FeatureCard icon={benefit.icon} title={benefit.title} description={benefit.description} />
+            </motion.div>
+          ))}
         </motion.div>
       </section>
 
