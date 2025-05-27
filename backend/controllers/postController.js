@@ -241,18 +241,45 @@ exports.reactToPost = async (req, res) => {
 
 exports.commentOnPost = async (req, res) => {
   try {
+    // Debug log to check the request user
+    console.log('Request user:', req.user);
+    
+    // Find the post
     const post = await Post.findById(req.params.postId);
-    if (!post) return res.status(404).json({ message: 'Post not found' });
-
-    if (!req.body.text || req.body.text.trim() === '') {
-       return res.status(400).json({ message: 'Comment text is required' });
+    if (!post) {
+      console.log('Post not found with ID:', req.params.postId);
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found',
+        code: 'POST_NOT_FOUND'
+      });
     }
 
+    // Validate comment text
+    if (!req.body.text || req.body.text.trim() === '') {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Comment text is required',
+        code: 'COMMENT_TEXT_REQUIRED'
+      });
+    }
+
+    // Ensure user is authenticated
+    if (!req.user || !req.user._id) {
+      console.error('No user found in request');
+      return res.status(401).json({
+        success: false,
+        message: 'Authentication required',
+        code: 'AUTH_REQUIRED'
+      });
+    }
+
+    // Create new comment
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      text: req.body.text,
+      text: req.body.text.trim(),
       author: req.user._id, // User's ID as the comment author
-      createdByRole: req.user.role, // User's role
+      createdByRole: req.user.role || 'user', // Default to 'user' if role not specified
       createdAt: new Date(),
       updatedAt: new Date(),
       reactions: {
@@ -262,13 +289,113 @@ exports.commentOnPost = async (req, res) => {
         angry: { count: 0, users: [] }
       }
     };
+    
+    // Ensure all existing comments have the required createdByRole field
+    if (post.comments && Array.isArray(post.comments)) {
+      post.comments = post.comments.map(comment => ({
+        ...comment.toObject ? comment.toObject() : comment,
+        createdByRole: comment.createdByRole || 'user'
+      }));
+    }
 
+    console.log('Adding new comment:', newComment);
+    
+    // Add comment to post
     post.comments.push(newComment);
-    await post.save();
-    res.status(200).json(post);
+    const savedPost = await post.save();
+    
+    try {
+      // Populate author info for the response
+      const populatedPost = await Post.findById(savedPost._id)
+        .populate('comments.author', 'name email role')
+        .lean();
+      
+      if (!populatedPost) {
+        throw new Error('Failed to retrieve the updated post');
+      }
+
+      // Ensure we have comments array
+      if (!Array.isArray(populatedPost.comments)) {
+        populatedPost.comments = [];
+      }
+      
+      // Find the newly added comment in the populated post
+      const addedComment = populatedPost.comments.find(
+        comment => comment._id && comment._id.toString() === newComment._id.toString()
+      );
+
+      // Prepare the response
+      const responseData = {
+        success: true,
+        message: 'Comment added successfully',
+        comment: addedComment || {
+          ...newComment,
+          author: {
+            _id: req.user._id,
+            name: req.user.name || 'Unknown User',
+            email: req.user.email || 'unknown@example.com',
+            role: req.user.role || 'user'
+          }
+        },
+        post: {
+          _id: populatedPost._id,
+          comments: populatedPost.comments.map(comment => ({
+            ...comment,
+            // Ensure author is always an object
+            author: comment.author || {
+              _id: comment.author || 'unknown',
+              name: 'Unknown User',
+              email: 'unknown@example.com',
+              role: comment.createdByRole || 'user'
+            },
+            // Ensure createdByRole exists
+            createdByRole: comment.createdByRole || 'user'
+          }))
+        }
+      };
+
+      res.status(200).json(responseData);
+    } catch (populateError) {
+      console.error('Error populating author info:', populateError);
+      // If population fails, return the saved comment with basic info
+      res.status(200).json({
+        success: true,
+        message: 'Comment added successfully (author info may be limited)',
+        comment: {
+          ...newComment,
+          author: {
+            _id: req.user._id,
+            name: req.user.name || 'Unknown User',
+            email: req.user.email || 'unknown@example.com',
+            role: req.user.role || 'user'
+          }
+        },
+        post: {
+          _id: savedPost._id,
+          comments: savedPost.comments.map(comment => ({
+            ...comment,
+            // Ensure author is always an object
+            author: {
+              _id: comment.author || 'unknown',
+              name: 'Unknown User',
+              email: 'unknown@example.com',
+              role: comment.createdByRole || 'user'
+            },
+            // Ensure createdByRole exists
+            createdByRole: comment.createdByRole || 'user'
+          }))
+        }
+      });
+    }
+    
   } catch (err) {
-    console.error('Comment error:', err);
-    res.status(500).json({ message: 'Error commenting' });
+    console.error('Error adding comment:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error adding comment',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      code: 'COMMENT_ERROR'
+    });
   }
 };
 

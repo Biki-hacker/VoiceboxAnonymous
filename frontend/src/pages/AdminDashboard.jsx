@@ -1,7 +1,7 @@
 // src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '../api/axios'; // Your axios instance
+import { api } from '../api/axios'; // This is the axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
@@ -765,21 +765,31 @@ const AdminDashboard = () => {
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const [isReacted, setIsReacted] = useState(false);
-  const [currentCount, setCurrentCount] = useState(count);
+  const [currentCount, setCurrentCount] = useState(count || 0);
   const [isLoading, setIsLoading] = useState(false);
   const orgId = localStorage.getItem('orgId');
+
+  // Helper function to build the API endpoint
+  const buildEndpoint = (basePath, includeOrgId = true) => {
+    if (includeOrgId && orgId) {
+      return commentId 
+        ? `${basePath}/${orgId}/${postId}/comments/${commentId}/reactions`
+        : `${basePath}/${orgId}/${postId}/reactions`;
+    }
+    return commentId 
+      ? `${basePath}/${postId}/comments/${commentId}/reactions`
+      : `${basePath}/${postId}/reactions`;
+  };
 
   // Fetch reaction status on mount and when postId/commentId/type changes
   useEffect(() => {
     const fetchReactionStatus = async () => {
-      if (!orgId) return;
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) return;
       
       try {
-        const storedToken = localStorage.getItem('token');
-        const endpoint = commentId 
-          ? `/posts/${orgId}/${postId}/comments/${commentId}/reactions`
-          : `/posts/${orgId}/${postId}/reactions`;
-
+        // Try with orgId first if available
+        const endpoint = buildEndpoint('/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -796,15 +806,10 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
           }
         }
       } catch (error) {
-        console.error('Error fetching reaction status:', error);
-        // Fallback to the non-org specific endpoint if the org-specific one fails
-        if (error.response?.status === 404) {
+        // If we have an orgId and got a 404, try without orgId
+        if (orgId && error.response?.status === 404) {
           try {
-            const storedToken = localStorage.getItem('token');
-            const fallbackEndpoint = commentId 
-              ? `/posts/${postId}/comments/${commentId}/reactions`
-              : `/posts/${postId}/reactions`;
-
+            const fallbackEndpoint = buildEndpoint('/posts', false);
             const fallbackResponse = await api.get(fallbackEndpoint, {
               headers: { 
                 'Content-Type': 'application/json',
@@ -820,8 +825,10 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
               }
             }
           } catch (fallbackError) {
-            console.error('Fallback endpoint also failed:', fallbackError);
+            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
           }
+        } else {
+          console.error('Error fetching reaction status:', error);
         }
       }
     };
@@ -834,6 +841,12 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     
     const wasReacted = isReacted;
     const newIsReacted = !wasReacted;
+    const storedToken = localStorage.getItem('token');
+    
+    if (!storedToken) {
+      console.error('No authentication token found');
+      return;
+    }
     
     // Optimistic UI updates
     setIsLoading(true);
@@ -841,37 +854,31 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
     
     try {
-      const storedToken = localStorage.getItem('token');
-      const endpoint = commentId 
-        ? `/posts/${orgId || ''}/${postId}/comments/${commentId}/reactions`
-        : `/posts/${orgId || ''}/${postId}/reactions`;
-
-      // First try with orgId in the path
-      try {
-        const response = await api.post(
-          endpoint, 
-          { type },
-          { 
-            headers: { 
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${storedToken}` 
-            } 
-          }
-        );
-        
-        // Update with server response
-        if (response.data?.success && response.data?.reaction) {
-          setIsReacted(response.data.reaction.hasReacted);
-          setCurrentCount(response.data.reaction.count);
-          return;
+      // First try with orgId if available
+      const endpoint = buildEndpoint('/posts', true);
+      
+      const response = await api.post(
+        endpoint, 
+        { type },
+        { 
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          } 
         }
-      } catch (error) {
-        if (error.response?.status === 404 && orgId) {
-          // If the org-specific endpoint fails, try the non-org specific endpoint
-          const fallbackEndpoint = commentId 
-            ? `/posts/${postId}/comments/${commentId}/reactions`
-            : `/posts/${postId}/reactions`;
-
+      );
+      
+      // Update with server response
+      if (response.data?.success && response.data?.reaction) {
+        setIsReacted(response.data.reaction.hasReacted);
+        setCurrentCount(response.data.reaction.count);
+        return;
+      }
+    } catch (error) {
+      // If we have an orgId and got a 404, try without orgId
+      if (orgId && error.response?.status === 404) {
+        try {
+          const fallbackEndpoint = buildEndpoint('/posts', false);
           const fallbackResponse = await api.post(
             fallbackEndpoint,
             { type },
@@ -888,39 +895,49 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
             setCurrentCount(fallbackResponse.data.reaction.count);
             return;
           }
+        } catch (fallbackError) {
+          console.error('Error updating reaction via fallback endpoint:', fallbackError);
+          throw fallbackError;
         }
-        throw error; // Re-throw the error if we couldn't handle it
+      } else {
+        console.error('Error updating reaction:', error);
+        throw error;
       }
-    } catch (error) {
-      console.error('Error updating reaction:', error);
-      // Revert optimistic updates on error
-      setIsReacted(wasReacted);
-      setCurrentCount(count);
     } finally {
       setIsLoading(false);
     }
   };
 
   const getIcon = () => {
+    const baseClass = "h-5 w-5";
     switch(type) {
-      case 'like': return <HandThumbUpIcon className="h-5 w-5" />;
-      case 'love': return <HeartIcon className="h-5 w-5 text-red-500" />;
-      case 'laugh': return <EmojiHappyIcon className="h-5 w-5 text-yellow-500" />;
-      case 'angry': return <XCircleIcon className="h-5 w-5 text-orange-500" />;
-      default: return <HandThumbUpIcon className="h-5 w-5" />;
+      case 'like': return <HandThumbUpIcon className={baseClass} />;
+      case 'love': return <HeartIcon className={`${baseClass} text-red-500`} />;
+      case 'laugh': return <EmojiHappyIcon className={`${baseClass} text-yellow-500`} />;
+      case 'angry': return <XCircleIcon className={`${baseClass} text-orange-500`} />;
+      default: return <HandThumbUpIcon className={baseClass} />;
     }
   };
 
   return (
     <button
       onClick={handleReaction}
-      className={`flex items-center gap-1 px-2 py-1 rounded-full ${
-        isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
+      className={`flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${
+        isReacted 
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' 
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
       }`}
       title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
       disabled={isLoading}
     >
-      {getIcon()}
+      {isLoading ? (
+        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      ) : (
+        getIcon()
+      )}
       <span className="text-sm">{currentCount}</span>
     </button>
   );
@@ -1016,15 +1033,28 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
     setNewComment('');
 
     try {
+      // Get the stored token
       const storedToken = localStorage.getItem('token');
       if (!storedToken) {
-        throw new Error('No authentication token found');
+        throw new Error('No authentication token found. Please sign in again.');
       }
-
-      // Post the comment
+      
+      // Get the current user's email and role
+      const userEmail = localStorage.getItem('email');
+      const userRole = localStorage.getItem('role');
+      
+      if (!userEmail || !userRole) {
+        throw new Error('User session is incomplete. Please sign in again.');
+      }
+      
+      console.log('Posting comment to post:', postId, 'as user:', userEmail, 'with role:', userRole);
+      
+      // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
         `/posts/${postId}/comments`,
-        { text: commentText },
+        { 
+          text: commentText  // Only send the text, let backend handle the rest
+        },
         {
           headers: {
             'Content-Type': 'application/json',
@@ -1032,12 +1062,65 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           }
         }
       );
-
-      // Refresh comments after successful submission
-      await fetchPostWithComments();
+      
+      console.log('Comment posted successfully, response:', response.data);
+      
+      // If the response includes the updated post with comments, use that
+      if (response.data && response.data.post && response.data.post.comments) {
+        const updatedComments = response.data.post.comments.map(comment => ({
+          ...comment,
+          // Ensure we have the author info
+          author: comment.author || {
+            _id: 'unknown',
+            name: 'Unknown User',
+            email: 'unknown@example.com',
+            role: comment.createdByRole || 'user'
+          },
+          // Ensure we have a createdByRole
+          createdByRole: comment.createdByRole || 'user'
+        }));
+        
+        setLocalComments(updatedComments);
+        if (onCommentAdded) {
+          onCommentAdded(updatedComments);
+        }
+      } else {
+        // Fallback to fetching the updated comments from the backend
+        await fetchPostWithComments();
+      }
+      
+      setError(null);
     } catch (error) {
       console.error('Error submitting comment:', error);
-      setError(error.response?.data?.message || 'Failed to post comment');
+      
+      // Enhanced error handling
+      let errorMessage = 'Failed to post comment. ';
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        // that falls out of the range of 2xx
+        console.error('Response data:', error.response.data);
+        console.error('Response status:', error.response.status);
+        console.error('Response headers:', error.response.headers);
+        
+        if (error.response.status === 401) {
+          errorMessage += 'Authentication failed. Please sign in again.';
+          // Redirect to login after a short delay
+          setTimeout(() => navigate('/signin'), 2000);
+        } else if (error.response.data) {
+          errorMessage += error.response.data.message || JSON.stringify(error.response.data);
+        }
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('No response received:', error.request);
+        errorMessage += 'No response from server. Please check your connection.';
+      } else {
+        // Something happened in setting up the request that triggered an Error
+        console.error('Error setting up request:', error.message);
+        errorMessage += error.message || 'Unknown error occurred';
+      }
+      
+      setError(errorMessage);
       // Restore the comment text if there was an error
       setNewComment(commentText);
     } finally {

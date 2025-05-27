@@ -283,14 +283,41 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       const response = await api.post(
         `/posts/${postId}/comments`,
         { 
-          text: commentText
+          text: commentText  // Only send the text, let backend handle the rest
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${storedToken}`
+          }
         }
       );
       
       console.log('Comment posted successfully, response:', response.data);
       
-      // Immediately fetch the updated comments from the backend
-      await fetchPostWithComments();
+      // If the response includes the updated post with comments, use that
+      if (response.data && response.data.post && response.data.post.comments) {
+        const updatedComments = response.data.post.comments.map(comment => ({
+          ...comment,
+          // Ensure we have the author info
+          author: comment.author || {
+            _id: 'unknown',
+            name: 'Unknown User',
+            email: 'unknown@example.com',
+            role: comment.createdByRole || 'user'
+          },
+          // Ensure we have a createdByRole
+          createdByRole: comment.createdByRole || 'user'
+        }));
+        
+        setLocalComments(updatedComments);
+        if (onCommentAdded) {
+          onCommentAdded(updatedComments);
+        }
+      } else {
+        // Fallback to fetching the updated comments from the backend
+        await fetchPostWithComments();
+      }
     } catch (error) {
       console.error('Error submitting comment:', error);
       const errorMessage = error.response?.data?.message || error.message || 'Failed to post comment';
