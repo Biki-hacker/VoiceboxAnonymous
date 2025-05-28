@@ -153,7 +153,7 @@ const PostCreation = ({
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             placeholder={placeholder}
-            className={`w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 dark:text-white ${inputClassName}`}
+            className={`w-full px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-slate-700 text-gray-900 dark:text-white ${inputClassName}`}
             rows={3}
             maxLength={maxLength}
           />
@@ -166,7 +166,7 @@ const PostCreation = ({
                   placeholder="Region (optional)"
                   value={region}
                   onChange={(e) => setRegion(e.target.value)}
-                  className="w-full p-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+                  className="w-full p-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-gray-900 dark:text-white"
                 />
               </div>
               <div>
@@ -175,7 +175,7 @@ const PostCreation = ({
                   placeholder="Department (optional)"
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full p-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md dark:bg-slate-700 dark:text-white"
+                  className="w-full p-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md dark:bg-slate-700 text-gray-900 dark:text-white"
                 />
               </div>
             </div>

@@ -8,6 +8,7 @@ import { Bar, Pie } from 'react-chartjs-2';
 import {
     Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
 } from 'chart.js';
+import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
@@ -165,20 +166,19 @@ const AdminDashboard = () => {
     const [theme, toggleTheme, setTheme] = useTheme();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
-    const [viewMode, setViewMode] = useState('dashboard');
+    const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' or 'createPost'
+    // Track posting state with useRef to prevent unnecessary re-renders
+    const isPostingRef = useRef(false);
+    const [isPosting, setIsPosting] = useState(false);
     const [viewingMedia, setViewingMedia] = useState({
         isOpen: false,
         url: '',
         type: 'image' // 'image' or 'video'
     });
     const [createPostView, setCreatePostView] = useState(false);
-    const [postContent, setPostContent] = useState('');
-    const [postType, setPostType] = useState('feedback');
-    const [postRegion, setPostRegion] = useState('');
-    const [postDepartment, setPostDepartment] = useState('');
-    const [postTags, setPostTags] = useState([]);
-    const [postMedia, setPostMedia] = useState(null);
     const [isSubmittingPost, setIsSubmittingPost] = useState(false);
+    const [postError, setPostError] = useState('');
+    const [postSuccess, setPostSuccess] = useState('');
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -854,48 +854,97 @@ const AdminDashboard = () => {
                             animate={{ opacity: 1, y: 0 }}
                             className="w-full max-w-2xl mx-auto"
                         >
-                            <PostCreation
-                                onSend={async (postData) => {
-                                    if (!selectedOrg) return;
-                                    
-                                    try {
-                                        const postPayload = {
-                                            content: postData.content,
-                                            postType: postData.postType,
-                                            orgId: selectedOrg._id,
-                                            isAnonymous: false,
-                                            mediaUrls: postData.media ? postData.media.map(m => m.preview) : []
-                                        };
+                            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-sm p-4 sm:p-6">
+                                <PostCreation
+                                    onSend={async (postData) => {
+                                        if (!selectedOrg) return;
                                         
-                                        const response = await api.post('/posts', postPayload);
+                                        setIsPosting(true); // Start loading animation
                                         
-                                        // Switch back to dashboard after successful post
-                                        setViewMode('dashboard');
-                                        
-                                        // Refresh posts
-                                        const postsRes = await api.get(`/posts/${selectedOrg._id}`);
-                                        setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-                                        
-                                        // Refresh stats
-                                        const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-                                        setStats(statsRes.data);
-                                        
-                                        return { success: true };
-                                    } catch (error) {
-                                        console.error('Error creating post:', error);
-                                        return { 
-                                            success: false, 
-                                            error: error.response?.data?.message || 'Failed to create post' 
-                                        };
+                                        try {
+                                            // Upload media files if any
+                                            let mediaUrls = [];
+                                            if (postData.media && postData.media.length > 0) {
+                                                try {
+                                                    for (const mediaItem of postData.media) {
+                                                        const fileUrl = await uploadMedia(mediaItem.file, (progress) => {
+                                                            console.log(`Upload progress for ${mediaItem.file.name}: ${progress}%`);
+                                                        });
+                                                        if (fileUrl) {
+                                                            mediaUrls.push(fileUrl);
+                                                        }
+                                                    }
+                                                } catch (uploadError) {
+                                                    console.error('Error uploading media:', uploadError);
+                                                    return { 
+                                                        success: false, 
+                                                        error: `Failed to upload media: ${uploadError.message}` 
+                                                    };
+                                                }
+                                            }
+
+                                            const postPayload = {
+                                                content: postData.content,
+                                                postType: postData.postType,
+                                                orgId: selectedOrg._id,
+                                                isAnonymous: false,
+                                                mediaUrls,
+                                                region: postData.region || '',
+                                                department: postData.department || ''
+                                            };
+                                            
+                                            const response = await api.post('/posts', postPayload);
+                                            
+                                            // Switch back to dashboard after successful post
+                                            setViewMode('dashboard');
+                                            
+                                            // Refresh posts
+                                            const postsRes = await api.get(`/posts/${selectedOrg._id}`);
+                                            setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+                                            
+                                            // Refresh stats
+                                            const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                                            setStats(statsRes.data);
+                                            
+                                            return { success: true };
+                                        } catch (error) {
+                                            console.error('Error creating post:', error);
+                                            return { 
+                                                success: false, 
+                                                error: error.response?.data?.message || 'Failed to create post' 
+                                            };
+                                        } finally {
+                                            // Reset both ref and state
+                                            isPostingRef.current = false;
+                                            setIsPosting(false);
+                                        }
+                                    }}
+                                    placeholder="Share your thoughts..."
+                                    buttonText={
+                                        <span className={`flex items-center justify-center w-full transition-opacity duration-200 ${isPosting ? 'opacity-90' : 'opacity-100'}`}>
+                                            {isPosting && (
+                                                <svg 
+                                                    className="animate-spin h-5 w-5 sm:h-4 sm:w-4 text-white mr-2 flex-shrink-0" 
+                                                    xmlns="http://www.w3.org/2000/svg" 
+                                                    fill="none" 
+                                                    viewBox="0 0 24 24"
+                                                >
+                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                </svg>
+                                            )}
+                                            <span className={isPosting ? 'ml-0' : ''}>
+                                                {isPosting ? 'Posting...' : 'Create Post'}
+                                            </span>
+                                        </span>
                                     }
-                                }}
-                                placeholder="Share your thoughts..."
-                                buttonText="Create Post"
-                                showHeader={false}
-                                showRegionDepartment={true}
-                                className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
-                                postTypes={['feedback', 'complaint', 'suggestion', 'public']}
-                            />
+                                    isSubmitting={isPosting}
+                                    className={`bg-transparent dark:bg-transparent p-0 transition-all duration-200 ${isPosting ? 'cursor-not-allowed' : 'hover:opacity-90'}`}
+                                    showHeader={false}
+                                    showRegionDepartment={true}
+                                    postTypes={['feedback', 'complaint', 'suggestion', 'public']}
+                                />
+                            </div>
                         </motion.div>
                     ) : (
                         <>
@@ -918,20 +967,20 @@ const AdminDashboard = () => {
                              <motion.div key="select-org-prompt" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><MagnifyingGlassIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Welcome, Admin!</h3><p className="text-gray-600 dark:text-slate-400">Please select an organization from the "Manage Orgs" menu or add a new one to view details.</p></div></DashboardCard> </motion.div>
                         ) : selectedOrg ? (
                             <motion.div key={selectedOrg._id} className="space-y-6 md:space-y-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditParamsModal} title="Edit Verification Parameters" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><PencilSquareIcon className="h-4 w-4"/> <span>Edit Params</span></button><button onClick={handleOpenEditEmailsModal} title="Manage Employee Emails" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><IdentificationIcon className="h-4 w-4"/> <span>Manage Emails</span></button></div></div>
-                                <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-3">Verification Parameters</h3>{(selectedOrg.verificationFields && selectedOrg.verificationFields.length > 0) ? (<ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-slate-300">{selectedOrg.verificationFields.map((param, i) => <li key={i}>{param}</li>)}</ul>) : ( <NothingToShow message="No verification parameters set." /> )}</DashboardCard>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditEmailsModal} title="Manage Employee Emails" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><IdentificationIcon className="h-4 w-4"/> <span>Manage Emails</span></button></div></div>
+                                
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Employee Access</h3>
-                                    <div className="bg-white p-4 rounded-lg shadow">
+                                    <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h4 className="font-medium">Authorized Emails</h4>
-                                                <p className="text-sm text-gray-500">
+                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Emails</h4>
+                                                <p className="text-sm text-gray-500 dark:text-slate-400">
                                                     {selectedOrg.employeeEmails?.length > 0
                                                         ? `${selectedOrg.employeeEmails.length} email(s) configured`
                                                         : 'No employee emails added'}
                                                 </p>
                                                 {selectedOrg.employeeEmails?.length > 0 && (
-                                                    <div className="mt-2 text-xs text-gray-500">
+                                                    <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
                                                         <p>First email: {selectedOrg.employeeEmails[0].email}</p>
                                                         {selectedOrg.employeeEmails.length > 1 && (
                                                             <p>+ {selectedOrg.employeeEmails.length - 1} more</p>
@@ -1185,7 +1234,7 @@ const AdminDashboard = () => {
                     Enter comma-separated email addresses (max 25)
                 </p>
                 <textarea
-                    className="w-full p-3 border rounded-md h-32 font-mono text-sm"
+                    className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-md h-32 font-mono text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
                     placeholder="employee1@example.com, employee2@example.com"
                     value={emailsInput}
                     onChange={(e) => setEmailsInput(e.target.value)}
@@ -1197,10 +1246,10 @@ const AdminDashboard = () => {
                     <p>• Invalid emails will be automatically removed</p>
                 </div>
                 <div className="flex justify-between items-center mt-2">
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
                         {emailsInput ? emailsInput.split(/[,\n]/).filter(Boolean).length : 0} email(s)
                     </span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
                         Max 25 emails
                     </span>
                 </div>
@@ -1208,14 +1257,14 @@ const AdminDashboard = () => {
                     <button
                         onClick={() => setIsEditEmailsModalOpen(false)}
                         disabled={isUpdatingEmails}
-                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
                     >
                         Cancel
                     </button>
                     <button
                         onClick={handleUpdateEmployeeEmails}
                         disabled={isUpdatingEmails || !emailsInput.trim()}
-                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 flex items-center"
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[120px]"
                     >
                         {isUpdatingEmails ? (
                             <>
@@ -1656,7 +1705,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           value={newComment}
           onChange={(e) => setNewComment(e.target.value)}
           placeholder="Write a comment..."
-          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white"
+          className="flex-1 p-2 rounded bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white"
           onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
         />
         <button
@@ -1675,8 +1724,8 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium dark:text-white">
-                  {comment.author?.name || 'Anonymous'}
+                <span className="text-sm font-medium">
+                  {comment.author?.name || <span className="text-gray-800 dark:text-slate-200">Anonymous</span>}
                 </span>
                 <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
                   isAdmin 

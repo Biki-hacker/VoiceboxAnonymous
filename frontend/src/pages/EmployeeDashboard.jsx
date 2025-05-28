@@ -170,12 +170,18 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   };
 
   const getIcon = () => {
+    const baseClasses = "h-5 w-5";
     switch(type) {
-      case 'like': return <ThumbUpIcon className="h-5 w-5" />;
-      case 'love': return <HeartIcon className="h-5 w-5 text-red-500" />;
-      case 'laugh': return <EmojiHappyIcon className="h-5 w-5 text-yellow-500" />;
-      case 'angry': return <XCircleIcon className="h-5 w-5 text-orange-500" />;
-      default: return <ThumbUpIcon className="h-5 w-5" />;
+      case 'like': 
+        return <ThumbUpIcon className={`${baseClasses} text-gray-700 dark:text-slate-200`} />;
+      case 'love': 
+        return <HeartIcon className={`${baseClasses} text-red-500 dark:text-red-400`} />;
+      case 'laugh': 
+        return <EmojiHappyIcon className={`${baseClasses} text-yellow-500 dark:text-yellow-400`} />;
+      case 'angry': 
+        return <XCircleIcon className={`${baseClasses} text-orange-500 dark:text-orange-400`} />;
+      default: 
+        return <ThumbUpIcon className={`${baseClasses} text-gray-700 dark:text-slate-200`} />;
     }
   };
 
@@ -188,7 +194,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
     >
       {getIcon()}
-      <span className="text-sm">{currentCount}</span>
+      <span className="text-sm text-gray-800 dark:text-slate-200">{currentCount}</span>
     </button>
   );
 };
@@ -385,7 +391,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
           onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
           placeholder="Write a comment..."
           disabled={isSubmitting}
-          className="flex-1 p-2 rounded bg-gray-100 dark:bg-slate-700 dark:text-white disabled:opacity-50"
+          className="flex-1 p-2 rounded bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white disabled:opacity-50"
         />
         <button
           onClick={handleCommentSubmit}
@@ -415,7 +421,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <span className="text-sm font-medium dark:text-white">
-                  {comment.author?.name || 'Anonymous'}
+                  {comment.author?.name || <span className="text-gray-800 dark:text-slate-200">Anonymous</span>}
                 </span>
                 <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
                   isAdmin 
@@ -1009,10 +1015,10 @@ const EmployeeDashboard = () => {
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
             <div className="mb-6">
-              <h2 className="text-xl font-bold dark:text-white">Posts</h2>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
             </div>
             {posts.length === 0 ? (
-              <p className="dark:text-white">No posts found.</p>
+              <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
             ) : (
               <div className="space-y-4">
                 {posts.map((post, i) => (
@@ -1130,19 +1136,19 @@ const EmployeeDashboard = () => {
                         })}
                       </div>
                     )}
-                    <div className="text-xs text-gray-500 dark:text-slate-400 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1 items-center">
-                      <span>By: {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : (post.createdBy || 'User')}</span>
+                    <div className="text-xs text-gray-600 dark:text-slate-300 border-t border-gray-100 dark:border-slate-700 pt-1.5 sm:pt-2 mt-1.5 sm:mt-2 flex flex-wrap gap-x-2 gap-y-1 items-center">
+                      <span className="text-gray-700 dark:text-slate-200">By: {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : (post.createdBy || 'User')}</span>
                       {(post.createdByRole === 'admin' || (post.author && post.author.role === 'admin')) && (
                         <span className="px-1.5 py-0.5 text-[10px] bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 rounded-full">
                           Admin
                         </span>
                       )}
-                      <span>|</span>
-                      <span>{new Date(post.createdAt).toLocaleString()}</span>
-                      <span className="hidden sm:inline">|</span>
-                      <span className="block sm:inline mt-1 sm:mt-0">Region: {post.region || 'N/A'}</span>
-                      <span className="hidden sm:inline">|</span>
-                      <span className="block sm:inline">Dept: {post.department || 'N/A'}</span>
+                      <span className="text-gray-400 dark:text-slate-500">|</span>
+                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}</span>
+                      <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
+                      <span className="block sm:inline mt-1 sm:mt-0 text-gray-600 dark:text-slate-300">Region: {post.region || 'N/A'}</span>
+                      <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
+                      <span className="block sm:inline text-gray-600 dark:text-slate-300">Dept: {post.department || 'N/A'}</span>
                     </div>
                     {post.reactions && Object.entries(post.reactions).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-3">
