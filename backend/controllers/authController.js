@@ -185,36 +185,202 @@ const verifyEmployee = async (req, res, next) => {
 
 const checkVerificationStatus = async (req, res, next) => {
   try {
-    const { email } = req.query;
+    // Get email from either authenticated user or query params
+    const email = req.user?.email || req.query.email;
     
     if (!email) {
       return res.status(400).json({
         success: false,
         message: 'Email is required',
-        code: 'VALIDATION_ERROR'
+        code: 'EMAIL_REQUIRED'
       });
     }
-    
+
+    // Find the user by email
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(404).json({ 
-        success: false,
+      return res.status(200).json({
+        success: true,
+        verified: false,
         message: 'User not found',
         code: 'USER_NOT_FOUND'
       });
     }
-    
-    return res.status(200).json({
+
+    // If user is already verified, return success with user data
+    if (user.verified) {
+      return res.json({
+        success: true,
+        verified: true,
+        message: 'User is already verified',
+        data: {
+          role: user.role,
+          organizationId: user.organizationId,
+          email: user.email,
+          verified: user.verified
+        }
+      });
+    }
+
+    // Check if user has an organization
+    if (user.organizationId) {
+      const org = await Organization.findById(user.organizationId);
+      if (org) {
+        // Check if email is in the allowed list
+        const isEmailAuthorized = org.employeeEmails?.some(
+          emp => emp.email.toLowerCase() === email.toLowerCase()
+        );
+
+        if (isEmailAuthorized) {
+          // Email is authorized, verify the user
+          user.verified = true;
+          await user.save();
+          
+          return res.json({
+            success: true,
+            verified: true,
+            message: 'Email verified successfully',
+            data: {
+              role: user.role,
+              organizationId: user.organizationId,
+              email: user.email,
+              verified: true
+            }
+          });
+        }
+        
+        // Email not in the allowed list
+        return res.status(403).json({
+          success: false,
+          verified: false,
+          message: 'Your email is not authorized for this organization',
+          code: 'UNAUTHORIZED_EMAIL'
+        });
+      }
+    }
+
+    // If no organization is required, mark as verified
+    if (!user.organizationId) {
+      user.verified = true;
+      await user.save();
+      
+      return res.json({
+        success: true,
+        verified: true,
+        message: 'User verified successfully',
+        requiresVerification: false,
+        data: {
+          role: user.role,
+          organizationId: user.organizationId,
+          email: user.email,
+          verified: true
+        }
+      });
+    }
+
+    // If we get here, the user is not verified and needs to be verified
+    res.json({
       success: true,
+      verified: false,
+      message: 'Email verification required',
+      requiresVerification: true,
       data: {
-        verified: user.verified,
-        organizationId: user.organizationId,
         role: user.role,
-        userId: user._id
+        organizationId: user.organizationId,
+        email: user.email,
+        verified: false
       }
     });
   } catch (error) {
-    console.error('Status check error:', error);
+    console.error('Error checking verification status:', error);
+    next(error);
+  }
+};
+
+// Verify employee email against organization's allowed emails
+const verifyEmployeeEmail = async (req, res, next) => {
+  try {
+    const { email, organizationId } = req.body;
+
+    // Validate input
+    if (!email || !organizationId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Email and organization ID are required',
+        code: 'VALIDATION_ERROR'
+      });
+    }
+
+    // Find the organization
+    const organization = await Organization.findById(organizationId);
+    if (!organization) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization not found',
+        code: 'ORGANIZATION_NOT_FOUND'
+      });
+    }
+
+    // Check if email is in the allowed list
+    const isEmailAuthorized = organization.employeeEmails?.some(
+      emp => emp.email.toLowerCase() === email.toLowerCase()
+    );
+
+    if (!isEmailAuthorized) {
+      return res.status(403).json({
+        success: false,
+        verified: false,
+        message: 'Your email is not authorized for this organization',
+        code: 'UNAUTHORIZED_EMAIL'
+      });
+    }
+
+    // Find or create the user
+    let user = await User.findOne({ email });
+    const isNewUser = !user;
+    
+    if (isNewUser) {
+      // Create a new user if they don't exist
+      user = new User({
+        email,
+        role: 'employee',
+        organizationId,
+        verified: true
+      });
+      await user.save();
+    } else {
+      // Update existing user
+      user.organizationId = organizationId;
+      user.verified = true;
+      await user.save();
+    }
+
+    // Generate JWT token
+    const token = jwt.sign(
+      { userId: user._id, email: user.email, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '30d' }
+    );
+
+    res.status(200).json({
+      success: true,
+      verified: true,
+      token,
+      isNewUser,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        isVerified: user.verified
+      },
+      organization: {
+        id: organization._id,
+        name: organization.name
+      }
+    });
+  } catch (error) {
+    console.error('Error verifying employee email:', error);
     next(error);
   }
 };
@@ -224,5 +390,6 @@ module.exports = {
   getCurrentUser,
   registerUser,
   verifyEmployee,
-  checkVerificationStatus
+  checkVerificationStatus,
+  verifyEmployeeEmail
 };

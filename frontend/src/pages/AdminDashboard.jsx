@@ -155,6 +155,9 @@ const AdminDashboard = () => {
     const [isManageOrgModalOpen, setIsManageOrgModalOpen] = useState(false);
     const [orgToDelete, setOrgToDelete] = useState(null);
     const [isDeleteConfirmModalOpen, setIsDeleteConfirmModalOpen] = useState(false);
+    const [isEditEmailsModalOpen, setIsEditEmailsModalOpen] = useState(false);
+    const [emailsInput, setEmailsInput] = useState('');
+    const [isUpdatingEmails, setIsUpdatingEmails] = useState(false);
     const [newOrgName, setNewOrgName] = useState("");
     const [verificationParamsInput, setVerificationParamsInput] = useState("");
     const [deleteOrgNameConfirm, setDeleteOrgNameConfirm] = useState("");
@@ -212,69 +215,236 @@ const AdminDashboard = () => {
         verifyAuth();
     }, [navigate]);
 
-    // --- Callback to select an organization and fetch its details ---
+    /**
+     * Selects an organization and fetches its related data
+     * @param {Object|null} org - The organization to select, or null to clear selection
+     */
     const selectOrganization = useCallback(async (org) => {
-        if (!org) {
+        if (!org || !org._id) {
+            console.log('[selectOrganization] Clearing organization selection');
             setSelectedOrg(null);
             setPosts([]);
             setStats([]);
-            setLoading(prev => ({ ...prev, orgDetails: false }));
+            setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
             return;
         }
 
+        console.log(`[selectOrganization] Selecting organization:`, { 
+            id: org._id, 
+            name: org.name,
+            adminId: org.adminId
+        });
+        
+        // Update selected org and reset related state
         setSelectedOrg(org);
-        setLoading(prev => ({ ...prev, orgDetails: true }));
+        setLoading(prev => ({ 
+            ...prev, 
+            orgDetails: true, 
+            posts: true, 
+            stats: true 
+        }));
         setError(prev => ({ ...prev, page: null }));
-        setStats([]);
         setPosts([]);
+        setStats([]);
 
         try {
+            // Fetch posts and stats in parallel
             const [statsRes, postsRes] = await Promise.all([
-                api.get(`/posts/stats/${org._id}`),
-                api.get(`/posts/${org._id}`)
+                // Fetch stats with error handling
+                api.get(`/posts/stats/${org._id}`, {
+                    validateStatus: status => status < 500 // Don't throw for 4xx errors
+                }).catch(err => {
+                    console.warn(`[selectOrganization] Error fetching stats for org ${org._id}:`, err);
+                    return { data: null };
+                }),
+                // Fetch posts with error handling
+                api.get(`/posts/${org._id}`, {
+                    validateStatus: status => status < 500 // Don't throw for 4xx errors
+                }).catch(err => {
+                    console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
+                    return { data: [] };
+                })
             ]);
 
-            setStats(statsRes.data);
-            setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+            // Process stats response
+            if (statsRes?.data) {
+                setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
+            } else {
+                setStats([]);
+            }
+
+            // Process posts response
+            if (Array.isArray(postsRes?.data)) {
+                const sortedPosts = [...postsRes.data].sort((a, b) => 
+                    new Date(b.createdAt) - new Date(a.createdAt)
+                );
+                setPosts(sortedPosts);
+            } else {
+                setPosts([]);
+            }
         } catch (err) {
-            console.error(`Error fetching data for ${org.name}:`, err);
-            setError(prev => ({ 
-                ...prev, 
-                page: err.response?.data?.message || `Failed to load details for ${org.name}.` 
+            console.error(`[selectOrganization] Error fetching data for ${org?.name || 'organization'}:`, {
+                error: err,
+                response: err.response?.data,
+                status: err.response?.status
+            });
+
+            let errorMessage = `Failed to load details for ${org?.name || 'the organization'}.`;
+            
+            // Handle different types of errors
+            if (err.response) {
+                // Server responded with an error status code
+                if (err.response.status === 401) {
+                    errorMessage = 'Your session has expired. Please log in again.';
+                    // Optionally redirect to login
+                    // navigate('/login', { state: { from: 'session-expired' } });
+                } else if (err.response.status === 403) {
+                    errorMessage = 'You do not have permission to view this organization.';
+                } else if (err.response.status === 404) {
+                    // Clear any previous errors if we get a 404 (no posts)
+                    setError(prev => ({ ...prev, page: null }));
+                    return; // Exit early for 404 errors
+                } else if (err.response.data?.message) {
+                    errorMessage = err.response.data.message;
+                }
+            } else if (err.request) {
+                // Request was made but no response received
+                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            } else if (err.message) {
+                // Other errors (e.g., from throw new Error)
+                errorMessage = err.message;
+            }
+            
+            // Update error state
+            setError(prev => ({
+                ...prev,
+                page: errorMessage
             }));
+            
+            // Reset states on error
+            setPosts([]);
+            setStats([]);
         } finally {
-            setLoading(prev => ({ ...prev, orgDetails: false }));
+            // Ensure all loading states are reset
+            setLoading(prev => ({
+                ...prev,
+                orgDetails: false,
+                posts: false,
+                stats: false
+            }));
+            
+            // Log completion of organization selection
+            console.log(`[selectOrganization] Completed loading for org: ${org?._id || 'none'}`);
         }
     }, []);
 
-    // --- Callback to fetch the list of organizations ---
+    /**
+     * Fetches organizations for the currently authenticated admin user
+     * @returns {Promise<void>}
+     */
     const fetchOrganizationsList = useCallback(async () => {
-        if (!userData) return;
+        if (!userData) {
+            console.log('[fetchOrganizationsList] No user data available');
+            return;
+        }
 
+        console.log('[fetchOrganizationsList] Starting to fetch organizations for user:', userData.email);
         setLoading(prev => ({ ...prev, orgList: true }));
         setError(prev => ({ ...prev, page: null }));
 
         try {
             const storedToken = localStorage.getItem('token');
+            if (!storedToken) {
+                const errorMsg = 'No authentication token found. Please log in again.';
+                console.error('[fetchOrganizationsList]', errorMsg);
+                setError(prev => ({ ...prev, page: errorMsg }));
+                return;
+            }
+
+            console.log('[fetchOrganizationsList] Making API request to /organizations/by-admin');
+            
             const response = await api.get('/organizations/by-admin', {
-              params: { email: userData.email },
-              headers: { Authorization: `Bearer ${storedToken}` }
+                headers: { 
+                    'Authorization': `Bearer ${storedToken}`,
+                    'Cache-Control': 'no-cache',
+                    'Pragma': 'no-cache'
+                },
+                validateStatus: status => status < 500 // Don't throw for 4xx errors
             });
 
-            const sortedOrgs = response.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            setOrganizations(sortedOrgs);
+            console.log('[fetchOrganizationsList] API Response:', {
+                status: response.status,
+                data: response.data
+            });
+
+            // Handle different response statuses
+            if (!response.data) {
+                throw new Error('No data received from server');
+            }
+
+            if (!response.data.success) {
+                // Handle API-level errors (e.g., validation errors)
+                const errorMessage = response.data.message || 'Failed to fetch organizations';
+                throw new Error(errorMessage);
+            }
+
+            // Extract organizations from response
+            const orgs = Array.isArray(response.data.data) ? response.data.data : [];
+            console.log(`[fetchOrganizationsList] Found ${orgs.length} organizations`);
+            
+            // Update state with the organizations
+            setOrganizations(orgs);
 
             // Auto-select first organization if none selected
-            if (!selectedOrg && sortedOrgs.length > 0) {
-                selectOrganization(sortedOrgs[0]);
+            if (!selectedOrg && orgs.length > 0) {
+                console.log('[fetchOrganizationsList] Auto-selecting first organization:', orgs[0]._id);
+                selectOrganization(orgs[0]);
+            } else if (orgs.length === 0) {
+                console.log('[fetchOrganizationsList] No organizations found for user');
+                setSelectedOrg(null);
+                setPosts([]);
+                setStats([]);
             }
         } catch (err) {
-            console.error('Error loading organizations:', err);
-            setError(prev => ({ 
-                ...prev, 
-                page: err.response?.data?.message || 'Failed to load organizations. Please try again.' 
+            console.error('[fetchOrganizationsList] Error loading organizations:', {
+                error: err,
+                response: err.response?.data,
+                status: err.response?.status
+            });
+            
+            let errorMessage = 'Failed to load organizations. Please try again.';
+            
+            // Handle different types of errors
+            if (err.response) {
+                // Server responded with an error status code
+                if (err.response.status === 401) {
+                    errorMessage = 'Your session has expired. Please log in again.';
+                    // Optionally redirect to login
+                    // navigate('/login', { state: { from: 'session-expired' } });
+                } else if (err.response.status === 403) {
+                    errorMessage = 'You do not have permission to view organizations.';
+                } else if (err.response.data?.message) {
+                    errorMessage = err.response.data.message;
+                }
+            } else if (err.request) {
+                // Request was made but no response received
+                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            } else if (err.message) {
+                // Other errors (e.g., from throw new Error)
+                errorMessage = err.message;
+            }
+            
+            // Update error state
+            setError(prev => ({
+                ...prev,
+                page: errorMessage
             }));
+            
+            // Reset states
             setOrganizations([]);
+            setSelectedOrg(null);
+            setPosts([]);
+            setStats([]);
         } finally {
             setLoading(prev => ({ ...prev, orgList: false }));
         }
@@ -344,6 +514,168 @@ const AdminDashboard = () => {
             .then(() => { const updatedOrg = { ...selectedOrg, verificationFields: fields }; setSelectedOrg(updatedOrg); setOrganizations(orgs => orgs.map(o => o._id === updatedOrg._id ? updatedOrg : o)); setIsEditParamsModalOpen(false); })
             .catch(err => { console.error('Error updating parameters:', err); setError(prev => ({ ...prev, modal: err.response?.data?.message || 'Failed to update parameters.' })); })
             .finally(() => { setLoading(prev => ({ ...prev, modal: false })); });
+    };
+    const handleOpenEditEmailsModal = () => {
+        const currentEmails = selectedOrg.employeeEmails?.map(e => e.email) || [];
+        setEmailsInput(currentEmails.join(', '));
+        setIsEditEmailsModalOpen(true);
+    };
+    const handleUpdateEmployeeEmails = async () => {
+        if (!selectedOrg) return;
+
+        try {
+            setIsUpdatingEmails(true);
+            
+            // Parse and validate emails
+            const emails = emailsInput
+                .split(',')
+                .map(email => email.trim())
+                .filter(Boolean);
+
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const invalidEmails = emails.filter(email => !emailRegex.test(email));
+            
+            if (invalidEmails.length > 0) {
+                setError(prev => ({ ...prev, modal: `Invalid email format: ${invalidEmails.join(', ')}` }));
+                return;
+            }
+
+            if (emails.length > 25) {
+                setError(prev => ({ ...prev, modal: 'Maximum 25 employee emails allowed' }));
+                return;
+            }
+
+            // Verify the organization ID exists and is valid
+            if (!selectedOrg?._id) {
+                throw new Error('No organization selected or invalid organization ID');
+            }
+
+            console.log('Updating emails for organization:', {
+                orgId: selectedOrg._id,
+                orgName: selectedOrg.name
+            });
+
+            // Refresh the organizations list first to ensure we have the latest data
+            try {
+                console.log('Refreshing organizations list...');
+                const { data: orgsData } = await api.get('/organizations/by-admin');
+                const updatedOrgs = Array.isArray(orgsData.data) ? orgsData.data : [];
+                
+                // Update the organizations list
+                setOrganizations(updatedOrgs);
+                
+                // Find the current organization in the updated list
+                const currentOrg = updatedOrgs.find(org => org._id === selectedOrg._id);
+                
+                if (!currentOrg) {
+                    throw new Error(`Organization "${selectedOrg.name}" (${selectedOrg._id}) no longer exists or you no longer have access to it`);
+                }
+                
+                // Update the selected organization reference
+                setSelectedOrg(currentOrg);
+                
+                console.log('Refreshed organization data:', currentOrg);
+                
+            } catch (refreshError) {
+                console.error('Error refreshing organizations:', refreshError);
+                throw new Error('Failed to refresh organization data. Please try again.');
+            }
+
+            // Prepare the request data - backend expects a simple array of email strings
+            const requestData = {
+                emails: emails.map(email => email.trim().toLowerCase())
+            };
+
+            // Verify the organization ID is a valid MongoDB ObjectId
+            const orgId = selectedOrg._id;
+            if (!orgId || !/^[0-9a-fA-F]{24}$/.test(orgId)) {
+                throw new Error(`Invalid organization ID format: ${orgId}`);
+            }
+
+            const requestUrl = `/organizations/${orgId}/emails`;
+            
+            console.log('Sending request to update emails:', {
+                method: 'PUT',
+                url: requestUrl,
+                data: requestData,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Requested-With': 'XMLHttpRequest'
+                },
+                withCredentials: true
+            });
+            
+            // Log the raw request details for debugging
+            console.log('Organization ID being sent:', orgId, {
+                type: typeof orgId,
+                length: orgId?.length,
+                value: orgId
+            });
+
+            try {
+                const response = await api.put(
+                    requestUrl,
+                    requestData,
+                    {
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        withCredentials: true,
+                        validateStatus: (status) => status < 500
+                    }
+                );
+
+                console.log('Update response:', {
+                    status: response.status,
+                    statusText: response.statusText,
+                    data: response.data,
+                    headers: response.headers
+                });
+                
+                if (response.status === 404) {
+                    console.error('Organization not found in response:', {
+                        organizationId: selectedOrg._id,
+                        organizationName: selectedOrg.name,
+                        responseData: response.data
+                    });
+                    throw new Error(`Organization "${selectedOrg.name}" (${selectedOrg._id}) not found. It may have been deleted or you may have lost access.`);
+                }
+
+                if (response.data?.success) {
+                    // Update local state with the new emails
+                    const updatedEmails = requestData.emails.map(email => ({ email }));
+                    
+                    const updatedOrgs = organizations.map(org => 
+                        org._id === selectedOrg._id 
+                            ? { ...org, employeeEmails: updatedEmails }
+                            : org
+                    );
+                    
+                    setOrganizations(updatedOrgs);
+                    setSelectedOrg(prev => ({
+                        ...prev,
+                        employeeEmails: updatedEmails
+                    }));
+                    
+                    setError(prev => ({ ...prev, modal: null }));
+                    setIsEditEmailsModalOpen(false);
+                } else {
+                    throw new Error(response.data?.message || 'Failed to update emails');
+                }
+            } catch (err) {
+                console.error('Error in email update:', {
+                    error: err,
+                    response: err.response?.data
+                });
+                throw err; // Re-throw to be caught by the outer catch
+            }
+        } catch (err) {
+            console.error('Error updating employee emails:', err);
+            setError(prev => ({ ...prev, modal: err.response?.data?.message || 'Failed to update employee emails' }));
+        } finally {
+            setIsUpdatingEmails(false);
+        }
     };
     const handleOpenManageOrgModal = () => { setError(prev => ({ ...prev, modal: null })); setIsManageOrgModalOpen(true); };
     const initiateDeleteOrganization = (org) => { setOrgToDelete(org); setDeleteOrgNameConfirm(""); setDeletePasswordConfirm(""); setError(prev => ({ ...prev, modal: null })); setIsManageOrgModalOpen(false); setIsDeleteConfirmModalOpen(true); };
@@ -480,7 +812,6 @@ const AdminDashboard = () => {
                 <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7 lg:h-8 lg:w-8" /></div>
                 <nav className="flex flex-col space-y-4 items-center">
                     {sidebarNavItems.map((item) => (<button key={item.name} onClick={item.action} title={item.name} className={`p-3 lg:p-3 rounded-lg transition-colors duration-150 ${item.current ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'}`}><item.icon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">{item.name}</span></button>))}
-
                 </nav>
                 <div className="mt-auto flex flex-col items-center space-y-4">
                     <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
@@ -587,8 +918,39 @@ const AdminDashboard = () => {
                              <motion.div key="select-org-prompt" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><MagnifyingGlassIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Welcome, Admin!</h3><p className="text-gray-600 dark:text-slate-400">Please select an organization from the "Manage Orgs" menu or add a new one to view details.</p></div></DashboardCard> </motion.div>
                         ) : selectedOrg ? (
                             <motion.div key={selectedOrg._id} className="space-y-6 md:space-y-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditParamsModal} title="Edit Verification Parameters" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><PencilSquareIcon className="h-4 w-4"/> <span>Edit Params</span></button></div></div>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditParamsModal} title="Edit Verification Parameters" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><PencilSquareIcon className="h-4 w-4"/> <span>Edit Params</span></button><button onClick={handleOpenEditEmailsModal} title="Manage Employee Emails" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><IdentificationIcon className="h-4 w-4"/> <span>Manage Emails</span></button></div></div>
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-3">Verification Parameters</h3>{(selectedOrg.verificationFields && selectedOrg.verificationFields.length > 0) ? (<ul className="list-disc list-inside space-y-1 text-sm text-gray-700 dark:text-slate-300">{selectedOrg.verificationFields.map((param, i) => <li key={i}>{param}</li>)}</ul>) : ( <NothingToShow message="No verification parameters set." /> )}</DashboardCard>
+                                <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Employee Access</h3>
+                                    <div className="bg-white p-4 rounded-lg shadow">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h4 className="font-medium">Authorized Emails</h4>
+                                                <p className="text-sm text-gray-500">
+                                                    {selectedOrg.employeeEmails?.length > 0
+                                                        ? `${selectedOrg.employeeEmails.length} email(s) configured`
+                                                        : 'No employee emails added'}
+                                                </p>
+                                                {selectedOrg.employeeEmails?.length > 0 && (
+                                                    <div className="mt-2 text-xs text-gray-500">
+                                                        <p>First email: {selectedOrg.employeeEmails[0].email}</p>
+                                                        {selectedOrg.employeeEmails.length > 1 && (
+                                                            <p>+ {selectedOrg.employeeEmails.length - 1} more</p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                onClick={handleOpenEditEmailsModal}
+                                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                                            >
+                                                <svg className="-ml-0.5 mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                                                </svg>
+                                                Manage
+                                            </button>
+                                        </div>
+                                    </div>
+                                </DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
@@ -776,8 +1138,8 @@ const AdminDashboard = () => {
                                                                 <ReactionButton
                                                                     key={type}
                                                                     type={type}
-                                                                    count={count || 0}
                                                                     postId={post._id}
+                                                                    count={count || 0}
                                                                 />
                                                             ))}
                                                         </div>
@@ -817,6 +1179,59 @@ const AdminDashboard = () => {
         {/* Modals */}
         <Modal isOpen={isAddOrgModalOpen} onClose={() => setIsAddOrgModalOpen(false)} title="Add New Organization">{/* ... Add Org Modal Content ... */}<div className="space-y-4"><div><label htmlFor="orgName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Organization Name</label><input type="text" id="orgName" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder="Enter organization name" disabled={loading.modal} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setIsAddOrgModalOpen(false)} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmAddOrg} disabled={loading.modal || !newOrgName.trim()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[80px]">{loading.modal ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Add'}</button></div></div></Modal>
         <Modal isOpen={isEditParamsModalOpen} onClose={() => setIsEditParamsModalOpen(false)} title={`Edit Parameters for ${selectedOrg?.name || ''}`}>{/* ... Edit Params Modal Content ... */}<div className="space-y-4"><div><label htmlFor="verifParams" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Verification Fields (comma-separated)</label><textarea id="verifParams" rows="3" value={verificationParamsInput} onChange={(e) => setVerificationParamsInput(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder="e.g., employeeId, department, location" disabled={loading.modal} /><p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Enter fields required for employee verification, separated by commas.</p></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setIsEditParamsModalOpen(false)} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmEditParams} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[120px]">{loading.modal ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Save Changes'}</button></div></div></Modal>
+        <Modal isOpen={isEditEmailsModalOpen} onClose={() => !isUpdatingEmails && setIsEditEmailsModalOpen(false)} title="Manage Employee Emails">
+            <div className="space-y-4">
+                <p className="text-sm text-gray-500">
+                    Enter comma-separated email addresses (max 25)
+                </p>
+                <textarea
+                    className="w-full p-3 border rounded-md h-32 font-mono text-sm"
+                    placeholder="employee1@example.com, employee2@example.com"
+                    value={emailsInput}
+                    onChange={(e) => setEmailsInput(e.target.value)}
+                    disabled={isUpdatingEmails}
+                />
+                <div className="text-xs text-gray-500">
+                    <p>• Enter one email per line or separate with commas</p>
+                    <p>• Only the first 25 emails will be saved</p>
+                    <p>• Invalid emails will be automatically removed</p>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                    <span className="text-xs text-gray-500">
+                        {emailsInput ? emailsInput.split(/[,\n]/).filter(Boolean).length : 0} email(s)
+                    </span>
+                    <span className="text-xs text-gray-500">
+                        Max 25 emails
+                    </span>
+                </div>
+                <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                        onClick={() => setIsEditEmailsModalOpen(false)}
+                        disabled={isUpdatingEmails}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 rounded-md hover:bg-gray-200 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleUpdateEmployeeEmails}
+                        disabled={isUpdatingEmails || !emailsInput.trim()}
+                        className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:bg-blue-300 flex items-center"
+                    >
+                        {isUpdatingEmails ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Saving...
+                            </>
+                        ) : (
+                            'Save Changes'
+                        )}
+                    </button>
+                </div>
+            </div>
+        </Modal>
         <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">{/* ... Manage Orgs Modal Content ... */ loading.orgList ? (<div className="text-center py-10"><p className="text-gray-600 dark:text-slate-400">Loading organizations...</p></div>) : organizations.length === 0 ? (<NothingToShow message="No organizations to manage. Add one first." />) : (<div className="space-y-3"><p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p><ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">{organizations.map((org) => (<li key={org._id} className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}><div className="flex items-center justify-between space-x-3"><div className="flex-1 min-w-0"><button onClick={() => { selectOrganization(org); setIsManageOrgModalOpen(false); }} className="text-left w-full group"><p className={`text-sm font-medium truncate ${selectedOrg?._id === org._id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{org.name}</p><p className="text-xs text-gray-500 dark:text-slate-400 truncate">ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}</p></button></div><button onClick={() => initiateDeleteOrganization(org)} disabled={loading.deleteOrg?.[org._id]} className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50" title="Delete Organization">{loading.deleteOrg?.[org._id] ? <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> : <TrashIcon className="h-4 w-4" />}</button></div></li>))}</ul></div>)}<div className="mt-6 flex justify-end"><button type="button" onClick={() => setIsManageOrgModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800">Close</button></div></Modal>
         <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 disabled:bg-red-400 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
         </>

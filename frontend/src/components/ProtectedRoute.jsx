@@ -63,20 +63,28 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         });
         console.log('[ProtectedRoute] /auth/verify-status response:', response);
         
-        // Handle different response formats
-        let userData = null;
+        const responseData = response?.data;
         
-        if (response.data.success && response.data.data) {
-          // Format: { success: true, data: { role, userId, verified, organizationId } }
-          userData = response.data.data;
-        } else if (response.data.authenticated && response.data.user) {
-          // Fallback to previous format
-          userData = response.data.user;
+        // Extract user data from the response
+        // The new format has user data in response.data.data
+        let userData = responseData?.data || responseData;
+        
+        // If we still don't have user data, check for common response formats
+        if (!userData) {
+          if (responseData?.user) {
+            userData = responseData.user;
+          } else if (responseData) {
+            // If response is not in expected format but has data, use it
+            userData = responseData;
+          }
         }
         
         if (!userData) {
-          throw new Error('Invalid response format from server');
+          console.error('Invalid response format:', response);
+          throw new Error('Invalid server response format');
         }
+        
+        console.log('[ProtectedRoute] Extracted user data:', userData);
         
         // Update last verified timestamp
         localStorage.setItem('lastVerified', new Date().getTime().toString());
@@ -84,12 +92,12 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         // Extract user data from response
         const { role: userRole, organizationId, email: userEmail, verified } = userData;
         
-        // For admin role, verified should be false
-        if (userRole === 'admin' && verified !== false) {
-          console.warn('[ProtectedRoute] Admin account verification status is invalid');
-          if (isMounted) setIsAuthorized(false);
-          localStorage.clear();
-          return;
+        // For admin role, we don't need email verification
+        // Just ensure the role is set correctly
+        if (userRole === 'admin') {
+          console.log('[ProtectedRoute] Admin user detected, skipping email verification');
+          // Set verified to true for admin to bypass verification
+          userData.verified = true;
         }
         
         console.log('[ProtectedRoute] Backend verification successful. User role:', userRole, 'Required role:', requiredRole);

@@ -29,8 +29,15 @@ const speedLimiter = slowDown({
 
 const authMiddleware = async (req, res, next) => {
   try {
-    // Skip auth for health check and public routes
-    if (req.path === '/health' || req.path === '/auth/refresh-token') {
+    // Skip auth for public routes
+    const publicRoutes = [
+      '/health',
+      '/auth/refresh-token',
+      '/auth/verify-email',
+      '/auth/verify-status'
+    ];
+    
+    if (publicRoutes.some(route => req.path.startsWith(route))) {
       return next();
     }
 
@@ -40,7 +47,8 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ 
         success: false, 
         message: 'Authentication required',
-        code: 'NO_TOKEN'
+        code: 'UNAUTHORIZED',
+        details: 'No authentication token provided'
       });
     }
 
@@ -48,7 +56,15 @@ const authMiddleware = async (req, res, next) => {
     
     try {
       // Verify JWT token
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const decoded = jwt.verify(token, process.env.JWT_SECRET, {
+        algorithms: ['HS256'],
+        ignoreExpiration: false,
+        maxAge: '30d'
+      });
+      
+      if (!decoded || !decoded.userId) {
+        throw new Error('Invalid token payload');
+      }
       
       if (!decoded || !decoded.userId) {
         return res.status(401).json({ 
@@ -59,27 +75,44 @@ const authMiddleware = async (req, res, next) => {
       }
 
       // Find user in database
-      const user = await User.findById(decoded.userId)
-        .select('_id email role organizationId verified lastLogin lastPasswordChange')
-        .lean();
-
+      const user = await User.findById(decoded.userId).select('+verified');
       if (!user) {
         return res.status(401).json({ 
           success: false, 
           message: 'User not found',
-          code: 'USER_NOT_FOUND'
+          code: 'USER_NOT_FOUND',
+          details: 'The user associated with this token no longer exists'
         });
       }
 
+      // For organization users, verify their email is still valid
+      if (user.organizationId) {
+        // Check if user is verified
+        if (!user.verified) {
+          return res.status(403).json({
+            success: false,
+            message: 'Email verification required',
+            code: 'VERIFICATION_REQUIRED',
+            requiresVerification: true,
+            details: 'Please verify your email address before accessing this resource'
+          });
+        }
 
-      // Check if user is verified (skip for admin users)
-      if (!user.verified && user.role !== 'admin') {
-        return res.status(403).json({ 
-          success: false,
-          message: 'Account not verified. Please verify your email.',
-          code: 'ACCOUNT_NOT_VERIFIED'
-        });
+        // Additional verification can be added here if needed
+        // For example, checking if the user's email is still in the organization's allowed list
       }
+      
+      // Update last login timestamp (non-blocking)
+      user.updateLastLogin().catch(console.error);
+      
+      // Attach user to request object
+      req.user = user;
+      req.token = token;
+      
+      // Add user info to response locals for logging
+      res.locals.userId = user._id;
+      res.locals.role = user.role;
+      res.locals.organizationId = user.organizationId;
 
       // Check if token was issued before last password change
       if (user.lastPasswordChange && decoded.iat * 1000 < user.lastPasswordChange.getTime()) {

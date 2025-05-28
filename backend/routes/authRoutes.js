@@ -192,9 +192,10 @@ router.post('/verify', (req, res, next) => {
   authController.verifyEmployee(req, res, next).catch(next);
 });
 
-// Check status + role
-router.get('/verify-status', (req, res, next) => {
-  authController.checkVerificationStatus(req, res, next).catch(next);
-});
+// Check verification status
+router.get('/verify-status', authController.checkVerificationStatus);
+
+// Verify employee email
+router.post('/verify-email', authController.verifyEmployeeEmail);
 
 module.exports = router;
