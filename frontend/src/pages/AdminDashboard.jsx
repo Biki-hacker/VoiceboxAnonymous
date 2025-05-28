@@ -179,6 +179,68 @@ const AdminDashboard = () => {
     const [isSubmittingPost, setIsSubmittingPost] = useState(false);
     const [postError, setPostError] = useState('');
     const [postSuccess, setPostSuccess] = useState('');
+    const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
+    const [postToDelete, setPostToDelete] = useState(null);
+    const [isDeletingPost, setIsDeletingPost] = useState(false);
+
+    // --- Post Deletion Handlers ---
+    const confirmDeletePost = (post) => {
+        setPostToDelete(post);
+        setShowDeletePostDialog(true);
+    };
+
+    const handleCancelDeletePost = () => {
+        setShowDeletePostDialog(false);
+        setPostToDelete(null);
+    };
+    
+    const handleConfirmDeletePost = async () => {
+        if (!postToDelete) return;
+        
+        try {
+            setIsDeletingPost(true);
+            await handleDeletePost(postToDelete._id);
+        } catch (error) {
+            console.error('Error in delete confirmation:', error);
+            setPostError('Failed to delete post. Please try again.');
+            setTimeout(() => setPostError(''), 3000);
+        } finally {
+            setIsDeletingPost(false);
+        }
+    };
+    
+    const handleDeletePost = async (postId) => {
+        if (!selectedOrg || !postId) return;
+        
+        try {
+            const response = await api.delete(`/posts/${postId}`);
+            
+            // Remove the deleted post from the UI
+            setPosts(prev => prev.filter(p => p._id !== postId));
+            
+            // Close the delete dialog
+            setShowDeletePostDialog(false);
+            setPostToDelete(null);
+            
+            // Show success message
+            const isAdminDelete = response.data?.deletedByAdmin;
+            if (isAdminDelete) {
+                setPostSuccess('Post deleted successfully');
+                setTimeout(() => setPostSuccess(''), 3000);
+            }
+            
+            // Refresh stats if needed
+            if (selectedOrg?._id) {
+                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                setStats(statsRes.data);
+            }
+        } catch (error) {
+            console.error('Error deleting post:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
+            setPostError(errorMessage);
+            setTimeout(() => setPostError(''), 3000);
+        }
+    };
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -707,39 +769,9 @@ const AdminDashboard = () => {
             setDeletePasswordConfirm("");
         }
     };
-    const handleDeletePost = async (postId, postContent) => {
-        if (!selectedOrg || !window.confirm(`Delete this post?\n"${postContent.substring(0, 50)}..."`)) {
-            return;
-        }
-
-        try {
-            const response = await api.delete(`/posts/${postId}`);
-            
-            // Remove the deleted post from the UI
-            setPosts(prev => prev.filter(p => p._id !== postId));
-            
-            // Show success message
-            const isAdminDelete = response.data?.deletedByAdmin;
-            if (isAdminDelete) {
-                setError(prev => ({ 
-                    ...prev, 
-                    page: 'Post deleted by admin.' 
-                }));
-            }
-            
-            // Refresh stats
-            const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-            setStats(statsRes.data);
-            
-        } catch (err) {
-            console.error('Error deleting post:', err);
-            const errorMessage = err.response?.data?.message || 'Failed to delete post.';
-            setError(prev => ({ 
-                ...prev, 
-                page: errorMessage 
-            }));
-        }
-    };
+    // Post deletion is now handled by the handleDeletePost function above
+    // which uses a modal dialog for confirmation
+    
     const handleLogout = () => { localStorage.clear(); navigate('/signin'); };
 
     // --- Sidebar Items ---
@@ -1069,11 +1101,22 @@ const AdminDashboard = () => {
                                                             </span>
                                                         </div>
                                                         <button 
-                                                            onClick={() => handleDeletePost(post._id, post.content)} 
+                                                            onClick={(e) => {
+                                                                e.stopPropagation();
+                                                                confirmDeletePost(post);
+                                                            }}
                                                             className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
                                                             title="Delete Post"
+                                                            disabled={isDeletingPost}
                                                         >
-                                                            <TrashIcon className="h-4 w-4" />
+                                                            {isDeletingPost && postToDelete?._id === post._id ? (
+                                                                <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                            ) : (
+                                                                <TrashIcon className="h-4 w-4" />
+                                                            )}
                                                         </button>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
@@ -1281,6 +1324,46 @@ const AdminDashboard = () => {
                 </div>
             </div>
         </Modal>
+
+        {/* Delete Post Confirmation Dialog */}
+        <Modal isOpen={showDeletePostDialog} onClose={handleCancelDeletePost} title="Delete Post">
+            <div className="space-y-4">
+                <p className="text-gray-600 dark:text-slate-300">
+                    Are you sure you want to delete this post? This action cannot be undone.
+                </p>
+                {postToDelete?.content && (
+                    <div className="bg-gray-50 dark:bg-slate-800/50 p-3 rounded-md border border-gray-200 dark:border-slate-700">
+                        <p className="text-sm text-gray-800 dark:text-slate-200 italic">
+                            "{postToDelete.content.length > 100 ? `${postToDelete.content.substring(0, 100)}...` : postToDelete.content}"
+                        </p>
+                    </div>
+                )}
+                <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                        onClick={handleCancelDeletePost}
+                        disabled={isDeletingPost}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleConfirmDeletePost}
+                        disabled={isDeletingPost}
+                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[100px]"
+                    >
+                        {isDeletingPost ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Deleting...
+                            </>
+                        ) : 'Delete'}
+                    </button>
+                </div>
+            </div>
+        </Modal>
         <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">{/* ... Manage Orgs Modal Content ... */ loading.orgList ? (<div className="text-center py-10"><p className="text-gray-600 dark:text-slate-400">Loading organizations...</p></div>) : organizations.length === 0 ? (<NothingToShow message="No organizations to manage. Add one first." />) : (<div className="space-y-3"><p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p><ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">{organizations.map((org) => (<li key={org._id} className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}><div className="flex items-center justify-between space-x-3"><div className="flex-1 min-w-0"><button onClick={() => { selectOrganization(org); setIsManageOrgModalOpen(false); }} className="text-left w-full group"><p className={`text-sm font-medium truncate ${selectedOrg?._id === org._id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{org.name}</p><p className="text-xs text-gray-500 dark:text-slate-400 truncate">ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}</p></button></div><button onClick={() => initiateDeleteOrganization(org)} disabled={loading.deleteOrg?.[org._id]} className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50" title="Delete Organization">{loading.deleteOrg?.[org._id] ? <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> : <TrashIcon className="h-4 w-4" />}</button></div></li>))}</ul></div>)}<div className="mt-6 flex justify-end"><button type="button" onClick={() => setIsManageOrgModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800">Close</button></div></Modal>
         <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 disabled:bg-red-400 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
         </>
@@ -1475,6 +1558,8 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState(null);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
@@ -1653,14 +1738,21 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
     }
   };
 
-  const handleCommentDelete = async (commentId) => {
-    if (!commentId || isLoading) return;
-    
-    if (!window.confirm('Are you sure you want to delete this comment?')) {
-      return;
-    }
+  const handleDeleteClick = (commentId) => {
+    setCommentToDelete(commentId);
+    setShowDeleteDialog(true);
+  };
 
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
+    setCommentToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!commentToDelete || isLoading) return;
+    
     setIsLoading(true);
+    setShowDeleteDialog(false);
     setError(null);
 
     try {
@@ -1669,7 +1761,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
         throw new Error('No authentication token found');
       }
 
-      const response = await api.delete(`/posts/${postId}/comments/${commentId}`, {
+      const response = await api.delete(`/posts/${postId}/comments/${commentToDelete}`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }
@@ -1688,11 +1780,53 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       setError(errorMessage);
     } finally {
       setIsLoading(false);
+      setCommentToDelete(null);
     }
   };
+  
+  // For backward compatibility
+  const handleCommentDelete = handleDeleteClick;
 
   return (
     <div className="mt-4 space-y-4">
+      {/* Delete Confirmation Dialog for Comments */}
+      <Modal 
+        isOpen={showDeleteDialog} 
+        onClose={handleCancelDelete}
+        title="Delete Comment"
+        size="max-w-md"
+      >
+        <div className="space-y-4">
+          <p className="text-gray-800 dark:text-slate-200">
+            Are you sure you want to delete this comment? This action cannot be undone.
+          </p>
+          <div className="flex justify-end space-x-3 pt-2">
+            <button
+              onClick={handleCancelDelete}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[100px]"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Deleting...
+                </>
+              ) : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
       {error && (
         <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
           {error}
@@ -1739,7 +1873,10 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
                 </span>
               </div>
               <button
-                onClick={() => handleCommentDelete(comment._id)}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleDeleteClick(comment._id);
+                }}
                 className="p-1 text-gray-400 hover:text-red-500 transition-colors"
                 disabled={isLoading}
                 title="Delete comment"
@@ -1765,6 +1902,40 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           </div>
         );
       })}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-sm w-full mx-4">
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Comment</h3>
+            <p className="text-gray-600 dark:text-slate-300 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelDelete}
+                disabled={isLoading}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                disabled={isLoading}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+              >
+                {isLoading ? (
+                  <>
+                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    Deleting...
+                  </>
+                ) : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1802,10 +1973,12 @@ const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
     };
   }, [onClose]);
 
-  // Toggle fullscreen
+  // Toggle fullscreen mode
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.log);
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen: ${err.message}`);
+      });
       setIsFullscreen(true);
     } else {
       if (document.exitFullscreen) {
@@ -1816,36 +1989,59 @@ const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
   };
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <button
+    <div className="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center z-50 p-4" onClick={onClose}>
+      <div 
+        ref={modalRef} 
+        className="relative max-w-4xl w-full max-h-[90vh] bg-white dark:bg-gray-800 rounded-lg overflow-hidden"
+        onClick={e => e.stopPropagation()}
+      >
+        {/* Close button */}
+        <button 
           onClick={onClose}
-          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
+          className="absolute top-2 right-2 z-10 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-all"
           aria-label="Close media viewer"
         >
-          <XCircleIcon className="h-8 w-8" />
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
         </button>
         
-        <div 
-          ref={modalRef} 
-          className="relative max-w-full max-h-full flex items-center justify-center"
+        {/* Fullscreen toggle button */}
+        <button 
+          onClick={toggleFullscreen}
+          className="absolute top-2 right-12 z-10 p-2 bg-black bg-opacity-50 text-white rounded-full hover:bg-opacity-75 transition-all"
+          aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
         >
-          {mediaType === 'image' ? (
-            <img
-              src={mediaUrl}
-              alt="Full size media"
-              className="max-w-full max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
+          {isFullscreen ? (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 16L4 20l4-2-2 4 4-2m8-12l2-4-4 2 2-4-4 2m0 12l-2 4 4-2-2 4 4-2m8-12l-2-4-4 2 2-4-4 2" />
+            </svg>
+          ) : (
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4m4 0l5 5" />
+            </svg>
+          )}
+        </button>
+        
+        {/* Media content */}
+        <div className="flex items-center justify-center h-full">
+          {mediaType.startsWith('image/') ? (
+            <img 
+              src={mediaUrl} 
+              alt="Media content" 
+              className="max-w-full max-h-[85vh] object-contain"
+            />
+          ) : mediaType.startsWith('video/') ? (
+            <video 
+              src={mediaUrl} 
+              controls 
+              className="max-w-full max-h-[85vh]"
+              autoPlay
             />
           ) : (
-            <video
-              src={mediaUrl}
-              className="max-w-full max-h-[90vh]"
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onClick={(e) => e.stopPropagation()}
-            />
+            <div className="p-8 text-center text-gray-500">
+              <p>Unsupported media type</p>
+            </div>
           )}
         </div>
       </div>
@@ -1853,7 +2049,12 @@ const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
   );
 };
 
-const fadeInUp = { initial: { opacity: 0, y: 20 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -10 }, transition: { duration: 0.3, ease: "easeOut" } };
-
+// Animation variants for Framer Motion
+export const fadeInUp = { 
+  initial: { opacity: 0, y: 20 }, 
+  animate: { opacity: 1, y: 0 }, 
+  exit: { opacity: 0, y: -10 }, 
+  transition: { duration: 0.3, ease: "easeOut" } 
+};
 
 export default AdminDashboard;

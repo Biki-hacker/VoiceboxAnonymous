@@ -206,6 +206,8 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState(null);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
@@ -337,14 +339,26 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
     }
   };
 
-  const handleCommentDelete = async (commentId) => {
-    if (!window.confirm('Are you sure you want to delete this comment?') || isLoading) return;
+  const handleDeleteClick = (commentId) => {
+    setCommentToDelete(commentId);
+    setShowDeleteDialog(true);
+  };
+
+  const handleCancelDelete = () => {
+    setShowDeleteDialog(false);
+    setCommentToDelete(null);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!commentToDelete || isLoading) return;
+    
     setIsLoading(true);
+    setShowDeleteDialog(false);
     
     try {
       const storedToken = localStorage.getItem('token');
       await api.delete(
-        `/posts/${postId}/comments/${commentId}`,
+        `/posts/${postId}/comments/${commentToDelete}`,
         { 
           headers: { 
             'Content-Type': 'application/json',
@@ -354,7 +368,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       );
       
       // Optimistic update
-      const updatedComments = localComments.filter(c => c._id !== commentId);
+      const updatedComments = localComments.filter(c => c._id !== commentToDelete);
       setLocalComments(updatedComments);
       setError(null);
       
@@ -362,22 +376,72 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       if (onCommentAdded) {
         onCommentAdded(updatedComments);
       }
+      
+      // Comment deleted successfully, no need to show a message
     } catch (error) {
       console.error('Error deleting comment:', error);
       setError(error.response?.data?.message || 'Failed to delete comment');
+      // Error already handled by error state
     } finally {
       setIsLoading(false);
+      setCommentToDelete(null);
     }
   };
   
-  const handleReaction = (commentId, reactionType) => {
-    // This function is no longer needed as we're using the ReactionButton component
-    // which handles its own state and API calls
-    console.log('Reaction handled by ReactionButton component');
+  // For backward compatibility
+  const handleCommentDelete = handleDeleteClick;
+  
+  const renderDeleteButton = (commentId) => {
+    return (
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          handleDeleteClick(commentId);
+        }}
+        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
+        disabled={isLoading}
+        title="Delete comment"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    );
   };
 
   return (
     <div className="mt-4 space-y-4">
+      {/* Delete Confirmation Dialog */}
+      {showDeleteDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
+          <h3 className="text-lg font-medium text-gray-900 mb-4">Delete Comment</h3>
+          <p className="text-gray-600 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
+          <div className="flex justify-end space-x-3">
+            <button
+              onClick={handleCancelDelete}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={isLoading}
+              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
+            >
+              {isLoading ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Deleting...
+                </>
+              ) : 'Delete'}
+            </button>
+          </div>
+        </div>
+      </div>
+      )}
       {error && (
         <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
           {error}
@@ -413,8 +477,40 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       </div>
 
       {localComments.map(comment => {
-        console.log('Comment data:', comment);
+        const currentUserId = localStorage.getItem('userId');
         const isAdmin = comment.createdByRole === 'admin' || (comment.author && comment.author.role === 'admin');
+        
+        // Get the author ID from various possible locations in the comment object
+        const authorId = (
+          comment.author?._id || // Case: author is an object with _id
+          comment.author ||      // Case: author is the ID string
+          comment.createdBy ||   // Case: using createdBy field
+          comment.authorId       // Case: using authorId field
+        )?.toString().trim();    // Ensure we're comparing strings and remove any whitespace
+        
+        // Check if the current user is the author (compare string values)
+        const isAuthor = authorId === currentUserId?.toString().trim();
+        
+        // Debug log to help identify the issue
+        console.log('Comment author check:', {
+          commentId: comment._id,
+          authorId,
+          currentUserId,
+          isAuthor,
+          authorType: typeof comment.author,
+          authorValue: comment.author,
+          localStorage: {
+            userId: localStorage.getItem('userId'),
+            email: localStorage.getItem('email'),
+            role: localStorage.getItem('role')
+          },
+          comment: {
+            ...comment,
+            // Make sure we don't log sensitive data
+            author: comment.author?._id || comment.author,
+            reactions: 'Object' // Just indicate it's an object to avoid large logs
+          }
+        });
         
         return (
           <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
@@ -434,14 +530,9 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
                   {new Date(comment.createdAt).toLocaleDateString()}
                 </span>
               </div>
-              <button
-                onClick={() => handleCommentDelete(comment._id)}
-                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                disabled={isLoading}
-                title="Delete comment"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
+              {isAuthor && (
+                renderDeleteButton(comment._id)
+              )}
             </div>
             
             <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>

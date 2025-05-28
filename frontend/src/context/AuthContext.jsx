@@ -41,12 +41,22 @@ export const AuthProvider = ({ children }) => {
         password
       });
       const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      localStorage.setItem('email', email); // Store email in localStorage
-      localStorage.setItem('role', user.role); // Store role in localStorage
-      if (user.organizationId) {
-        localStorage.setItem('orgId', user.organizationId); // Store orgId if exists
+      
+      if (!user || !user._id) {
+        throw new Error('User ID not found in response');
       }
+      
+      // Store all user data in localStorage
+      localStorage.setItem('token', token);
+      localStorage.setItem('email', email);
+      localStorage.setItem('role', user.role);
+      localStorage.setItem('userId', user._id); // Store MongoDB user ID
+      
+      if (user.organizationId) {
+        localStorage.setItem('orgId', user.organizationId);
+      }
+      
+      console.log('User logged in:', { email, userId: user._id, role: user.role });
       setUser(user);
       return user;
     } catch (error) {
@@ -64,13 +74,24 @@ export const AuthProvider = ({ children }) => {
         role,
         organizationId
       });
+      
       const { token, user } = response.data;
-      localStorage.setItem('token', token);
-      localStorage.setItem('email', email); // Store email in localStorage
-      localStorage.setItem('role', role); // Store role in localStorage
-      if (organizationId) {
-        localStorage.setItem('orgId', organizationId); // Store orgId if exists
+      
+      if (!user || !user._id) {
+        throw new Error('User ID not found in registration response');
       }
+      
+      // Store all user data in localStorage
+      localStorage.setItem('token', token);
+      localStorage.setItem('email', email);
+      localStorage.setItem('role', role);
+      localStorage.setItem('userId', user._id); // Store MongoDB user ID
+      
+      if (organizationId) {
+        localStorage.setItem('orgId', organizationId);
+      }
+      
+      console.log('User registered:', { email, userId: user._id, role });
       setUser(user);
       return user;
     } catch (error) {
@@ -95,6 +116,7 @@ export const AuthProvider = ({ children }) => {
       localStorage.removeItem('email');
       localStorage.removeItem('role');
       localStorage.removeItem('orgId');
+      localStorage.removeItem('userId');
       setUser(null);
     }
   };

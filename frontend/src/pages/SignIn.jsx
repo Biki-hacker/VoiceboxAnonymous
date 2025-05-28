@@ -90,31 +90,92 @@ export default function SignIn() {
         throw new Error('No data received from authentication server');
       }
 
-      const { token, role, verified, orgId } = backendResponse.data;
+      const responseData = backendResponse.data;
+      console.log('Full auth response:', responseData);
+      
+      const { token, role, verified, orgId, userId, user } = responseData;
       
       if (!token || role === undefined || verified === undefined) {
-        console.error('Invalid response data:', backendResponse.data);
+        console.error('Invalid response data:', responseData);
         throw new Error('Invalid authentication response received');
       }
 
-      console.log('Authentication successful for user:', { email, role, verified });
-      
-      // Create a user object in the expected format
-      const user = {
-        _id: email, // Using email as ID since _id is not provided
-        email,
-        role,
-        organizationId: orgId,
-        verified
+      // Function to decode JWT token
+      const decodeJWT = (token) => {
+        try {
+          // Get the payload part of the token
+          const base64Url = token.split('.')[1];
+          const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+          const jsonPayload = decodeURIComponent(
+            atob(base64)
+              .split('')
+              .map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
+              .join('')
+          );
+          return JSON.parse(jsonPayload);
+        } catch (e) {
+          console.error('Error decoding JWT:', e);
+          return null;
+        }
       };
 
+      // Try to get user ID from different possible locations
+      let resolvedUserId = userId || 
+                          user?._id || 
+                          responseData.user?._id || 
+                          responseData.userId;
+      
+      // If still no user ID, try to get it from the JWT token
+      if (!resolvedUserId && token) {
+        const decodedToken = decodeJWT(token);
+        console.log('Decoded JWT token:', decodedToken);
+        resolvedUserId = decodedToken?.userId || 
+                        decodedToken?.user?._id || 
+                        decodedToken?.sub; // Standard JWT subject field
+      }
+      
+      console.log('Authentication response:', { 
+        email, 
+        role, 
+        verified, 
+        userId: resolvedUserId,
+        responseData: JSON.parse(JSON.stringify(responseData)) // Create a safe copy for logging
+      });
+      
+      if (!resolvedUserId) {
+        console.error('Could not determine user ID from response:', responseData);
+        // Instead of throwing an error, we'll use email as a fallback for now
+        console.warn('Falling back to using email as user ID');
+        // For debugging, log the JWT token parts
+        if (token) {
+          const parts = token.split('.');
+          if (parts.length === 3) {
+            console.log('JWT Header:', JSON.parse(atob(parts[0])));
+            console.log('JWT Payload:', JSON.parse(atob(parts[1])));
+          }
+        }
+      }
+
       // Store user data in localStorage
+      // Always store the resolved user ID, falling back to email if needed
+      const storageUserId = resolvedUserId || email;
+      
       localStorage.setItem('email', email);
       localStorage.setItem('role', role);
       localStorage.setItem('verified', verified || false);
       localStorage.setItem('orgId', orgId || '');
       localStorage.setItem('token', token);
+      localStorage.setItem('userId', storageUserId);
       localStorage.setItem('supabaseToken', signInData.session.access_token);
+      
+      console.log('Stored user data in localStorage:', {
+        email,
+        userId: storageUserId,
+        role,
+        orgId,
+        verified,
+        source: resolvedUserId ? 'fromBackend' : 'fallbackToEmail'
+      });
       
       // Route based on role and verification status
       if (role === 'admin') {
