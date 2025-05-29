@@ -1,7 +1,7 @@
 import React, { useRef, useState } from "react";
 import { motion } from "framer-motion";
 
-export default function AnimatedText({ text, down = false }) {
+export default function AnimatedText({ text, down = false, size = 'sm' }) {
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const containerRef = useRef(null);
  
@@ -34,7 +34,7 @@ export default function AnimatedText({ text, down = false }) {
       ref={containerRef}
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
-      className="font-bold flex items-center cursor-pointer text-xl md:text-2xl text-white uppercase"
+      className={`font-bold flex items-center cursor-pointer text-${size} text-white uppercase`}
     >
       {text.split("").map((letter, index) => (
         <motion.span

@@ -15,6 +15,7 @@ import UpdatePassword from './pages/UpdatePassword';
 import EmployeeVerification from './components/EmployeeVerification';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
+import PricingPage from './components/PricingPage';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Component to handle page title and meta updates
@@ -28,6 +29,12 @@ const PageMetadata = () => {
           title: 'Voicebox Anonymous - Secure Anonymous Feedback Platform',
           description: 'Empower your workforce with secure, anonymous feedback, complaints, and suggestions. Total anonymity guaranteed with advanced security features.',
           keywords: 'anonymous feedback, employee feedback, secure feedback, anonymous complaints, suggestion box, workplace feedback',
+        };
+      case '/pricing':
+        return {
+          title: 'Pricing - Voicebox Anonymous',
+          description: 'Flexible pricing plans for organizations of all sizes. Choose the perfect plan that fits your needs.',
+          keywords: 'pricing, plans, subscription, enterprise, pro, free plan',
         };
       case '/signin':
         return {
@@ -75,6 +82,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Home />} />
+      <Route path="/pricing" element={<PricingPage />} />
       <Route path="/signin" element={<SignIn />} />
       <Route path="/signup" element={<SignUp />} />
       <Route path="/forgotpassword" element={<ForgotPassword />} />

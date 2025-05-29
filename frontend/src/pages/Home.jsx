@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState, useMemo } from "react";
 import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Helmet } from 'react-helmet';
 import AnimatedText from "../components/AnimatedText";
 import { 
@@ -237,6 +237,7 @@ const ContactModal = ({ isOpen, onClose, onSubmit }) => {
 
 
 export default function Home() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const controls = useAnimation();
   const heroRef = useRef(null);
   const isInView = useInView(heroRef, { once: true, amount: 0.3 });
@@ -248,8 +249,23 @@ export default function Home() {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false); // New state for contact modal
   const [typedText, setTypedText] = useState("");
   const [contactStatus, setContactStatus] = useState(""); // For success/error messages after send
-
   const fullText = "Revolutionize Employee Feedback with Total Anonymity";
+
+  // Handle smooth scrolling to sections
+  const scrollToSection = (e, sectionId) => {
+    e.preventDefault();
+    const element = document.getElementById(sectionId);
+    if (element) {
+      window.scrollTo({
+        top: element.offsetTop - 80, // Adjust for header height
+        behavior: 'smooth'
+      });
+      // Close mobile menu if open
+      if (isMenuOpen) {
+        setIsMenuOpen(false);
+      }
+    }
+  };
 
   const sparkleData = useMemo(() => Array.from({ length: 30 }).map(() => ({
     startX: Math.random() * window.innerWidth, duration: 4 + Math.random() * 6,
@@ -283,6 +299,18 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [fullText, controls]);
 
+  // Check for showContact query parameter on component mount and URL changes
+  useEffect(() => {
+    const showContact = searchParams.get('showContact');
+    if (showContact === 'true') {
+      setIsContactModalOpen(true);
+      // Remove the query parameter from the URL without refreshing the page
+      const newSearchParams = new URLSearchParams(searchParams);
+      newSearchParams.delete('showContact');
+      window.history.replaceState({}, '', `${window.location.pathname}?${newSearchParams.toString()}`);
+    }
+  }, [searchParams]);
+
   useEffect(() => {
     if (isMenuOpen || isContactModalOpen) { document.body.style.overflow = 'hidden'; }
     else { document.body.style.overflow = 'unset'; }
@@ -290,7 +318,9 @@ export default function Home() {
   }, [isMenuOpen, isContactModalOpen]);
 
   const navLinks = [
-    { name: "Features", href: "#features" }, { name: "About", href: "#about" },
+    { name: "Features", href: "#features" },
+    { name: "About", href: "#about" },
+    { name: "Pricing", href: "/pricing" },
     // { name: "Contact", href: "#contact" }, // Will be handled by button now
   ];
 
@@ -355,12 +385,42 @@ export default function Home() {
         <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
           <div className="text-2xl font-extrabold tracking-widest flex items-center relative">
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-3">
-            <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
+              <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
             </motion.div>
             <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-500 relative">Voicebox Anonymous<div className="absolute bottom-0 left-0 w-0 h-px bg-blue-400 group-hover:w-full transition-all duration-300" /></span>
           </div>
         </Link>
-        <div className="z-50"><MenuButton isOpen={isMenuOpen} toggle={toggleMenu} /></div>
+        
+        {/* Desktop Navigation */}
+        <div className="hidden md:flex items-center space-x-8">
+          {navLinks.map((link, idx) => (
+            <a 
+              key={idx}
+              href={link.href}
+              onClick={(e) => link.href.startsWith('#') && scrollToSection(e, link.href.substring(1))}
+              className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium cursor-pointer"
+            >
+              <AnimatedText text={link.name} el="span" size="sm" />
+            </a>
+          ))}
+          <button 
+            onClick={openContactModal}
+            className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium"
+          >
+            <AnimatedText text="Contact" el="span" size="sm" />
+          </button>
+          <Link 
+            to="/signin" 
+            className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2.5 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
+          >
+            Sign In
+          </Link>
+        </div>
+        
+        {/* Mobile Menu Button */}
+        <div className="md:hidden z-50">
+          <MenuButton isOpen={isMenuOpen} toggle={toggleMenu} />
+        </div>
       </nav>
 
       <AnimatePresence>
@@ -378,11 +438,27 @@ export default function Home() {
                   </Link>
                 </div>
                 <div className="flex flex-col space-y-6">
-                  {navLinks.map((link, idx) => ( <div key={idx} className="overflow-hidden"> <a href={link.href} onClick={toggleMenu} className="block text-gray-200 hover:text-blue-400 text-lg"><AnimatedText text={link.name} el="span" /></a> </div> ))}
+                  {navLinks.map((link, idx) => ( 
+                    <div key={idx} className="overflow-hidden"> 
+                      <a 
+                        href={link.href}
+                        onClick={(e) => {
+                          if (link.href.startsWith('#')) {
+                            scrollToSection(e, link.href.substring(1));
+                          } else {
+                            toggleMenu();
+                          }
+                        }}
+                        className="block text-gray-200 hover:text-blue-400 text-lg"
+                      >
+                        <AnimatedText text={link.name} el="span" size="base" />
+                      </a> 
+                    </div>
+                  ))}
                   {/* Add Contact to menu, opening modal */}
                    <div className="overflow-hidden">
                       <button onClick={() => { toggleMenu(); openContactModal();}} className="block text-gray-200 hover:text-blue-400 text-lg text-left w-full">
-                        <AnimatedText text="Contact" el="span" />
+                        <AnimatedText text="Contact" el="span" size="base" />
                       </button>
                     </div>
                 </div>
