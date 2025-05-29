@@ -1,11 +1,12 @@
-import React from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { CheckIcon, UserGroupIcon, RocketLaunchIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
 import AnimatedText from "./AnimatedText";
 
 const PricingPage = () => {
-  const plans = [
+  // Memoize plans to prevent recreation on re-renders
+  const plans = useMemo(() => [
     {
       name: 'Free Plan',
       price: '₹0',
@@ -61,20 +62,35 @@ const PricingPage = () => {
       popular: false,
       highlight: 'Best for Teams',
     },
-  ];
+  ], []); // Empty dependency array means this is created once
+  
+  // Cleanup animations on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup any running animations when component unmounts
+      document.querySelectorAll('*').forEach(el => {
+        el.style.animation = 'none';
+        el.style.transition = 'none';
+      });
+    };
+  }, []);
 
   return (
     <div className="relative overflow-x-hidden min-h-screen text-white flex flex-col bg-[#040b1d]">
-      {/* Background pattern */}
-      <div className="fixed inset-0 opacity-5" style={{ zIndex: 1 }}>
-        <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wIDVMNSAwWk02IDRMNCA2Wk0tMSAxTDEgLTFaIiBzdHJva2U9IiMxMTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"></div>
-      </div>
+      {/* Background pattern - Memoized to prevent recreation */}
+      {useMemo(() => (
+        <div className="fixed inset-0 opacity-5" style={{ zIndex: 1 }} key="bg-pattern">
+          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wIDVMNSAwWk02IDRMNCA2Wk0tMSAxTDEgLTFaIiBzdHJva2U9IiMxMTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"></div>
+        </div>
+      ), [])}
       
-      {/* Gradient overlays */}
-      <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }}>
-        <div className="absolute -right-64 -top-64 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-blue-500/5 to-blue-700/5 blur-3xl"></div>
-        <div className="absolute -left-64 -bottom-64 w-[600px] h-[600px] rounded-full bg-gradient-to-tr from-blue-400/5 to-indigo-500/5 blur-3xl"></div>
-      </div>
+      {/* Gradient overlays - Memoized to prevent recreation */}
+      {useMemo(() => (
+        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} key="gradient-overlays">
+          <div className="absolute -right-64 -top-64 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-blue-500/5 to-blue-700/5 blur-3xl"></div>
+          <div className="absolute -left-64 -bottom-64 w-[600px] h-[600px] rounded-full bg-gradient-to-tr from-blue-400/5 to-indigo-500/5 blur-3xl"></div>
+        </div>
+      ), [])}
       
       {/* Hero Section */}
       <section className="relative flex flex-col justify-center px-6 md:px-16 lg:px-24 pt-24 pb-20 md:pt-32" style={{ position: 'relative', zIndex: 2 }}>
@@ -144,7 +160,7 @@ const PricingPage = () => {
         </motion.div>
       </section>
 
-      {/* Pricing Cards */}
+      {/* Pricing Cards - Memoized to prevent unnecessary re-renders */}
       <motion.div 
         className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pb-32 relative z-10"
         initial={{ opacity: 0, y: 40 }}
@@ -152,63 +168,66 @@ const PricingPage = () => {
         transition={{ duration: 0.6, delay: 0.2 }}
       >
         <div className="grid gap-8 md:grid-cols-3 mt-8">
-          {plans.map((plan, index) => (
-            <motion.div
-              key={plan.name}
-              className={`relative bg-[#0B1122] bg-opacity-90 backdrop-blur-md rounded-2xl p-8 border border-blue-900/30 transition-all duration-300 ${
-                plan.popular ? 'ring-2 ring-blue-500/50 shadow-2xl shadow-blue-500/10' : 'hover:border-blue-500/50'
-              }`}
-              whileHover={{ y: -5, boxShadow: '0 10px 30px -10px rgba(59, 130, 246, 0.25)' }}
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: 0.1 * index }}
-            >
-              {plan.popular && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg">
-                    {plan.highlight}
-                  </span>
+          {useMemo(() => plans.map((plan, index) => {
+            const PlanCard = (
+              <motion.div
+                key={plan.name}
+                className={`relative bg-[#0B1122] bg-opacity-90 backdrop-blur-md rounded-2xl p-8 border border-blue-900/30 transition-all duration-300 ${
+                  plan.popular ? 'ring-2 ring-blue-500/50 shadow-2xl shadow-blue-500/10' : 'hover:border-blue-500/50'
+                }`}
+                whileHover={{ y: -5, boxShadow: '0 10px 30px -10px rgba(59, 130, 246, 0.25)' }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.4, delay: 0.1 * index }}
+                layoutId={`pricing-card-${index}`}
+              >
+                {plan.popular ? (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-blue-500 to-blue-600 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg">
+                      {plan.highlight}
+                    </span>
+                  </div>
+                ) : plan.highlight ? (
+                  <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
+                    <span className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center">
+                      <UserGroupIcon className="h-3.5 w-3.5 mr-1.5" /> {plan.highlight}
+                    </span>
+                  </div>
+                ) : null}
+                <div className="text-center mb-8">
+                  <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-300">
+                    {plan.name}
+                  </h3>
+                  <div className="mt-4 flex items-baseline justify-center">
+                    <span className="text-4xl font-extrabold text-white">{plan.price}</span>
+                    <span className="ml-1 text-lg font-medium text-gray-400">{plan.period}</span>
+                  </div>
                 </div>
-              )}
-              {!plan.popular && plan.highlight && (
-                <div className="absolute -top-4 left-1/2 transform -translate-x-1/2">
-                  <span className="bg-gradient-to-r from-purple-500 to-indigo-600 text-white text-xs font-semibold px-4 py-1.5 rounded-full shadow-lg flex items-center">
-                    <UserGroupIcon className="h-3.5 w-3.5 mr-1.5" /> {plan.highlight}
-                  </span>
+                <ul className="space-y-4 mb-8">
+                  {plan.features.map((feature, i) => (
+                    <li key={i} className="flex items-start">
+                      <CheckIcon className="h-5 w-5 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
+                      <span className="text-gray-300 text-sm leading-relaxed">{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-auto">
+                  <Link
+                    to={plan.buttonText === 'Contact Sales' ? '/?showContact=true' : '/signup'}
+                    state={{ fromPricing: true }}
+                    className={`w-full block text-center py-3 px-6 rounded-lg font-medium transition-all duration-300 ${
+                      plan.popular 
+                        ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02]'
+                        : 'bg-blue-900/30 text-blue-400 border border-blue-800/50 hover:bg-blue-900/50 hover:border-blue-700/70'
+                    }`}
+                  >
+                    {plan.buttonText}
+                  </Link>
                 </div>
-              )}
-              <div className="text-center mb-8">
-                <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-300">
-                  {plan.name}
-                </h3>
-                <div className="mt-4 flex items-baseline justify-center">
-                  <span className="text-4xl font-extrabold text-white">{plan.price}</span>
-                  <span className="ml-1 text-lg font-medium text-gray-400">{plan.period}</span>
-                </div>
-              </div>
-              <ul className="space-y-4 mb-8">
-                {plan.features.map((feature, i) => (
-                  <li key={i} className="flex items-start">
-                    <CheckIcon className="h-5 w-5 text-green-400 mr-2 mt-0.5 flex-shrink-0" />
-                    <span className="text-gray-300 text-sm leading-relaxed">{feature}</span>
-                  </li>
-                ))}
-              </ul>
-              <div className="mt-auto">
-                <Link
-                  to={plan.buttonText === 'Contact Sales' ? '/?showContact=true' : '/signup'}
-                  state={{ fromPricing: true }}
-                  className={`w-full block text-center py-3 px-6 rounded-lg font-medium transition-all duration-300 ${
-                    plan.popular 
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02]'
-                      : 'bg-blue-900/30 text-blue-400 border border-blue-800/50 hover:bg-blue-900/50 hover:border-blue-700/70'
-                  }`}
-                >
-                  {plan.buttonText}
-                </Link>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+            return PlanCard;
+          }), [plans])}
         </div>
       </motion.div>
 
