@@ -1,18 +1,36 @@
 // src/pages/SignUp.jsx
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { api } from '../api/axios'; // axios instance pointed at your backend
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useLocation } from 'react-router-dom';
 
 export default function SignUp() {
+  const location = useLocation();
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
   const [confirmPassword, setConfirm] = useState('');
   const [showPassword, setShow]       = useState(false);
-  const [role, setRole]               = useState('employee');
+  const [role, setRole]               = useState(() => {
+    // Initialize role based on navigation state
+    return location.state?.fromPricing ? 'admin' : 'employee';
+  });
   const [message, setMessage]         = useState('');
   const [error, setError]             = useState('');
+  const [fromPricing, setFromPricing] = useState(() => {
+    // Initialize fromPricing based on navigation state
+    return location.state?.fromPricing || false;
+  });
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Update state if location state changes
+    if (location.state?.fromPricing) {
+      setFromPricing(true);
+      setRole('admin');
+    } else {
+      setFromPricing(false);
+    }
+  }, [location.state]);
 
   const validatePassword = (pass) => {
     const minLength = 8;
@@ -112,16 +130,27 @@ export default function SignUp() {
           <input type="checkbox" onChange={() => setShow(!showPassword)} />
           <label className="text-sm">Show Password</label>
         </div>
-        <label className="block text-sm">
-          I am signing up as:
-          <select
-            className="w-full mt-1 p-2 rounded text-black"
-            value={role}
-            onChange={e => setRole(e.target.value)}>
-            <option value="employee">Employee</option>
-            <option value="admin">Admin</option>
-          </select>
-        </label>
+        {fromPricing ? (
+          <div className="bg-blue-900/20 border border-blue-800/50 rounded-lg p-4 mb-4">
+            <p className="text-blue-300 text-sm mb-2">Please sign up as admin and choose your plan in the admin dashboard.</p>
+            <div className="text-sm">
+              <label className="block text-gray-300 mb-1">You're signing up as:</label>
+              <div className="w-full p-2 rounded bg-gray-700 text-white">Admin</div>
+              <input type="hidden" value="admin" />
+            </div>
+          </div>
+        ) : (
+          <label className="block text-sm">
+            I am signing up as:
+            <select
+              className="w-full mt-1 p-2 rounded text-black"
+              value={role}
+              onChange={e => setRole(e.target.value)}>
+              <option value="employee">Employee</option>
+              <option value="admin">Admin</option>
+            </select>
+          </label>
+        )}
         <button className="w-full bg-white text-black py-2 rounded hover:bg-gray-300">
           Register
         </button>

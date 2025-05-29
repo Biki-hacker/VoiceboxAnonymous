@@ -197,6 +197,7 @@ const PricingPage = () => {
               <div className="mt-auto">
                 <Link
                   to={plan.buttonText === 'Contact Sales' ? '/?showContact=true' : '/signup'}
+                  state={{ fromPricing: true }}
                   className={`w-full block text-center py-3 px-6 rounded-lg font-medium transition-all duration-300 ${
                     plan.popular 
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg hover:shadow-blue-500/30 hover:scale-[1.02]'
