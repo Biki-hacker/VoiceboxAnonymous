@@ -32,6 +32,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import PostCreation from '../components/PostCreation';
+import DeletionConfirmation from '../components/DeletionConfirmation';
 
 // --- Theme Hook ---
 const useTheme = () => {
@@ -413,45 +414,16 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
   return (
     <div className="mt-4 space-y-4">
       {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Comment</h3>
-          <p className="text-gray-600 dark:text-gray-300 mb-4">Are you sure you want to delete this comment? This action cannot be undone.</p>
-          {commentToDelete && (
-            <div className="mb-4 p-3 bg-gray-100 dark:bg-slate-700 rounded-md border-l-4 border-red-500">
-              <p className="text-sm text-gray-800 dark:text-gray-200 italic">
-                "{localComments.find(c => c._id === commentToDelete)?.text || 'Comment text not available'}"
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end space-x-3">
-            <button
-              onClick={handleCancelDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 disabled:opacity-50"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Deleting...
-                </>
-              ) : 'Delete'}
-            </button>
-          </div>
-        </div>
-      </div>
-      )}
+      <DeletionConfirmation
+        isOpen={showDeleteDialog}
+        onClose={handleCancelDelete}
+        title="Delete Comment"
+        itemType="comment"
+        itemPreview={commentToDelete ? localComments.find(c => c._id === commentToDelete)?.text : ''}
+        isDeleting={isLoading}
+        onConfirm={handleConfirmDelete}
+        confirmButtonText={isLoading ? 'Deleting...' : 'Delete'}
+      />
       {error && (
         <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
           {error}
@@ -1181,17 +1153,28 @@ const EmployeeDashboard = () => {
                         }`}>
                           {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : 'User'}
                         </span>
+                        {/* Debug info - can be removed after verification */}
+                        <div className="hidden">
+                          {console.log('Post debug:', {
+                            postId: post._id,
+                            postAuthor: post.author,
+                            currentUserId: localStorage.getItem('userId'),
+                            isAuthor: post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId'))
+                          })}
+                        </div>
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handlePostDelete(post._id);
-                        }}
-                        className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                        title="Delete Post"
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </button>
+                      {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handlePostDelete(post._id);
+                          }}
+                          className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                          title="Delete Post"
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      )}
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
                       {post.content}
@@ -1551,80 +1534,16 @@ const EmployeeDashboard = () => {
       )}
 
       {/* Delete Post Confirmation Dialog */}
-      <Transition.Root show={showDeletePostDialog} as={Fragment}>
-        <Dialog as="div" className="relative z-50" onClose={cancelDeletePost}>
-          <Transition.Child
-            as={Fragment}
-            enter="ease-out duration-300"
-            enterFrom="opacity-0"
-            enterTo="opacity-100"
-            leave="ease-in duration-200"
-            leaveFrom="opacity-100"
-            leaveTo="opacity-0"
-          >
-            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" />
-          </Transition.Child>
-
-          <div className="fixed inset-0 z-10 overflow-y-auto">
-            <div className="flex min-h-full items-center justify-center p-4 text-center">
-              <Transition.Child
-                as={Fragment}
-                enter="ease-out duration-300"
-                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                enterTo="opacity-100 translate-y-0 sm:scale-100"
-                leave="ease-in duration-200"
-                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
-                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-              >
-                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-slate-800 px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
-                  <div className="sm:flex sm:items-start">
-                    <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
-                      <ExclamationTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
-                    </div>
-                    <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
-                      <Dialog.Title as="h3" className="text-base font-semibold leading-6 text-gray-900 dark:text-slate-100">
-                        Delete post
-                      </Dialog.Title>
-                      <div className="mt-2">
-                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-3">
-                          Are you sure you want to delete this post? This action cannot be undone.
-                        </p>
-                        {postToDelete?.content && (
-                          <div className="mt-3 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-md border border-gray-200 dark:border-slate-600">
-                            <p className="text-sm text-gray-700 dark:text-slate-300 whitespace-pre-wrap">
-                              {postToDelete.content.length > 200 
-                                ? `${postToDelete.content.substring(0, 200)}...` 
-                                : postToDelete.content}
-                            </p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
-                    <button
-                      type="button"
-                      className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-                      onClick={confirmDeletePost}
-                      disabled={isDeletingPost}
-                    >
-                      {isDeletingPost ? 'Deleting...' : 'Delete'}
-                    </button>
-                    <button
-                      type="button"
-                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white dark:bg-slate-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-slate-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 sm:mt-0 sm:w-auto"
-                      onClick={cancelDeletePost}
-                      disabled={isDeletingPost}
-                    >
-                      Cancel
-                    </button>
-                  </div>
-                </Dialog.Panel>
-              </Transition.Child>
-            </div>
-          </div>
-        </Dialog>
-      </Transition.Root>
+      <DeletionConfirmation
+        isOpen={showDeletePostDialog}
+        onClose={cancelDeletePost}
+        title="Delete Post"
+        itemType="post"
+        itemPreview={postToDelete?.content}
+        isDeleting={isDeletingPost}
+        onConfirm={confirmDeletePost}
+        confirmButtonText={isDeletingPost ? 'Deleting...' : 'Delete'}
+      />
     </div>
   );
 };
