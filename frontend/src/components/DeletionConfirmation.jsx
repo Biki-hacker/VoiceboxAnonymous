@@ -63,10 +63,13 @@ const DeletionConfirmation = ({
               </p>
               
               {itemPreview && (
-                <div className="mt-4 bg-gray-50 dark:bg-slate-800/50 p-3 rounded-md border border-gray-200 dark:border-slate-700">
-                  <p className="text-sm text-gray-800 dark:text-slate-200 italic">
-                    "{itemPreview.length > 100 ? `${itemPreview.substring(0, 100)}...` : itemPreview}"
-                  </p>
+                <div className="mt-4 flex rounded-md overflow-hidden border border-gray-200 dark:border-slate-700">
+                  <div className="w-1 bg-red-600"></div>
+                  <div className="bg-gray-50 dark:bg-slate-800/50 p-3 flex-1">
+                    <p className="text-sm text-gray-800 dark:text-slate-200 italic">
+                      "{itemPreview.length > 100 ? `${itemPreview.substring(0, 100)}...` : itemPreview}"
+                    </p>
+                  </div>
                 </div>
               )}
               
