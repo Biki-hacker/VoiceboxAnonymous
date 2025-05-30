@@ -129,6 +129,8 @@ mongoose.connection.on('disconnected', () => {
   connectWithRetry();
 });
 
+const WebSocket = require('ws');
+
 // Start server after MongoDB connection is established
 mongoose.connection.once('open', () => {
   const PORT = process.env.PORT || 5000;
@@ -141,6 +143,72 @@ mongoose.connection.once('open', () => {
     console.log(`✉️  Contact form emails will be sent from: ${process.env.BREVO_SENDER_EMAIL || 'Not configured'}`);
     console.log(`✉️  Contact form emails will be sent to: ${process.env.YOUR_RECEIVING_EMAIL || 'Not configured'}`);
   });
+
+  // WebSocket server setup
+  const wss = new WebSocket.Server({ server });
+
+  wss.on('connection', (ws) => {
+    console.log('Client connected to WebSocket');
+
+    ws.on('message', (message) => {
+      console.log('Received message from client:', message);
+      // For now, just echo the message back to the client
+      // ws.send(`Server received: ${message}`);
+      // In a real application, you would parse the message and handle it accordingly
+      // For example, if it's a new post, broadcast it to all clients
+    });
+
+    ws.on('close', () => {
+      console.log('Client disconnected from WebSocket');
+    });
+
+    ws.on('error', (error) => {
+      console.error('WebSocket error:', error);
+    });
+  });
+
+  console.log('WebSocket server initialized and listening on the same port.');
+
+  // Function to broadcast messages to all connected clients
+  const broadcastMessage = (message) => {
+    try {
+      // Validate message format
+      if (!message || typeof message !== 'object' || !message.type) {
+        console.error('[WebSocket] Invalid message format for broadcast:', message);
+        return;
+      }
+
+      const messageString = JSON.stringify(message);
+      console.log(`[WebSocket] Broadcasting ${message.type} to ${wss.clients.size} clients`);
+      
+      let sentCount = 0;
+      wss.clients.forEach(client => {
+        if (client.readyState === WebSocket.OPEN) {
+          try {
+            client.send(messageString);
+            sentCount++;
+          } catch (err) {
+            console.error('[WebSocket] Error sending message to client:', err);
+          }
+        }
+      });
+      
+      console.log(`[WebSocket] Successfully sent ${message.type} to ${sentCount} clients`);
+    } catch (err) {
+      console.error('[WebSocket] Broadcast error:', err);
+    }
+  };
+
+  // Make broadcastMessage available to routes
+  app.set('broadcastMessage', broadcastMessage);
+
+  // Example of how you might use broadcastMessage from your routes (this is conceptual)
+  // app.post('/api/posts', async (req, res) => {
+  //   // ... your existing post creation logic ...
+  //   const newPost = {}; // your newly created post object
+  //   broadcastMessage({ type: 'NEW_POST', payload: newPost });
+  //   res.status(201).json(newPost);
+  // });
 
   // Handle server errors
   server.on('error', (err) => {

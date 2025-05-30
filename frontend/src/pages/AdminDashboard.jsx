@@ -183,6 +183,9 @@ const AdminDashboard = () => {
     const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
     const [postToDelete, setPostToDelete] = useState(null);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
+    const ws = useRef(null); // WebSocket reference
+    const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
+    const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
 
     // --- Post Deletion Handlers ---
     const confirmDeletePost = (post) => {
@@ -266,7 +269,7 @@ const AdminDashboard = () => {
                     setUserData({ email: storedEmail, role: storedRole });
                 } else {
                     localStorage.clear();
-                    navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
+                    navigate('/signin', { state: { message: 'Session expired. Please log in again.' } });
                 }
             } catch (error) {
                 console.error('Auth verification failed:', error);
@@ -520,6 +523,183 @@ const AdminDashboard = () => {
         }
     }, [userData, fetchOrganizationsList]);
 
+    // Effect to keep selectedOrgRef updated
+    useEffect(() => {
+        selectedOrgRef.current = selectedOrg;
+    }, [selectedOrg]);
+
+    // Function to fetch stats, to be reused
+    const refreshOrgStats = useCallback(async (orgId) => {
+        if (!orgId) return Promise.resolve();
+        try {
+            const statsRes = await api.get(`/posts/stats/${orgId}`);
+            setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
+            return statsRes.data;
+        } catch (err) {
+            console.error(`AdminDashboard: Error refreshing stats for org ${orgId}:`, err);
+            throw err;
+        }
+    }, [api]);
+
+    // --- WebSocket Effect for Real-time Updates ---
+    useEffect(() => {
+        if (!userData) {
+            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+                console.log('AdminDashboard: No user data, closing WebSocket.');
+                ws.current.close();
+            }
+            return; // Don't connect if no user data (not authenticated)
+        }
+
+        let reconnectAttempts = 0;
+        const maxReconnectAttempts = 5;
+        let reconnectTimeout;
+        let isMounted = true;
+        
+        // Create a wrapper for refreshOrgStats that checks isMounted
+        const safeRefreshOrgStats = async (orgId) => {
+            if (!isMounted) return Promise.resolve();
+            try {
+                return await refreshOrgStats(orgId);
+            } catch (err) {
+                console.error('Error in safeRefreshOrgStats:', err);
+                return Promise.reject(err);
+            }
+        };
+
+        const connectWebSocket = () => {
+            if (!isMounted) return;
+            
+            if (ws.current) {
+                if (ws.current.readyState === WebSocket.OPEN) return;
+                ws.current.close();
+            }
+
+            console.log(`AdminDashboard: Attempting to connect WebSocket to ${WS_URL}`);
+            ws.current = new WebSocket(WS_URL);
+
+            ws.current.onopen = () => {
+                console.log('AdminDashboard: WebSocket connected successfully.');
+                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            };
+
+            ws.current.onmessage = async (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('AdminDashboard: WebSocket message received:', message);
+                    const currentSelectedOrgId = selectedOrgRef.current?._id;
+
+                    if (!currentSelectedOrgId) {
+                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
+                        return;
+                    }
+
+                    switch (message.type) {
+                        case 'POST_CREATED':
+                            if (message.payload.organization === currentSelectedOrgId) {
+                                console.log('AdminDashboard: POST_CREATED event for current org', message.payload);
+                                setPosts(prevPosts =>
+                                    [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                                );
+                                await safeRefreshOrgStats(currentSelectedOrgId);
+                            }
+                            break;
+                        case 'POST_UPDATED':
+                            if (message.payload.organization === currentSelectedOrgId) {
+                                console.log('AdminDashboard: POST_UPDATED event for current org', message.payload);
+                                setPosts(prevPosts =>
+                                    prevPosts.map(p => (p._id === message.payload._id ? message.payload : p))
+                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                                );
+                                await safeRefreshOrgStats(currentSelectedOrgId);
+                            }
+                            break;
+                        case 'POST_DELETED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                console.log('AdminDashboard: POST_DELETED event for current org', message.payload);
+                                setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
+                                await safeRefreshOrgStats(currentSelectedOrgId);
+                            }
+                            break;
+                        case 'COMMENT_CREATED':
+                        case 'COMMENT_UPDATED':
+                        case 'COMMENT_DELETED':
+                        case 'REACTION_UPDATED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                console.log(`AdminDashboard: ${message.type} event for current org, refreshing stats and potentially specific post.`);
+                                await safeRefreshOrgStats(currentSelectedOrgId);
+                                
+                                if (message.payload.postId) {
+                                    setPosts(prevPosts => prevPosts.map(p => {
+                                        if (p._id === message.payload.postId) {
+                                            let updatedPost = { ...p };
+                                            if (message.type === 'COMMENT_CREATED') {
+                                                updatedPost.commentCount = (updatedPost.commentCount || 0) + 1;
+                                            } else if (message.type === 'COMMENT_DELETED') {
+                                                updatedPost.commentCount = Math.max(0, (updatedPost.commentCount || 0) - 1);
+                                            }
+                                            return updatedPost;
+                                        }
+                                        return p;
+                                    }));
+                                }
+                            }
+                            break;
+                        default:
+                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
+                    }
+                } catch (error) {
+                    console.error('AdminDashboard: Failed to process WebSocket message:', error);
+                }
+            };
+
+            ws.current.onerror = (error) => {
+                console.error('AdminDashboard: WebSocket error:', error);
+            };
+
+            ws.current.onclose = (event) => {
+                console.log('AdminDashboard: WebSocket disconnected.', event.code, event.reason);
+                
+                if (!isMounted) return;
+                
+                // Attempt to reconnect with exponential backoff
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
+                    console.log(`AdminDashboard: Attempting to reconnect in ${delay}ms...`);
+                    
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectAttempts++;
+                        connectWebSocket();
+                    }, delay);
+                } else {
+                    console.error('AdminDashboard: Max reconnection attempts reached. Please refresh the page.');
+                }
+            };
+        };
+
+        // Initial connection
+        connectWebSocket();
+
+        // Cleanup on component unmount or when userData changes
+        return () => {
+            isMounted = false;
+            clearTimeout(reconnectTimeout);
+            
+            if (ws.current) {
+                ws.current.onopen = null;
+                ws.current.onmessage = null;
+                ws.current.onerror = null;
+                ws.current.onclose = null;
+                
+                if (ws.current.readyState === WebSocket.OPEN) {
+                    console.log('AdminDashboard: Closing WebSocket connection due to unmount or userData change.');
+                    ws.current.close();
+                }
+            }
+        };
+    }, [userData, refreshOrgStats]); // Dependencies for the WebSocket effect
+
+
     // --- Effect to handle auto-selection of an organization ---
     useEffect(() => {
         if (loading.orgList) return;
@@ -548,7 +728,50 @@ const AdminDashboard = () => {
     const regionOptions = useMemo(() => [ { value: 'all', label: 'All Regions' }, ...uniqueRegions.map(r => ({ value: r, label: r })) ], [uniqueRegions]);
     const departmentOptions = useMemo(() => [ { value: 'all', label: 'All Departments' }, ...uniqueDepartments.map(d => ({ value: d, label: d })) ], [uniqueDepartments]);
     const chartData = useMemo(() => ({ labels: stats.map(s => s._id.charAt(0).toUpperCase() + s._id.slice(1)), datasets: [{ label: 'Post Count', data: stats.map(s => s.count), backgroundColor: theme === 'dark' ? ['#374151','#4B5563','#52525B','#3F3F46','#44403C','#5B21B6'] : ['#BFDBFE','#FECACA','#A5F3FC','#FED7AA','#DDD6FE','#E9D5FF'], borderColor: theme === 'dark' ? '#4B5563' : '#E5E7EB', borderWidth: 1, hoverBackgroundColor: theme === 'dark' ? ['#4B5563','#52525B','#71717A','#52525B','#57534E','#6D28D9'] : ['#93C5FD','#FCA5A5','#67E8F9','#FDBA74','#C4B5FD','#D8B4FE'], }], }), [stats, theme]);
-    const commonChartOptions = useMemo(() => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { color: theme === 'dark' ? '#D1D5DB' : '#4B5563', padding: 20, font: { size: 12 } } }, title: { display: true, color: theme === 'dark' ? '#F3F4F6' : '#111827', font: { size: 16, weight: '600' }, padding: { bottom: 15 } }, tooltip: { backgroundColor: 'rgba(0, 0, 0, 0.75)', titleColor: '#FFFFFF', bodyColor: '#F3F4F6', padding: 10, cornerRadius: 4, } }, scales: { y: { beginAtZero: true, grid: { color: theme === 'dark' ? 'rgba(200, 200, 200, 0.1)' : '#E5E7EB' }, ticks: { color: theme === 'dark' ? '#9CA3AF' : '#6B7280' } }, x: { grid: { display: false }, ticks: { color: theme === 'dark' ? '#9CA3AF' : '#6B7280' } } } }), [theme]);
+    const commonChartOptions = useMemo(() => ({
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: {
+                    color: theme === 'dark' ? '#D1D5DB' : '#4B5563',
+                    padding: 20,
+                    font: { size: 12 }
+                }
+            },
+            title: {
+                display: true,
+                color: theme === 'dark' ? '#F3F4F6' : '#111827',
+                font: { size: 16, weight: '600' },
+                padding: { bottom: 15 }
+            },
+            tooltip: {
+                backgroundColor: 'rgba(0, 0, 0, 0.75)',
+                titleColor: '#FFFFFF',
+                bodyColor: '#F3F4F6',
+                padding: 10,
+                cornerRadius: 4
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                grid: {
+                    color: theme === 'dark' ? 'rgba(200, 200, 200, 0.1)' : '#E5E7EB'
+                },
+                ticks: {
+                    color: theme === 'dark' ? '#9CA3AF' : '#6B7280'
+                }
+            },
+            x: {
+                grid: { display: false },
+                ticks: {
+                    color: theme === 'dark' ? '#9CA3AF' : '#6B7280'
+                }
+            }
+        }
+    }), [theme]);
     const barChartOptions = useMemo(() => ({ ...commonChartOptions, plugins: { ...commonChartOptions.plugins, title: { ...commonChartOptions.plugins.title, text: 'Post Count by Type' } } }), [commonChartOptions]);
     const pieChartOptions = useMemo(() => ({ ...commonChartOptions, plugins: { ...commonChartOptions.plugins, title: { ...commonChartOptions.plugins.title, text: 'Post Type Distribution' } } }), [commonChartOptions]);
 
@@ -792,34 +1015,18 @@ const AdminDashboard = () => {
                     <Transition.Child as={Fragment} enter="transition ease-in-out duration-300 transform" enterFrom="-translate-x-full" enterTo="translate-x-0" leave="transition ease-in-out duration-300 transform" leaveFrom="translate-x-0" leaveTo="-translate-x-full">
                         <Dialog.Panel className="relative flex w-full max-w-xs flex-1 flex-col bg-white dark:bg-slate-900 pt-5 pb-4">
                             <Transition.Child as={Fragment} enter="ease-in-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in-out duration-300" leaveFrom="opacity-100" leaveTo="opacity-0">
-                                <div className="absolute top-0 right-0 -mr-12 pt-2"><button type="button" className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-inset focus:ring-white" onClick={() => setIsMobileSidebarOpen(false)}><span className="sr-only">Close sidebar</span> <XMarkIcon className="h-6 w-6 text-white" aria-hidden="true" /></button></div>
+                                <div className="absolute top-0 right-0 -mr-12 pt-2"><button type="button" className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setIsMobileSidebarOpen(false)}><span className="sr-only">Close sidebar</span> <XMarkIcon className="h-6 w-6 text-white" aria-hidden="true" /></button></div>
                             </Transition.Child>
                             <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200 dark:border-slate-700 flex-shrink-0"><BuildingOffice2Icon className="h-8 w-8 text-blue-600 dark:text-blue-500" /><span className="ml-2 text-xl font-semibold text-gray-800 dark:text-slate-100">Admin</span></div>
-                            <nav className="mt-5 flex-1 space-y-2 px-3">
-                                {sidebarNavItems.map((item) => (<button key={item.name} onClick={() => { item.action(); setIsMobileSidebarOpen(false);}} className={`w-full flex items-center px-3 py-3 rounded-md text-sm font-medium group transition-colors duration-150 ${item.current ? 'bg-gray-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-800 hover:text-gray-900 dark:hover:text-slate-100'}`}><item.icon className={`h-6 w-6 mr-3 flex-shrink-0 ${item.current ? 'text-blue-600 dark:text-blue-500' : 'text-gray-400 dark:text-slate-500 group-hover:text-gray-500 dark:group-hover:text-slate-400'}`} />{item.name}</button>))}
+                            <nav className="mt-5 flex flex-col space-y-4 items-center">
+                                {sidebarNavItems.map((item) => (<button key={item.name} onClick={() => { item.action(); setIsMobileSidebarOpen(false);}} className={`w-full flex items-center px-3 py-3 rounded-md text-sm font-medium group transition-colors duration-150 ${item.current ? 'bg-gray-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-slate-100'}`}><item.icon className="h-6 w-6 mr-3 flex-shrink-0" />{item.name}</button>))}
                             </nav>
-                            <div className="p-4 border-t border-gray-200 dark:border-slate-700">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center">
-                                  <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500 mr-2" />
-                                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                                    {userData?.email || 'Admin'}
-                                  </span>
-                                </div>
-                                <div className="flex items-center space-x-2">
-                                  <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                                  <button
-                                    onClick={() => {
-                                      handleLogout();
-                                      setIsMobileSidebarOpen(false);
-                                    }}
-                                    className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                                    title="Logout"
-                                  >
-                                    <ArrowLeftOnRectangleIcon className="h-5 w-5" />
-                                  </button>
-                                </div>
-                              </div>
+                            <div className="mt-auto flex flex-col items-center space-y-4">
+                                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+                                <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors">
+                                    <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
+                                    <span className="sr-only">Logout</span>
+                                </button>
                             </div>
                         </Dialog.Panel>
                     </Transition.Child>
@@ -843,7 +1050,7 @@ const AdminDashboard = () => {
             <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
             <MobileSidebar />
             <aside className="hidden md:flex md:w-20 lg:w-24 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-5 shadow-sm flex-shrink-0">
-                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7 lg:h-8 lg:w-8" /></div>
+                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7" /></div>
                 <nav className="flex flex-col space-y-4 items-center">
                     {sidebarNavItems.map((item) => (<button key={item.name} onClick={item.action} title={item.name} className={`p-3 lg:p-3 rounded-lg transition-colors duration-150 ${item.current ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'}`}><item.icon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">{item.name}</span></button>))}
                 </nav>
@@ -869,7 +1076,7 @@ const AdminDashboard = () => {
                                 className="flex items-center text-gray-600 dark:text-slate-300 hover:text-gray-900 dark:hover:text-white transition-colors"
                             >
                                 <ArrowLeftOnRectangleIcon className="h-5 w-5 mr-2" />
-                                <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100">Back to Dashboard</h1>
+                                <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100 truncate">Back to Dashboard</h1>
                             </button>
                         ) : (
                             <h1 className="text-lg font-semibold text-gray-800 dark:text-slate-100 truncate">Admin Dashboard</h1>
@@ -994,7 +1201,7 @@ const AdminDashboard = () => {
                             )}
                     <AnimatePresence mode="wait">
                         {loading.orgList && organizations.length === 0 && !selectedOrg ? (
-                             <motion.div key="loading-initial" {...fadeInUp} className="text-center py-20"> <svg className="animate-spin h-8 w-8 text-blue-600 dark:text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> <p className="text-gray-600 dark:text-slate-400">Loading organizations...</p> </motion.div>
+                             <motion.div key="loading-initial" {...fadeInUp} className="text-center py-20"> <svg className="animate-spin h-8 w-8 text-blue-600 dark:text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> <p className="text-gray-600 dark:text-slate-400">Loading organizations...</p> </motion.div>
                         ) : !selectedOrg && organizations.length === 0 && !loading.orgList ? (
                             <motion.div key="no-orgs-message" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><FolderOpenIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">No Organizations Found</h3><p className="text-gray-600 dark:text-slate-400 mb-4">Get started by adding your first organization.</p> <button onClick={handleOpenAddOrgModal} className="inline-flex items-center justify-center space-x-2 bg-blue-600 hover:bg-blue-700 text-white py-2.5 px-5 rounded-md text-sm font-medium transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900"><PlusIcon className="h-5 w-5" /> <span>Add Organization</span></button></div></DashboardCard> </motion.div>
                         ): !selectedOrg && organizations.length > 0 && !loading.orgList ? (
@@ -1340,7 +1547,7 @@ const AdminDashboard = () => {
             cancelButtonText="Cancel"
         />
         <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">{/* ... Manage Orgs Modal Content ... */ loading.orgList ? (<div className="text-center py-10"><p className="text-gray-600 dark:text-slate-400">Loading organizations...</p></div>) : organizations.length === 0 ? (<NothingToShow message="No organizations to manage. Add one first." />) : (<div className="space-y-3"><p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p><ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">{organizations.map((org) => (<li key={org._id} className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}><div className="flex items-center justify-between space-x-3"><div className="flex-1 min-w-0"><button onClick={() => { selectOrganization(org); setIsManageOrgModalOpen(false); }} className="text-left w-full group"><p className={`text-sm font-medium truncate ${selectedOrg?._id === org._id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{org.name}</p><p className="text-xs text-gray-500 dark:text-slate-400 truncate">ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}</p></button></div><button onClick={() => initiateDeleteOrganization(org)} disabled={loading.deleteOrg?.[org._id]} className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50" title="Delete Organization">{loading.deleteOrg?.[org._id] ? <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> : <TrashIcon className="h-4 w-4" />}</button></div></li>))}</ul></div>)}<div className="mt-6 flex justify-end"><button type="button" onClick={() => setIsManageOrgModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800">Close</button></div></Modal>
-        <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 disabled:bg-red-400 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
+        <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
         </>
     );
 };
@@ -1507,7 +1714,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       onClick={handleReaction}
       className={`flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${
         isReacted 
-          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300' 
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 text-blue-300' 
           : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
       }`}
       title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
@@ -1696,7 +1903,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           errorMessage += error.response.data.message || JSON.stringify(error.response.data);
         }
       } else if (error.request) {
-        // The request was made but no response was received
+        // The request was made but no response received
         console.error('No response received:', error.request);
         errorMessage += 'No response from server. Please check your connection.';
       } else {
@@ -1943,8 +2150,8 @@ const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
 
   // Handle keyboard events
   useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
+    const handleKeyDown = (event) => {
+      if (event.key === 'Escape') {
         onClose();
       }
     };

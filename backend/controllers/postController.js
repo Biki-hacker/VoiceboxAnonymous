@@ -32,6 +32,18 @@ exports.createPost = async (req, res) => {
     });
 
     await newPost.save();
+
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POST_CREATED',
+        payload: {
+          ...newPost.toObject(),
+          organization: newPost.orgId
+        }
+      });
+    }
+
     res.status(201).json(newPost);
   } catch (err) {
     console.error("Create post error:", err);
@@ -224,8 +236,46 @@ exports.reactToPost = async (req, res) => {
     post.markModified('reactions');
     await post.save({ session });
     await session.commitTransaction();
-    
-    // Return updated reaction status
+
+    // Send WebSocket broadcast with reaction update
+    try {
+      const broadcastMessage = req.app.get('broadcastMessage');
+      if (broadcastMessage) {
+        console.log(`Broadcasting post reaction update for post ${post._id}`);
+        
+        // Convert Mongoose document to plain object
+        const reactionsObject = {};
+        Object.keys(post.reactions || {}).forEach(key => {
+          const reaction = post.reactions[key];
+          if (!reaction) {
+            console.warn(`Reaction '${key}' is undefined for post ${post._id}`);
+            reactionsObject[key] = { count: 0, users: [] };
+            return;
+          }
+          
+          reactionsObject[key] = {
+            count: reaction.count || 0,
+            users: Array.isArray(reaction.users) ? reaction.users.map(id => id.toString()) : []
+          };
+        });
+        
+        broadcastMessage({
+          type: 'REACTION_UPDATED',
+          payload: {
+            entityType: 'post',
+            entityId: post._id.toString(),
+            postId: post._id.toString(),
+            reactions: reactionsObject,
+            organizationId: post.orgId.toString(),
+            updatedAt: new Date().toISOString()
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error broadcasting reaction update:', err);
+      // Don't fail the request if broadcast fails
+    }
+
     res.status(200).json({
       type,
       count: reaction.count,
@@ -389,6 +439,31 @@ exports.commentOnPost = async (req, res) => {
       });
     }
     
+    // Send WebSocket broadcast after the response is sent
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage && newComment) {
+      // Make sure we're not sending Mongoose-specific methods
+      const commentToBroadcast = {
+        ...newComment,
+        author: {
+          _id: req.user._id,
+          name: req.user.name || 'Unknown User',
+          email: req.user.email || 'unknown@example.com',
+          role: req.user.role || 'user'
+        },
+        createdByRole: newComment.createdByRole || 'user'
+      };
+      
+      broadcastMessage({
+        type: 'COMMENT_CREATED',
+        payload: {
+          postId: post._id,
+          comment: commentToBroadcast,
+          organizationId: post.orgId || post.organizationId
+        }
+      });
+    }
+    
   } catch (err) {
     console.error('Error adding comment:', err);
     res.status(500).json({ 
@@ -434,13 +509,32 @@ exports.deleteComment = async (req, res) => {
       return res.status(404).json({ message: 'Comment not found or already deleted' });
     }
 
+    // Broadcast the comment deletion
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'COMMENT_DELETED',
+        payload: {
+          postId: post._id,
+          commentId: commentId,
+          organizationId: post.orgId || post.organizationId
+        }
+      });
+    }
+
     res.status(200).json({ 
+      success: true,
       message: 'Comment deleted successfully',
       deletedByAdmin: isAdmin && !isAuthor // Indicate if deleted by admin who wasn't the author
     });
   } catch (err) {
     console.error('Delete comment error:', err);
-    res.status(500).json({ message: 'Error deleting comment' });
+    res.status(500).json({ 
+      success: false,
+      message: 'Error deleting comment',
+      error: process.env.NODE_ENV === 'development' ? err.message : undefined,
+      code: 'DELETE_COMMENT_ERROR'
+    });
   }
 };
 
@@ -486,6 +580,45 @@ exports.reactToComment = async (req, res) => {
     await post.save({ session, validateModifiedOnly: true });
     await session.commitTransaction();
     
+    // Send WebSocket broadcast with comment reaction update
+    try {
+      const broadcastMessage = req.app.get('broadcastMessage');
+      if (broadcastMessage) {
+        console.log(`Broadcasting comment reaction update for comment ${comment._id} in post ${post._id}`);
+        
+        // Convert Mongoose document to plain object
+        const reactionsObject = {};
+        Object.keys(comment.reactions || {}).forEach(key => {
+          const reaction = comment.reactions[key];
+          if (!reaction) {
+            console.warn(`Reaction '${key}' is undefined for comment ${comment._id}`);
+            reactionsObject[key] = { count: 0, users: [] };
+            return;
+          }
+          
+          reactionsObject[key] = {
+            count: reaction.count || 0,
+            users: Array.isArray(reaction.users) ? reaction.users.map(id => id.toString()) : []
+          };
+        });
+        
+        broadcastMessage({
+          type: 'REACTION_UPDATED',
+          payload: {
+            entityType: 'comment',
+            entityId: comment._id.toString(),
+            postId: post._id.toString(),
+            reactions: reactionsObject,
+            organizationId: post.orgId.toString(),
+            updatedAt: new Date().toISOString()
+          }
+        });
+      }
+    } catch (err) {
+      console.error('Error broadcasting comment reaction update:', err);
+      // Don't fail the request if broadcast fails
+    }
+
     // Get the updated reaction directly from the comment we just modified
     const updatedReaction = comment.reactions.get(type) || { count: 0, users: [] };
     const hasReacted = updatedReaction.users.some(id => id.equals(userId));
@@ -601,8 +734,20 @@ exports.deletePost = async (req, res) => {
     }
 
     // Delete the post
+    const postToDeleteForBroadcast = await Post.findById(postId).select('orgId').lean().session(session);
     await Post.findByIdAndDelete(postId).session(session);
     await session.commitTransaction();
+
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage && postToDeleteForBroadcast) {
+      broadcastMessage({
+        type: 'POST_DELETED',
+        payload: {
+          postId: postId,
+          organizationId: postToDeleteForBroadcast.orgId
+        }
+      });
+    }
     
     res.status(200).json({ 
       message: 'Post deleted successfully',
@@ -679,6 +824,16 @@ exports.editPost = async (req, res) => {
 
     updates.updatedAt = new Date();
     const updatedPost = await Post.findByIdAndUpdate(postId, updates, { new: true });
+
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage && updatedPost) {
+      const broadcastPayload = { ...updatedPost.toObject(), organization: updatedPost.orgId };
+      broadcastMessage({
+        type: 'POST_UPDATED',
+        payload: broadcastPayload
+      });
+    }
+
     res.status(200).json(updatedPost);
   } catch (err) {
     console.error('Edit post error:', err);
@@ -709,6 +864,19 @@ exports.editComment = async (req, res) => {
     comment.text = text;
     comment.updatedAt = new Date();
     await post.save();
+
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'COMMENT_UPDATED',
+        payload: {
+          postId: post._id,
+          comment: comment.toObject(),
+          organizationId: post.orgId
+        }
+      });
+    }
+
     res.status(200).json(post);
   } catch (err) {
     console.error('Edit comment error:', err);
