@@ -2,6 +2,7 @@
 const Post = require('../models/Post');
 const Organization = require('../models/Organization');
 const mongoose = require('mongoose');
+const supabase = require('../utils/supabaseClient');
 
 exports.createPost = async (req, res) => {
   try {
@@ -520,28 +521,99 @@ exports.reactToComment = async (req, res) => {
 };
 
 exports.deletePost = async (req, res) => {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+  
   try {
     const postId = req.params.postId;
-    const post = await Post.findById(postId);
+    const post = await Post.findById(postId).session(session);
 
-    if (!post) return res.status(404).json({ message: 'Post not found' });
+    if (!post) {
+      await session.abortTransaction();
+      return res.status(404).json({ message: 'Post not found' });
+    }
 
     // Allow admin to delete any post, otherwise check if the user is the author
     const isAdmin = req.user.role === 'admin';
     const isAuthor = post.author && post.author.toString() === req.user._id.toString();
     
     if (!isAdmin && !isAuthor) {
+      await session.abortTransaction();
       return res.status(403).json({ message: 'Unauthorized to delete this post' });
     }
 
-    await Post.findByIdAndDelete(postId);
+    // Delete media files from Supabase storage if they exist
+    if (post.mediaUrls && post.mediaUrls.length > 0) {
+      console.log('Found media URLs to delete:', post.mediaUrls);
+      
+      try {
+        // Process each media URL one by one
+        for (const url of post.mediaUrls) {
+          try {
+            // Extract the file path from the full URL
+            const urlObj = new URL(url);
+            // The pathname will be something like '/storage/v1/object/public/media/posts/filename.png'
+            // We need to extract the part after '/media/'
+            const pathParts = urlObj.pathname.split('/media/');
+            if (pathParts.length < 2) {
+              console.log(`Skipping URL (invalid format): ${url}`);
+              continue;
+            }
+            
+            const filePath = pathParts[1];
+            console.log(`Attempting to delete file: ${filePath}`);
+            
+            // Create a new Supabase client with service role key for this operation
+            const { createClient } = require('@supabase/supabase-js');
+            const supabaseAdmin = createClient(
+              process.env.SUPABASE_URL,
+              process.env.SUPABASE_SERVICE_ROLE_KEY,
+              {
+                auth: {
+                  autoRefreshToken: false,
+                  persistSession: false
+                }
+              }
+            );
+            
+            // Delete the file using the remove method with service role key
+            const { data, error } = await supabaseAdmin.storage
+              .from('media')
+              .remove([filePath]);
+              
+            if (error) {
+              console.error(`Error deleting ${filePath}:`, error);
+            } else {
+              console.log(`Successfully deleted: ${filePath}`);
+            }
+          } catch (fileError) {
+            console.error(`Error processing file ${url}:`, fileError.message);
+          }
+        }
+      } catch (mediaError) {
+        console.error('Error during media deletion:', {
+          message: mediaError.message,
+          stack: mediaError.stack,
+          name: mediaError.name
+        });
+        // Continue with post deletion even if media deletion fails
+      }
+    }
+
+    // Delete the post
+    await Post.findByIdAndDelete(postId).session(session);
+    await session.commitTransaction();
+    
     res.status(200).json({ 
       message: 'Post deleted successfully',
       deletedByAdmin: isAdmin && !isAuthor // Indicate if deleted by admin who wasn't the author
     });
   } catch (err) {
+    await session.abortTransaction();
     console.error('Delete post error:', err);
     res.status(500).json({ message: 'Error deleting post' });
+  } finally {
+    session.endSession();
   }
 };
 
