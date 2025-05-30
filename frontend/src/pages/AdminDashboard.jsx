@@ -1800,6 +1800,13 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
           <p className="text-gray-800 dark:text-slate-200">
             Are you sure you want to delete this comment? This action cannot be undone.
           </p>
+          {commentToDelete && (
+            <div className="bg-gray-100 dark:bg-slate-700 p-3 rounded-md">
+              <p className="text-sm text-gray-700 dark:text-slate-200 italic">
+                "{localComments.find(c => c._id === commentToDelete)?.text}"
+              </p>
+            </div>
+          )}
           <div className="flex justify-end space-x-3 pt-2">
             <button
               onClick={handleCancelDelete}

@@ -3,6 +3,8 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet';
+import { Dialog, Transition } from '@headlessui/react';
+import { Fragment } from 'react';
 import { api } from '../api/axios';
 import { uploadMedia } from '../utils/uploadMedia';
 import { hasReacted, toggleReaction } from '../utils/reactions';
@@ -25,7 +27,8 @@ import {
   XMarkIcon,
   PaperClipIcon,
   PaperAirplaneIcon,
-  Bars3Icon
+  Bars3Icon,
+  ExclamationTriangleIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import PostCreation from '../components/PostCreation';
@@ -412,9 +415,16 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       {/* Delete Confirmation Dialog */}
       {showDeleteDialog && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg p-6 max-w-sm w-full mx-4">
-          <h3 className="text-lg font-medium text-gray-900 mb-4">Delete Comment</h3>
-          <p className="text-gray-600 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
+        <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4">
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Comment</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">Are you sure you want to delete this comment? This action cannot be undone.</p>
+          {commentToDelete && (
+            <div className="mb-4 p-3 bg-gray-100 dark:bg-slate-700 rounded-md border-l-4 border-red-500">
+              <p className="text-sm text-gray-800 dark:text-gray-200 italic">
+                "{localComments.find(c => c._id === commentToDelete)?.text || 'Comment text not available'}"
+              </p>
+            </div>
+          )}
           <div className="flex justify-end space-x-3">
             <button
               onClick={handleCancelDelete}
@@ -710,6 +720,9 @@ const EmployeeDashboard = () => {
   }, [newPost.mediaUrls]);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
+  const [postToDelete, setPostToDelete] = useState(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false);
 
   // --- Authentication Effect ---
   useEffect(() => {
@@ -1017,6 +1030,37 @@ const EmployeeDashboard = () => {
     console.log('Comment submission is now handled by the CommentSection component');
   };
 
+  // --- Handle Post Delete ---
+  const handlePostDelete = async (postId) => {
+    const post = posts.find(p => p._id === postId);
+    if (!post) return;
+    
+    setPostToDelete(post);
+    setShowDeletePostDialog(true);
+  };
+
+  const confirmDeletePost = async () => {
+    if (!postToDelete) return;
+    
+    try {
+      setIsDeletingPost(true);
+      await api.delete(`/posts/${postToDelete._id}`);
+      setPosts(prev => prev.filter(post => post._id !== postToDelete._id));
+      setShowDeletePostDialog(false);
+      setPostToDelete(null);
+    } catch (err) {
+      console.error('Error deleting post:', err);
+      setError(err.response?.data?.message || 'Failed to delete post. Please try again.');
+    } finally {
+      setIsDeletingPost(false);
+    }
+  };
+
+  const cancelDeletePost = () => {
+    setShowDeletePostDialog(false);
+    setPostToDelete(null);
+  };
+
   // --- Handle Comment Delete ---
   const handleCommentDelete = async (postId, commentId) => {
     try {
@@ -1139,7 +1183,10 @@ const EmployeeDashboard = () => {
                         </span>
                       </div>
                       <button
-                        onClick={() => handleCommentDelete(post._id, post.comments[0]._id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handlePostDelete(post._id);
+                        }}
                         className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
                         title="Delete Post"
                       >
@@ -1502,6 +1549,82 @@ const EmployeeDashboard = () => {
           onClose={() => setViewingMedia({ isOpen: false, url: null, type: null })}
         />
       )}
+
+      {/* Delete Post Confirmation Dialog */}
+      <Transition.Root show={showDeletePostDialog} as={Fragment}>
+        <Dialog as="div" className="relative z-50" onClose={cancelDeletePost}>
+          <Transition.Child
+            as={Fragment}
+            enter="ease-out duration-300"
+            enterFrom="opacity-0"
+            enterTo="opacity-100"
+            leave="ease-in duration-200"
+            leaveFrom="opacity-100"
+            leaveTo="opacity-0"
+          >
+            <div className="fixed inset-0 bg-black/50 backdrop-blur-sm transition-opacity" />
+          </Transition.Child>
+
+          <div className="fixed inset-0 z-10 overflow-y-auto">
+            <div className="flex min-h-full items-center justify-center p-4 text-center">
+              <Transition.Child
+                as={Fragment}
+                enter="ease-out duration-300"
+                enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+                enterTo="opacity-100 translate-y-0 sm:scale-100"
+                leave="ease-in duration-200"
+                leaveFrom="opacity-100 translate-y-0 sm:scale-100"
+                leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
+              >
+                <Dialog.Panel className="relative transform overflow-hidden rounded-lg bg-white dark:bg-slate-800 px-4 pb-4 pt-5 text-left shadow-xl transition-all sm:my-8 sm:w-full sm:max-w-lg sm:p-6">
+                  <div className="sm:flex sm:items-start">
+                    <div className="mx-auto flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-100 dark:bg-red-900/30 sm:mx-0 sm:h-10 sm:w-10">
+                      <ExclamationTriangleIcon className="h-6 w-6 text-red-600 dark:text-red-400" aria-hidden="true" />
+                    </div>
+                    <div className="mt-3 text-center sm:ml-4 sm:mt-0 sm:text-left">
+                      <Dialog.Title as="h3" className="text-base font-semibold leading-6 text-gray-900 dark:text-slate-100">
+                        Delete post
+                      </Dialog.Title>
+                      <div className="mt-2">
+                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-3">
+                          Are you sure you want to delete this post? This action cannot be undone.
+                        </p>
+                        {postToDelete?.content && (
+                          <div className="mt-3 p-3 bg-gray-50 dark:bg-slate-700/50 rounded-md border border-gray-200 dark:border-slate-600">
+                            <p className="text-sm text-gray-700 dark:text-slate-300 whitespace-pre-wrap">
+                              {postToDelete.content.length > 200 
+                                ? `${postToDelete.content.substring(0, 200)}...` 
+                                : postToDelete.content}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                    <button
+                      type="button"
+                      className="inline-flex w-full justify-center rounded-md bg-red-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-red-500 sm:ml-3 sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                      onClick={confirmDeletePost}
+                      disabled={isDeletingPost}
+                    >
+                      {isDeletingPost ? 'Deleting...' : 'Delete'}
+                    </button>
+                    <button
+                      type="button"
+                      className="mt-3 inline-flex w-full justify-center rounded-md bg-white dark:bg-slate-700 px-3 py-2 text-sm font-semibold text-gray-900 dark:text-slate-100 shadow-sm ring-1 ring-inset ring-gray-300 dark:ring-slate-600 hover:bg-gray-50 dark:hover:bg-slate-600 sm:mt-0 sm:w-auto"
+                      onClick={cancelDeletePost}
+                      disabled={isDeletingPost}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </Dialog.Panel>
+              </Transition.Child>
+            </div>
+          </div>
+        </Dialog>
+      </Transition.Root>
     </div>
   );
 };
