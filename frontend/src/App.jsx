@@ -16,6 +16,7 @@ import EmployeeVerification from './components/EmployeeVerification';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
 import PricingPage from './components/PricingPage';
+import Subscriptions from './components/Subscriptions';
 import ProtectedRoute from './components/ProtectedRoute';
 
 // Component to handle page title and meta updates
@@ -94,6 +95,14 @@ function AppRoutes() {
         element={
           <ProtectedRoute requiredRole="admin">
             <AdminDashboard />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/subscriptions"
+        element={
+          <ProtectedRoute requiredRole="admin">
+            <Subscriptions />
           </ProtectedRoute>
         }
       />
