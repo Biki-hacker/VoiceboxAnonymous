@@ -24,9 +24,21 @@ const EmployeeVerification = () => {
     setEmail(storedEmail);
   }, [navigate]);
 
+  const isValidObjectId = (id) => {
+    // MongoDB ObjectId is a 24-character hex string
+    const objectIdPattern = /^[0-9a-fA-F]{24}$/;
+    return objectIdPattern.test(id);
+  };
+
   const handleSearch = async () => {
     if (!searchQuery.trim()) {
-      setError('Please enter the organization name or ID');
+      setError('Please enter the organization ID');
+      return;
+    }
+    
+    // Validate if the input is a valid MongoDB ObjectId
+    if (!isValidObjectId(searchQuery.trim())) {
+      setError('Please enter a valid organization ID (24-character hex string)');
       return;
     }
 
@@ -36,8 +48,8 @@ const EmployeeVerification = () => {
     setIsVerified(false);
     
     try {
-      // Search for organization by name or ID
-      const res = await api.get(`/organizations/search?query=${encodeURIComponent(searchQuery)}`);
+      // Search for organization by ID only
+      const res = await api.get(`/organizations/${searchQuery}`);
       
       if (res.data) {
         setOrganization(res.data);
@@ -48,7 +60,7 @@ const EmployeeVerification = () => {
       }
     } catch (err) {
       console.error('Error searching organization:', err);
-      setError(err.response?.data?.message || 'Organization not found. Please verify the name or ID and try again.');
+      setError('Organization not found. Please verify the ID and try again.');
     } finally {
       setLoading(prev => ({ ...prev, search: false }));
     }
@@ -153,16 +165,21 @@ const EmployeeVerification = () => {
           <div className="mb-4">
             <div className="mb-4">
               <label className="block text-sm font-medium mb-2 text-gray-300">
-                Organization Name or ID
+                Organization ID
               </label>
               <input
                 type="text"
-                placeholder="Enter organization name or ID"
+                placeholder="Enter organization ID"
                 className="w-full p-3 rounded-md bg-gray-700 text-white border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
+              {error && (
+                <p className="mt-2 text-sm text-red-400">
+                  {error}
+                </p>
+              )}
             </div>
             
             <button
@@ -185,7 +202,7 @@ const EmployeeVerification = () => {
             
             <div className="mt-4 p-3 bg-gray-700 rounded-md text-sm text-gray-300">
               <p className="font-medium">Need help?</p>
-              <p className="mt-1">Contact your organization administrator to get the correct organization name or ID.</p>
+              <p className="mt-1">Contact your organization administrator to get your organization ID.</p>
             </div>
           </div>
         ) : (
