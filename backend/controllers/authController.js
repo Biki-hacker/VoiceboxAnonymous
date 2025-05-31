@@ -185,6 +185,9 @@ const verifyEmployee = async (req, res, next) => {
 
 const checkVerificationStatus = async (req, res, next) => {
   try {
+    // Ensure we're sending JSON
+    res.setHeader('Content-Type', 'application/json');
+    
     // Get user from the request (set by authMiddleware)
     const user = req.user;
     

@@ -55,12 +55,24 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         const response = await api.get('/auth/verify-status', {
           signal: controller.signal,
           headers: {
+            'Accept': 'application/json',
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
             'Authorization': `Bearer ${token}`
-          }
+          },
+          // Ensure we don't get cached responses
+          params: { _t: Date.now() }
         });
-        console.log('[ProtectedRoute] /auth/verify-status response:', response);
+        
+        console.log('[ProtectedRoute] /auth/verify-status response status:', response.status);
+        console.log('[ProtectedRoute] Response headers:', response.headers);
+        console.log('[ProtectedRoute] Response data:', response.data);
+        
+        // Check if we got HTML instead of JSON
+        if (typeof response.data === 'string' && response.data.startsWith('<!DOCTYPE html>')) {
+          console.error('[ProtectedRoute] Received HTML instead of JSON. This usually means the request was not handled by the backend route.');
+          throw new Error('Invalid response format: received HTML instead of JSON');
+        }
         
         // Handle the response data
         const responseData = response?.data;
