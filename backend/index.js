@@ -20,6 +20,10 @@ const logger = require('./middleware/logger');
 
 const app = express();
 
+// --- Trust Proxy Configuration ---
+// This is needed when behind a proxy (e.g., Render, Nginx, etc.)
+app.set('trust proxy', 1); // Trust first proxy
+
 // --- Enhanced Security Headers ---
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
