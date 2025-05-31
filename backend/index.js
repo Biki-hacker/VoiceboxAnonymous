@@ -31,7 +31,9 @@ app.use((req, res, next) => {
 // --- CORS Configuration ---
 const allowedOrigins = [
   process.env.FRONTEND_URL || 'http://localhost:3000',
-  'http://localhost:5173'
+  'http://localhost:5173',
+  'https://voicebox-anonymous-g3khw2bir-biki-hackers-projects.vercel.app',
+  'https://voicebox-anonymous.vercel.app'
 ];
 
 app.use(cors({
