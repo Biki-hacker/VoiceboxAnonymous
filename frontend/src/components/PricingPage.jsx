@@ -1,10 +1,91 @@
-import React, { useMemo, useEffect, useRef } from 'react';
-import { Link } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { CheckIcon, UserGroupIcon, RocketLaunchIcon, ShieldCheckIcon } from '@heroicons/react/24/outline';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { CheckIcon, UserGroupIcon, RocketLaunchIcon, ShieldCheckIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import AnimatedText from "./AnimatedText";
+import vblogo from '../assets/vblogo1.webp';
+
+// Menu Button component
+const MenuButton = ({ isOpen, toggle }) => (
+  <motion.button
+    onClick={toggle}
+    className="flex flex-col justify-center items-center z-50 md:hidden"
+    whileHover={{ scale: 1.1 }}
+    whileTap={{ scale: 0.95 }}
+    aria-label="Toggle menu"
+    aria-expanded={isOpen}
+  >
+    {isOpen ? (
+      <XMarkIcon className="h-8 w-8 text-white" />
+    ) : (
+      <Bars3Icon className="h-8 w-8 text-white" />
+    )}
+  </motion.button>
+);
 
 const PricingPage = () => {
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+  const location = useLocation();
+  const navigate = useNavigate();
+
+  // Handle navigation to home page sections
+  const navigateToSection = (e, sectionId) => {
+    e.preventDefault();
+    
+    // Close mobile menu if open
+    if (isMenuOpen) {
+      setIsMenuOpen(false);
+    }
+    
+    // Navigate to home page first if not already there
+    if (location.pathname !== '/') {
+      navigate({
+        pathname: '/',
+        hash: sectionId,
+        state: { scrollTo: sectionId }
+      });
+    } else {
+      // If already on home page, scroll to section
+      // Use setTimeout to ensure the DOM is updated
+      setTimeout(() => {
+        const element = document.getElementById(sectionId);
+        if (element) {
+          const headerOffset = 80;
+          const elementPosition = element.getBoundingClientRect().top;
+          const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+          
+          window.scrollTo({
+            top: offsetPosition,
+            behavior: 'smooth'
+          });
+        }
+      }, 50);
+    }
+  };
+
+  // Close mobile menu when route changes
+  useEffect(() => {
+    setIsMenuOpen(false);
+  }, [location]);
+
+  // Handle scroll effect for header
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 10);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const toggleMenu = () => {
+    setIsMenuOpen(!isMenuOpen);
+  };
+
+  const handleNavigate = (path) => {
+    navigate(path);
+    window.scrollTo(0, 0);
+  };
   // Memoize plans to prevent recreation on re-renders
   const plans = useMemo(() => [
     {
@@ -77,25 +158,162 @@ const PricingPage = () => {
 
   return (
     <div className="relative overflow-x-hidden min-h-screen text-white flex flex-col bg-[#040b1d]">
-      {/* Background pattern - Memoized to prevent recreation */}
-      {useMemo(() => (
-        <div className="fixed inset-0 opacity-5" style={{ zIndex: 1 }} key="bg-pattern">
-          <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wIDVMNSAwWk02IDRMNCA2Wk0tMSAxTDEgLTFaIiBzdHJva2U9IiMxMTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"></div>
+      {/* Header */}
+      <header className={`fixed w-full z-50 transition-all duration-300 ${isScrolled ? 'bg-[#0a1122e6] backdrop-blur-md py-2 shadow-lg' : 'bg-transparent py-4'}`}>
+        <div className="w-full px-6 md:px-8 lg:px-12">
+          <div className="flex items-center h-16">
+            {/* Logo - Pushed to the left */}
+            <Link to="/" className="flex items-center group mr-auto" onClick={() => isMenuOpen && setIsMenuOpen(false)}>
+              <div className="text-2xl font-extrabold tracking-widest flex items-center relative">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.8 }} 
+                  animate={{ opacity: 1, scale: 1 }} 
+                  transition={{ duration: 0.8 }} 
+                  className="mr-3"
+                >
+                  <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
+                </motion.div>
+                <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-500 relative">
+                  Voicebox Anonymous
+                  <div className="absolute bottom-0 left-0 w-0 h-px bg-blue-400 group-hover:w-full transition-all duration-300" />
+                </span>
+              </div>
+            </Link>
+
+            {/* Desktop Navigation */}
+            <nav className="hidden md:flex items-center space-x-7">
+              {[
+                { 
+                  name: 'Home', 
+                  path: '/', 
+                  className: 'text-gray-300 font-semibold relative group hover:text-blue-400 transition-colors duration-200',
+                  hoverEffect: 'after:absolute after:content-[""] after:w-0 after:h-0.5 after:bg-blue-400 after:bottom-0 after:left-0 group-hover:after:w-full after:transition-all after:duration-300 after:rounded-full'
+                },
+                { 
+                  name: 'Features', 
+                  href: '#features', 
+                  className: 'text-gray-300 font-semibold relative group hover:text-blue-400 transition-colors duration-200',
+                  hoverEffect: 'after:absolute after:content-[""] after:w-0 after:h-0.5 after:bg-blue-400 after:bottom-0 after:left-0 group-hover:after:w-full after:transition-all after:duration-300 after:rounded-full'
+                },
+                { 
+                  name: 'About', 
+                  href: '#about', 
+                  className: 'text-gray-300 font-semibold relative group hover:text-blue-400 transition-colors duration-200',
+                  hoverEffect: 'after:absolute after:content-[""] after:w-0 after:h-0.5 after:bg-blue-400 after:bottom-0 after:left-0 group-hover:after:w-full after:transition-all after:duration-300 after:rounded-full'
+                },
+                { name: 'Pricing', path: '/pricing', className: 'text-blue-400 font-semibold border-b-2 border-blue-400' },
+              ].map((item, idx) => (
+                <Link 
+                  key={idx}
+                  to={item.href ? `/#${item.href.substring(1)}` : item.path}
+                  onClick={(e) => {
+                    if (item.href) {
+                      navigateToSection(e, item.href.substring(1));
+                    } else {
+                      e.preventDefault();
+                      navigate(item.path);
+                    }
+                  }}
+                  className={`${item.className || 'text-gray-300 hover:text-blue-400'} ${item.hoverEffect || ''} inline-block py-1`}
+                >
+                  {item.name}
+                </Link>
+              ))}
+              <div className="flex items-center space-x-2">
+                <Link
+                  to="/signin"
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium rounded-full transition-colors"
+                >
+                  Sign In
+                </Link>
+                <Link
+                  to="/signup"
+                  className="px-4 py-2 bg-transparent border border-blue-500 text-blue-400 hover:bg-blue-500 hover:text-white transition-all duration-300 ease-in-out text-sm font-medium rounded-full shadow-sm hover:shadow-md hover:shadow-blue-500/20"
+                >
+                  Sign Up
+                </Link>
+              </div>
+            </nav>
+
+            {/* Mobile menu button */}
+            <div className="md:hidden">
+              <MenuButton isOpen={isMenuOpen} toggle={toggleMenu} />
+            </div>
+          </div>
         </div>
-      ), [])}
-      
-      {/* Gradient overlays - Memoized to prevent recreation */}
-      {useMemo(() => (
-        <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} key="gradient-overlays">
-          <div className="absolute -right-64 -top-64 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-blue-500/5 to-blue-700/5 blur-3xl"></div>
-          <div className="absolute -left-64 -bottom-64 w-[600px] h-[600px] rounded-full bg-gradient-to-tr from-blue-400/5 to-indigo-500/5 blur-3xl"></div>
-        </div>
-      ), [])}
-      
-      {/* Hero Section */}
-      <section className="relative flex flex-col justify-center px-6 md:px-16 lg:px-24 pt-24 pb-20 md:pt-32" style={{ position: 'relative', zIndex: 2 }}>
+
+        {/* Mobile menu */}
+        <AnimatePresence>
+          {isMenuOpen && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+              className="md:hidden overflow-hidden"
+            >
+              <div className="px-2 pt-2 pb-3 space-y-1 bg-[#0a1122] border-t border-gray-800">
+                {[
+                  { name: 'Home', path: '/' },
+                  { name: 'Features', path: '/#features' },
+                  { name: 'About', path: '/#about' },
+                  { name: 'Pricing', path: '/pricing' },
+                ].map((item) => (
+                  <motion.button
+                    key={item.name}
+                    onClick={() => handleNavigate(item.path)}
+                    className={`w-full text-left px-3 py-2 rounded-md text-base font-medium ${
+                      location.pathname === item.path || 
+                      (location.pathname === '/' && item.path === '/')
+                        ? 'bg-blue-900/30 text-blue-300' 
+                        : 'text-gray-300 hover:bg-gray-800/50 hover:text-white'
+                    }`}
+                    whileHover={{ x: 5 }}
+                    transition={{ type: 'spring', stiffness: 400, damping: 30 }}
+                  >
+                    {item.name}
+                  </motion.button>
+                ))}
+                <div className="pt-2 border-t border-gray-800 mt-2">
+                  <Link
+                    to="/login"
+                    className="block w-full text-center px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-base font-medium rounded-md mb-2"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    to="/register"
+                    className="block w-full text-center px-4 py-2 bg-transparent border border-blue-500 text-blue-400 hover:bg-blue-900/20 text-base font-medium rounded-md"
+                  >
+                    Sign Up
+                  </Link>
+                </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </header>
+
+      {/* Add padding to account for fixed header */}
+      <div className="pt-16">
+        {/* Background pattern - Memoized to prevent recreation */}
+        {useMemo(() => (
+          <div className="fixed inset-0 opacity-5" style={{ zIndex: 1 }} key="bg-pattern">
+            <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI1IiBoZWlnaHQ9IjUiPgo8cmVjdCB3aWR0aD0iNSIgaGVpZ2h0PSI1IiBmaWxsPSIjZmZmIj48L3JlY3Q+CjxwYXRoIGQ9Ik0wIDVMNSAwWk02IDRMNCA2Wk0tMSAxTDEgLTFaIiBzdHJva2U9IiMxMTEiIHN0cm9rZS13aWR0aD0iMSI+PC9wYXRoPgo8L3N2Zz4=')]"></div>
+          </div>
+        ), [])}
         
-        <div className="container mx-auto relative z-10">
+        {/* Gradient overlays - Memoized to prevent recreation */}
+        {useMemo(() => (
+          <div className="fixed inset-0 pointer-events-none" style={{ zIndex: 1 }} key="gradient-overlays">
+            <div className="absolute -right-64 -top-64 w-[600px] h-[600px] rounded-full bg-gradient-to-br from-blue-500/5 to-blue-700/5 blur-3xl"></div>
+            <div className="absolute -left-64 -bottom-64 w-[600px] h-[600px] rounded-full bg-gradient-to-tr from-blue-400/5 to-indigo-500/5 blur-3xl"></div>
+          </div>
+        ), [])}
+        
+        {/* Hero Section */}
+        <section className="relative flex flex-col justify-center px-6 md:px-16 lg:px-24 pt-24 pb-20 md:pt-32" style={{ position: 'relative', zIndex: 2 }}>
+          <div className="container mx-auto relative z-10">
           <motion.div 
             className="max-w-4xl mx-auto text-center"
             initial={{ opacity: 0, y: 30 }}
@@ -231,21 +449,25 @@ const PricingPage = () => {
         </div>
       </motion.div>
 
+      {/* Footer Links */}
+      <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto py-2 border-t border-gray-800/50">
+        <div className="flex space-x-6">
+          <a href="#" className="text-xs text-gray-400 hover:text-blue-400 transition-colors duration-200">
+            Terms of Service
+          </a>
+          <a href="#" className="text-xs text-gray-400 hover:text-blue-400 transition-colors duration-200">
+            Privacy Policy
+          </a>
+        </div>
+      </div>
+      
       {/* Footer */}
-      <footer className="border-t border-gray-800/50 py-8 bg-[#0A0F1F]/50 backdrop-blur-sm">
+      <footer className="py-8 bg-[#0A0F1F]/50 backdrop-blur-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex flex-col md:flex-row justify-between items-center">
             <p className="text-sm text-gray-400">
               © {new Date().getFullYear()} Voicebox Anonymous. All rights reserved.
             </p>
-            <div className="mt-4 md:mt-0 flex space-x-6">
-              <a href="#" className="text-sm text-gray-400 hover:text-blue-400 transition-colors duration-200">
-                Terms of Service
-              </a>
-              <a href="#" className="text-sm text-gray-400 hover:text-blue-400 transition-colors duration-200">
-                Privacy Policy
-              </a>
-            </div>
             <p className="mt-4 md:mt-0 text-sm text-gray-500 flex items-center">
               <span>Powered by</span>
               <span className="ml-1 font-medium bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-300">Nexlify Studios</span>
@@ -253,6 +475,7 @@ const PricingPage = () => {
           </div>
         </div>
       </footer>
+    </div>
     </div>
   );
 };

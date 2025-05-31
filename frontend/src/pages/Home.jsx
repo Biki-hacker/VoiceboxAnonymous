@@ -291,6 +291,39 @@ export default function Home() {
     return () => window.removeEventListener("mousemove", onMouseMove);
   }, []);
 
+  // Handle scroll to section when navigating from other pages
+  useEffect(() => {
+    const handleHashChange = () => {
+      const hash = window.location.hash.substring(1);
+      if (hash) {
+        // Small delay to ensure the DOM is fully rendered
+        setTimeout(() => {
+          const element = document.getElementById(hash);
+          if (element) {
+            const headerOffset = 80;
+            const elementPosition = element.getBoundingClientRect().top;
+            const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+            
+            window.scrollTo({
+              top: offsetPosition,
+              behavior: 'smooth'
+            });
+          }
+        }, 100);
+      }
+    };
+
+    // Initial check
+    handleHashChange();
+
+    // Listen for hash changes
+    window.addEventListener('hashchange', handleHashChange);
+    
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, []);
+
   useEffect(() => { if (isInView) controls.start("visible"); }, [controls, isInView]);
 
   useEffect(() => {
@@ -630,9 +663,34 @@ export default function Home() {
       )}
 
 
-      <motion.footer initial={{ opacity: 0 }} whileInView={{ opacity: 1 }} viewport={{ once: true, amount: 0.1 }} transition={{ duration: 0.8 }} className="text-center py-10 text-gray-400 text-sm backdrop-blur-md z-10 border-t border-gray-700 mt-auto">
-        &copy; {new Date().getFullYear()} Voicebox Anonymous. All rights reserved.
-      </motion.footer>
+      {/* Footer Links */}
+      <div className="w-full border-t border-gray-800/50">
+        <div className="px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto py-2">
+          <div className="flex space-x-6">
+            <a href="#" className="text-xs text-gray-400 hover:text-blue-400 transition-colors duration-200">
+              Terms of Service
+            </a>
+            <a href="#" className="text-xs text-gray-400 hover:text-blue-400 transition-colors duration-200">
+              Privacy Policy
+            </a>
+          </div>
+        </div>
+      </div>
+      
+      {/* Footer */}
+      <footer className="py-8 bg-[#0A0F1F]/50 backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex flex-col md:flex-row justify-between items-center">
+            <p className="text-sm text-gray-400">
+              © {new Date().getFullYear()} Voicebox Anonymous. All rights reserved.
+            </p>
+            <p className="mt-4 md:mt-0 text-sm text-gray-500 flex items-center">
+              <span>Powered by</span>
+              <span className="ml-1 font-medium bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-300">Nexlify Studios</span>
+            </p>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
