@@ -18,6 +18,7 @@ import EmployeeDashboard from './pages/EmployeeDashboard';
 import PricingPage from './components/PricingPage';
 import Subscriptions from './components/Subscriptions';
 import ProtectedRoute from './components/ProtectedRoute';
+import TermsPolicy from './components/TermsPolicy';
 
 // Component to handle page title and meta updates
 const PageMetadata = () => {
@@ -47,6 +48,12 @@ const PageMetadata = () => {
         return {
           title: 'Create Account - Voicebox Anonymous',
           description: 'Create a new Voicebox Anonymous account to enable secure, anonymous feedback in your organization.',
+        };
+      case '/terms-and-policy':
+        return {
+          title: 'Terms of Service & Privacy Policy - Voicebox Anonymous',
+          description: 'Read our Terms of Service and Privacy Policy to understand how we handle your data and the terms of using our service.',
+          keywords: 'terms of service, privacy policy, legal, data protection, terms and conditions',
         };
       case '/forgotpassword':
         return {
@@ -122,7 +129,9 @@ function AppRoutes() {
           </ProtectedRoute>
         }
       />
-
+      
+      {/* Public Routes */}
+      <Route path="/terms-and-policy" element={<TermsPolicy />} />
     </Routes>
   );
 }
