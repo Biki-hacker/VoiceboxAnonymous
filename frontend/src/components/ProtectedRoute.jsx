@@ -54,7 +54,6 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         // Verify with backend
         const response = await api.get('/auth/verify-status', {
           signal: controller.signal,
-          params: { email },
           headers: {
             'Cache-Control': 'no-cache',
             'Pragma': 'no-cache',
@@ -63,7 +62,16 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         });
         console.log('[ProtectedRoute] /auth/verify-status response:', response);
         
+        // Handle the response data
         const responseData = response?.data;
+        
+        // If the response indicates the user needs to log in
+        if (responseData?.requiresLogin) {
+          console.log('[ProtectedRoute] Authentication required, redirecting to login');
+          localStorage.clear();
+          if (isMounted) setIsAuthorized(false);
+          return;
+        }
         
         // Extract user data from the response
         // The new format has user data in response.data.data

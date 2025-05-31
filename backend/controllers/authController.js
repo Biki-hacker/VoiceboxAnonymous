@@ -192,7 +192,8 @@ const checkVerificationStatus = async (req, res, next) => {
       return res.status(401).json({
         success: false,
         message: 'Not authenticated',
-        code: 'NOT_AUTHENTICATED'
+        code: 'NOT_AUTHENTICATED',
+        requiresLogin: true
       });
     }
 
