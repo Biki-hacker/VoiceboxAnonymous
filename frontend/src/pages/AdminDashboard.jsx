@@ -13,7 +13,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
     BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon,
-    UserCircleIcon, ChevronDownIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
+    UserCircleIcon, UserGroupIcon, ChevronDownIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
@@ -794,6 +794,76 @@ const AdminDashboard = () => {
     const handleOpenEditParamsModal = () => {
         if (!selectedOrg) return; const currentFields = selectedOrg.verificationFields || []; setVerificationParamsInput(currentFields.join(', ')); setError(prev => ({ ...prev, modal: null })); setIsEditParamsModalOpen(true);
     };
+
+    // --- Admin Emails Management ---
+    const [adminEmailsInput, setAdminEmailsInput] = useState('');
+    const [isUpdatingAdminEmails, setIsUpdatingAdminEmails] = useState(false);
+    const [isEditAdminEmailsModalOpen, setIsEditAdminEmailsModalOpen] = useState(false);
+    const adminEmailsButtonRef = useRef(null);
+    const employeeEmailsButtonRef = useRef(null);
+
+    const handleOpenEditAdminEmailsModal = (e) => {
+        e?.target?.blur();
+        const currentEmails = selectedOrg.adminEmails?.map(e => e.email) || [];
+        setAdminEmailsInput(currentEmails.join(', '));
+        setIsEditAdminEmailsModalOpen(true);
+    };
+
+    const handleUpdateAdminEmails = async () => {
+        if (!selectedOrg) return;
+
+        try {
+            setIsUpdatingAdminEmails(true);
+            
+            // Parse and validate emails
+            const emails = adminEmailsInput
+                .split(',')
+                .map(email => email.trim())
+                .filter(Boolean);
+
+            // Basic email validation
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            const invalidEmails = emails.filter(email => !emailRegex.test(email));
+            
+            if (invalidEmails.length > 0) {
+                setError(prev => ({ ...prev, modal: `Invalid email format: ${invalidEmails.join(', ')}` }));
+                return;
+            }
+
+            if (emails.length > 5) {
+                setError(prev => ({ ...prev, modal: 'Maximum 5 admin emails allowed' }));
+                return;
+            }
+
+
+            // Prepare the request data
+            const requestData = {
+                emails: emails.map(email => email.trim().toLowerCase())
+            };
+
+            const orgId = selectedOrg._id;
+            if (!orgId || !/^[0-9a-fA-F]{24}$/.test(orgId)) {
+                throw new Error(`Invalid organization ID format: ${orgId}`);
+            }
+
+            await api.put(`/organizations/${orgId}/admin-emails`, requestData);
+            
+            // Refresh organization data
+            const { data: updatedOrg } = await api.get(`/organizations/${orgId}`);
+            setSelectedOrg(updatedOrg);
+            setOrganizations(orgs => orgs.map(o => o._id === updatedOrg._id ? updatedOrg : o));
+            
+            setIsEditAdminEmailsModalOpen(false);
+        } catch (error) {
+            console.error('Error updating admin emails:', error);
+            setError(prev => ({ 
+                ...prev, 
+                modal: error.response?.data?.message || 'Failed to update admin emails' 
+            }));
+        } finally {
+            setIsUpdatingAdminEmails(false);
+        }
+    };
     const handleConfirmEditParams = () => {
         if (!selectedOrg) return; const fields = verificationParamsInput.split(',').map(f => f.trim()).filter(Boolean); setLoading(prev => ({ ...prev, modal: true })); setError(prev => ({ ...prev, modal: null }));
         api.patch(`/organizations/${selectedOrg._id}`, { verificationFields: fields })
@@ -801,7 +871,8 @@ const AdminDashboard = () => {
             .catch(err => { console.error('Error updating parameters:', err); setError(prev => ({ ...prev, modal: err.response?.data?.message || 'Failed to update parameters.' })); })
             .finally(() => { setLoading(prev => ({ ...prev, modal: false })); });
     };
-    const handleOpenEditEmailsModal = () => {
+    const handleOpenEditEmailsModal = (e) => {
+        e?.target?.blur();
         const currentEmails = selectedOrg.employeeEmails?.map(e => e.email) || [];
         setEmailsInput(currentEmails.join(', '));
         setIsEditEmailsModalOpen(true);
@@ -998,12 +1069,21 @@ const AdminDashboard = () => {
     
     const handleLogout = () => { localStorage.clear(); navigate('/signin'); };
 
+    // State for Co-admin Orgs Modal
+    const [isCoAdminOrgsModalOpen, setIsCoAdminOrgsModalOpen] = useState(false);
+    
+    // Handler for opening Co-admin Orgs modal
+    const handleOpenCoAdminOrgsModal = () => {
+        setIsCoAdminOrgsModalOpen(true);
+    };
+
     // --- Sidebar Items ---
     const sidebarNavItems = [
         { name: 'Add Organization', icon: PlusIcon, action: handleOpenAddOrgModal, current: isAddOrgModalOpen },
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
-        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
         { name: 'Subscriptions', icon: CreditCardIcon, action: () => navigate('/subscriptions'), current: window.location.pathname === '/subscriptions' },
+        { name: 'Co-admin Orgs', icon: UserGroupIcon, action: handleOpenCoAdminOrgsModal, current: isCoAdminOrgsModalOpen },
+        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
     ];
 
     // --- Mobile Sidebar Component ---
@@ -1208,7 +1288,7 @@ const AdminDashboard = () => {
                              <motion.div key="select-org-prompt" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><MagnifyingGlassIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Welcome, Admin!</h3><p className="text-gray-600 dark:text-slate-400">Please select an organization from the "Manage Orgs" menu or add a new one to view details.</p></div></DashboardCard> </motion.div>
                         ) : selectedOrg ? (
                             <motion.div key={selectedOrg._id} className="space-y-6 md:space-y-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"><button onClick={handleOpenEditEmailsModal} title="Manage Employee Emails" className="flex items-center space-x-1.5 px-3 py-2 bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md text-xs sm:text-sm text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-950 transition-colors"><IdentificationIcon className="h-4 w-4"/> <span>Manage Emails</span></button></div></div>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"></div></div>
                                 
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Employee Access</h3>
                                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
@@ -1230,13 +1310,48 @@ const AdminDashboard = () => {
                                                 )}
                                             </div>
                                             <button
+                                                ref={employeeEmailsButtonRef}
                                                 onClick={handleOpenEditEmailsModal}
                                                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                                             >
                                                 <svg className="-ml-0.5 mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
-                                                Manage
+                                                Manage Emails
+                                            </button>
+                                        </div>
+                                    </div>
+                                </DashboardCard>
+
+                                <DashboardCard className="p-4 sm:p-6">
+                                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Admin Access</h3>
+                                    <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
+                                        <div className="flex justify-between items-center">
+                                            <div>
+                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Admin Emails</h4>
+                                                <p className="text-sm text-gray-500 dark:text-slate-400">
+                                                    {selectedOrg.adminEmails?.length > 0
+                                                        ? `${selectedOrg.adminEmails.length} admin email(s) configured`
+                                                        : 'No admin emails added'}
+                                                </p>
+                                                {selectedOrg.adminEmails?.length > 0 && (
+                                                    <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
+                                                        <p>First admin: {selectedOrg.adminEmails[0].email}</p>
+                                                        {selectedOrg.adminEmails.length > 1 && (
+                                                            <p>+ {selectedOrg.adminEmails.length - 1} more</p>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <button
+                                                ref={adminEmailsButtonRef}
+                                                onClick={handleOpenEditAdminEmailsModal}
+                                                className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-purple-500"
+                                            >
+                                                <svg className="-ml-0.5 mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                                                </svg>
+                                                Manage Emails
                                             </button>
                                         </div>
                                     </div>
@@ -1480,7 +1595,17 @@ const AdminDashboard = () => {
         {/* Modals */}
         <Modal isOpen={isAddOrgModalOpen} onClose={() => setIsAddOrgModalOpen(false)} title="Add New Organization">{/* ... Add Org Modal Content ... */}<div className="space-y-4"><div><label htmlFor="orgName" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Organization Name</label><input type="text" id="orgName" value={newOrgName} onChange={(e) => setNewOrgName(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder="Enter organization name" disabled={loading.modal} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setIsAddOrgModalOpen(false)} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmAddOrg} disabled={loading.modal || !newOrgName.trim()} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[80px]">{loading.modal ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Add'}</button></div></div></Modal>
         <Modal isOpen={isEditParamsModalOpen} onClose={() => setIsEditParamsModalOpen(false)} title={`Edit Parameters for ${selectedOrg?.name || ''}`}>{/* ... Edit Params Modal Content ... */}<div className="space-y-4"><div><label htmlFor="verifParams" className="block text-sm font-medium text-gray-700 dark:text-slate-300 mb-1">Verification Fields (comma-separated)</label><textarea id="verifParams" rows="3" value={verificationParamsInput} onChange={(e) => setVerificationParamsInput(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-blue-500 focus:border-blue-500 disabled:opacity-50" placeholder="e.g., employeeId, department, location" disabled={loading.modal} /><p className="text-xs text-gray-500 dark:text-slate-400 mt-1">Enter fields required for employee verification, separated by commas.</p></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-2"><button type="button" onClick={() => setIsEditParamsModalOpen(false)} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmEditParams} disabled={loading.modal} className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[120px]">{loading.modal ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Save Changes'}</button></div></div></Modal>
-        <Modal isOpen={isEditEmailsModalOpen} onClose={() => !isUpdatingEmails && setIsEditEmailsModalOpen(false)} title="Manage Employee Emails">
+        <Modal 
+            isOpen={isEditEmailsModalOpen} 
+            onClose={() => {
+                // Blur the button using ref
+                if (employeeEmailsButtonRef.current) {
+                    employeeEmailsButtonRef.current.blur();
+                }
+                !isUpdatingEmails && setIsEditEmailsModalOpen(false);
+            }} 
+            title="Manage Employee Emails"
+        >
             <div className="space-y-4">
                 <p className="text-sm text-gray-500">
                     Enter comma-separated email addresses (max 25)
@@ -1531,6 +1656,86 @@ const AdminDashboard = () => {
                         )}
                     </button>
                 </div>
+            </div>
+        </Modal>
+
+        {/* Admin Emails Modal */}
+        <Modal 
+            isOpen={isEditAdminEmailsModalOpen} 
+            onClose={() => {
+                // Blur the button using ref
+                if (adminEmailsButtonRef.current) {
+                    adminEmailsButtonRef.current.blur();
+                }
+                !isUpdatingAdminEmails && setIsEditAdminEmailsModalOpen(false);
+            }} 
+            title="Manage Admin Emails"
+        >
+            <div className="space-y-4">
+                <p className="text-sm text-gray-500">
+                    Enter comma-separated email addresses (max 5)
+                </p>
+                <textarea
+                    className="w-full p-3 border border-gray-300 dark:border-slate-600 rounded-md h-32 font-mono text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                    placeholder="admin1@example.com, admin2@example.com"
+                    value={adminEmailsInput}
+                    onChange={(e) => setAdminEmailsInput(e.target.value)}
+                    disabled={isUpdatingAdminEmails}
+                />
+                <div className="text-xs text-gray-500">
+                    <p>• Enter one email per line or separate with commas</p>
+                    <p>• Only the first 5 emails will be saved</p>
+                    <p>• Invalid emails will be automatically removed</p>
+                    <p className="text-purple-600 dark:text-purple-400 font-medium mt-1">• These admins will have full access to manage this organization</p>
+                </div>
+                <div className="flex justify-between items-center mt-2">
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
+                        {adminEmailsInput ? adminEmailsInput.split(/[,\n]/).filter(Boolean).length : 0} email(s)
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-slate-400">
+                        Max 5 admin emails
+                    </span>
+                </div>
+                <div className="flex justify-end space-x-3 pt-2">
+                    <button
+                        onClick={() => setIsEditAdminEmailsModalOpen(false)}
+                        disabled={isUpdatingAdminEmails}
+                        className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-gray-100 dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-200 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={handleUpdateAdminEmails}
+                        disabled={isUpdatingAdminEmails || !adminEmailsInput.trim()}
+                        className="px-4 py-2 text-sm font-medium text-white bg-purple-600 border border-transparent rounded-md shadow-sm hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-purple-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[120px]"
+                    >
+                        {isUpdatingAdminEmails ? (
+                            <>
+                                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Saving...
+                            </>
+                        ) : (
+                            'Save Changes'
+                        )}
+                    </button>
+                </div>
+            </div>
+        </Modal>
+
+        {/* Co-admin Orgs Modal */}
+        <Modal 
+            isOpen={isCoAdminOrgsModalOpen} 
+            onClose={() => setIsCoAdminOrgsModalOpen(false)} 
+            title="Co-admin Organizations"
+            size="max-w-md"
+        >
+            <div className="text-center py-8">
+                <FolderOpenIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-900 dark:text-slate-100 mb-2">No Organizations</h3>
+                <p className="text-gray-500 dark:text-slate-400">There are no co-admin organizations to display.</p>
             </div>
         </Modal>
 
