@@ -12,13 +12,13 @@ const generateTokens = (userId) => {
   const accessToken = jwt.sign(
     { userId },
     process.env.JWT_SECRET,
-    { expiresIn: '15m' }
+    { expiresIn: '30d' } // 30 days
   );
   
   const refreshToken = jwt.sign(
     { userId },
     process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + '_refresh',
-    { expiresIn: '7d' }
+    { expiresIn: '30d' } // 30 days
   );
   
   return { accessToken, refreshToken };
@@ -83,7 +83,7 @@ router.post('/login', async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days (1 month)
     });
 
     const response = {
@@ -144,7 +144,7 @@ router.post('/refresh-token', async (req, res) => {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days (1 month)
     });
 
     res.json({
