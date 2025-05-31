@@ -193,7 +193,7 @@ router.post('/verify', (req, res, next) => {
 });
 
 // Check verification status
-router.get('/verify-status', authController.checkVerificationStatus);
+router.get('/verify-status', authMiddleware, authController.checkVerificationStatus);
 
 // Verify employee email
 router.post('/verify-email', authController.verifyEmployeeEmail);
