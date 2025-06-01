@@ -186,6 +186,175 @@ const AdminDashboard = () => {
     const ws = useRef(null); // WebSocket reference
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
+    const isMounted = useRef(true); // Track component mount state
+    let reconnectAttempts = 0;
+    let maxReconnectAttempts = 5;
+    let reconnectTimeout = null;
+
+    // Initialize WebSocket connection
+    useEffect(() => {
+        const initializeWebSocket = () => {
+            if (!isMounted.current) return;
+            
+            if (ws.current) {
+                if (ws.current.readyState === WebSocket.OPEN) return;
+                ws.current.close();
+            }
+
+            console.log(`AdminDashboard: Attempting to connect WebSocket to ${WS_URL}`);
+            ws.current = new WebSocket(WS_URL);
+
+            ws.current.onopen = () => {
+                console.log('AdminDashboard: WebSocket connected successfully.');
+                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
+            };
+
+            ws.current.onmessage = async (event) => {
+                try {
+                    const message = JSON.parse(event.data);
+                    console.log('AdminDashboard: WebSocket message received:', message);
+                    const currentSelectedOrgId = selectedOrgRef.current?._id;
+
+                    if (!currentSelectedOrgId) {
+                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
+                        return;
+                    }
+
+                    switch (message.type) {
+                        case 'POST_CREATED':
+                            if (message.payload.organization === currentSelectedOrgId) {
+                                setPosts(prev => [message.payload.post, ...prev]);
+                            }
+                            break;
+                        case 'POST_UPDATED':
+                            if (message.payload.organization === currentSelectedOrgId) {
+                                setPosts(prev => 
+                                    prev.map(p => 
+                                        p._id === message.payload.post._id 
+                                            ? message.payload.post 
+                                            : p
+                                    )
+                                );
+                            }
+                            break;
+                        case 'POST_DELETED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => prev.filter(p => p._id !== message.payload.postId));
+                            }
+                            break;
+                        case 'COMMENT_CREATED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => 
+                                    prev.map(p => 
+                                        p._id === message.payload.postId 
+                                            ? { 
+                                                ...p,
+                                                comments: [...(p.comments || []), message.payload.comment]
+                                            } 
+                                            : p
+                                    )
+                                );
+                            }
+                            break;
+                        case 'COMMENT_UPDATED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => 
+                                    prev.map(p => 
+                                        p._id === message.payload.postId 
+                                            ? { 
+                                                ...p,
+                                                comments: p.comments?.map(c => 
+                                                    c._id === message.payload.comment._id 
+                                                        ? message.payload.comment 
+                                                        : c
+                                                ) || []
+                                            } 
+                                            : p
+                                    )
+                                );
+                            }
+                            break;
+                        case 'COMMENT_DELETED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => 
+                                    prev.map(p => 
+                                        p._id === message.payload.postId 
+                                            ? { 
+                                                ...p,
+                                                comments: p.comments?.filter(c => c._id !== message.payload.commentId) || []
+                                            } 
+                                            : p
+                                    )
+                                );
+                            }
+                            break;
+                        case 'REACTION_UPDATED':
+                            if (message.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => 
+                                    prev.map(p => 
+                                        p._id === message.payload.postId 
+                                            ? { 
+                                                ...p,
+                                                reactions: message.payload.reactionsSummary,
+                                                comments: p.comments?.map(c => 
+                                                    c._id === message.payload.commentId 
+                                                        ? { 
+                                                            ...c,
+                                                            reactions: message.payload.reactionsSummary
+                                                        } 
+                                                        : c
+                                                ) || []
+                                            } 
+                                            : p
+                                    )
+                                );
+                            }
+                            break;
+                        default:
+                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
+                    }
+                } catch (error) {
+                    console.error('AdminDashboard: Failed to process WebSocket message:', error);
+                }
+            };
+
+            ws.current.onerror = (error) => {
+                console.error('AdminDashboard: WebSocket error:', error);
+            };
+
+            ws.current.onclose = (event) => {
+                console.log('AdminDashboard: WebSocket disconnected.', event.code, event.reason);
+                
+                if (!isMounted.current) return;
+                
+                // Attempt to reconnect with exponential backoff
+                if (reconnectAttempts < maxReconnectAttempts) {
+                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
+                    console.log(`AdminDashboard: Attempting to reconnect in ${delay}ms...`);
+                    
+                    reconnectTimeout = setTimeout(() => {
+                        reconnectAttempts++;
+                        initializeWebSocket();
+                    }, delay);
+                } else {
+                    console.error('AdminDashboard: Max reconnection attempts reached. Please refresh the page.');
+                }
+            };
+        };
+
+        initializeWebSocket();
+
+        // Cleanup
+        return () => {
+            isMounted.current = false;
+            if (ws.current) {
+                ws.current.close();
+            }
+            if (reconnectTimeout) {
+                clearTimeout(reconnectTimeout);
+            }
+        };
+    }, [selectedOrg]);
 
     // --- Post Deletion Handlers ---
     const confirmDeletePost = (post) => {
