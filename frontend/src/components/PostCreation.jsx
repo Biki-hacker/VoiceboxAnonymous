@@ -131,7 +131,7 @@ const PostCreation = ({
       <form onSubmit={handleSubmit} className="p-4">
         {/* Post Type Tabs */}
         <div className="mb-4">
-          <div className="flex space-x-1 p-1 bg-gray-100 dark:bg-slate-700 rounded-lg">
+          <div className="flex flex-wrap gap-1 p-1 bg-gray-100 dark:bg-slate-700 rounded-lg">
             {postTypes.map((type) => (
               <button
                 key={type}
@@ -140,7 +140,7 @@ const PostCreation = ({
                   setPostType(type);
                   onPostTypeChange(type);
                 }}
-                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                className={`flex-1 min-w-[calc(50%-0.25rem)] py-2 px-3 text-sm font-medium rounded-md transition-colors ${
                   postType === type
                     ? 'bg-white dark:bg-slate-800 shadow text-blue-600 dark:text-blue-400'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-slate-600/50'

@@ -1457,7 +1457,7 @@ const EmployeeDashboard = () => {
   ];
 
   const user = {
-    name: "Anonymous Employee"
+    name: localStorage.getItem('email') || "Anonymous Employee"
   };
 
   const renderContent = () => {
@@ -1802,9 +1802,12 @@ const EmployeeDashboard = () => {
               <div className="flex items-center justify-between">
                 <div className="flex items-center">
                   <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                    {user.name}
-                  </span>
+                  <div className="text-left">
+                    <p className="text-sm font-medium text-gray-700 dark:text-slate-300">{user.name}</p>
+                    <p className="text-xs text-gray-500 dark:text-slate-400 truncate" title={localStorage.getItem('email') || ''}>
+                      {localStorage.getItem('email') || ''}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex items-center space-x-2">
                   <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
@@ -1884,9 +1887,12 @@ const EmployeeDashboard = () => {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500" />
-              <span className="text-sm font-medium text-gray-700 dark:text-slate-300 hidden sm:block">
-                {user.name}
-              </span>
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-medium text-gray-700 dark:text-slate-300">{user.name}</p>
+                <p className="text-xs text-gray-500 dark:text-slate-400 truncate" title={localStorage.getItem('email') || ''}>
+                  {localStorage.getItem('email') || ''}
+                </p>
+              </div>
             </div>
           </div>
         </header>

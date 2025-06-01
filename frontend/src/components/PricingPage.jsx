@@ -30,34 +30,6 @@ const PricingPage = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
 
-  // Check if user is logged in and redirect based on role
-  useEffect(() => {
-    const checkAuthAndRedirect = () => {
-      const token = localStorage.getItem('token');
-      const email = localStorage.getItem('email');
-      const role = localStorage.getItem('role');
-
-      if (token && email && role) {
-        // Redirect based on role
-        switch (role.toLowerCase()) {
-          case 'admin':
-            navigate('/admin');
-            break;
-          case 'employee':
-            navigate('/employee');
-            break;
-          default:
-            // Clear localStorage if role is invalid
-            localStorage.removeItem('token');
-            localStorage.removeItem('email');
-            localStorage.removeItem('role');
-        }
-      }
-    };
-
-    checkAuthAndRedirect();
-  }, [navigate]);
-
   // Handle navigation to home page sections
   const navigateToSection = (e, sectionId) => {
     e.preventDefault();
@@ -482,7 +454,7 @@ const PricingPage = () => {
                 {/* Footer Content */}
                 <div className="flex flex-col md:flex-row justify-between items-center mb-8">
                   <p className="text-sm text-gray-400">
-                    © {new Date().getFullYear()} Voicebox Anonymous. All rights reserved.
+                    &copy; {new Date().getFullYear()} Voicebox Anonymous. All rights reserved.
                   </p>
                   <p className="mt-4 md:mt-0 text-sm text-gray-500 flex items-center">
                     <span>Powered by</span>
