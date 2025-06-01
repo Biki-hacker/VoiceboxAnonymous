@@ -166,7 +166,7 @@ const TermsPolicy = () => {
           </div>
         </Link>
         <Link 
-          to="/signin" 
+          to="/" 
           className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2.5 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
         >
           Back to Home Page
