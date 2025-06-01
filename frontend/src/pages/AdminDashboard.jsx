@@ -17,7 +17,7 @@ import {
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon,
+    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon,
     FaceSmileIcon as EmojiHappyIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
@@ -1477,7 +1477,34 @@ const AdminDashboard = () => {
                              <motion.div key="select-org-prompt" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><MagnifyingGlassIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Welcome, Admin!</h3><p className="text-gray-600 dark:text-slate-400">Please select an organization from the "Manage Orgs" menu or add a new one to view details.</p></div></DashboardCard> </motion.div>
                         ) : selectedOrg ? (
                             <motion.div key={selectedOrg._id} className="space-y-6 md:space-y-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"></div></div>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5 flex items-center">
+    ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded mx-1">{selectedOrg._id}</code>
+    <button 
+        onClick={() => {
+            navigator.clipboard.writeText(selectedOrg._id);
+            // Show a tooltip that the ID was copied
+            const tooltip = document.createElement('div');
+            tooltip.className = 'fixed bg-gray-800 text-white text-xs rounded py-1 px-2 z-50 shadow-lg';
+            tooltip.textContent = 'Copied!';
+            document.body.appendChild(tooltip);
+            // Position tooltip near the cursor
+            const rect = event.target.getBoundingClientRect();
+            tooltip.style.top = `${rect.top - 30}px`;
+            tooltip.style.left = `${rect.left + rect.width/2 - 20}px`;
+            setTimeout(() => {
+                tooltip.remove();
+            }, 1500);
+        }}
+        className="group relative text-gray-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-all duration-200 p-1 -ml-1"
+        title="Copy to clipboard"
+    >
+        <div className="p-1 rounded-md group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+            <ClipboardDocumentIcon className="h-4 w-4 sm:h-4 sm:w-4" />
+        </div>
+    </button>
+    <span className="mx-1">|</span>
+    <span>Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</span>
+</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"></div></div>
                                 
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Employee Access</h3>
                                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
