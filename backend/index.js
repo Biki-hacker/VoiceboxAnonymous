@@ -87,16 +87,6 @@ app.use('/api/mail', mailRoutes);
 // --- Error Handling ---
 app.use(errorHandler);
 
-// --- Catch-all route for undefined routes ---
-app.use('/api/*', (req, res) => {
-  res.status(404).json({
-    success: false,
-    message: 'API endpoint not found',
-    code: 'NOT_FOUND',
-    path: req.originalUrl
-  });
-});
-
 // --- Request Timeout Middleware ---
 app.use((req, res, next) => {
   req.setTimeout(60000, () => {

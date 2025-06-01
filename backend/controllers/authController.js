@@ -185,18 +185,25 @@ const verifyEmployee = async (req, res, next) => {
 
 const checkVerificationStatus = async (req, res, next) => {
   try {
-    // Ensure we're sending JSON
-    res.setHeader('Content-Type', 'application/json');
+    // Get email from either authenticated user or query params
+    const email = req.user?.email || req.query.email;
     
-    // Get user from the request (set by authMiddleware)
-    const user = req.user;
-    
-    if (!user) {
-      return res.status(401).json({
+    if (!email) {
+      return res.status(400).json({
         success: false,
-        message: 'Not authenticated',
-        code: 'NOT_AUTHENTICATED',
-        requiresLogin: true
+        message: 'Email is required',
+        code: 'EMAIL_REQUIRED'
+      });
+    }
+
+    // Find the user by email
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(200).json({
+        success: true,
+        verified: false,
+        message: 'User not found',
+        code: 'USER_NOT_FOUND'
       });
     }
 
@@ -221,7 +228,7 @@ const checkVerificationStatus = async (req, res, next) => {
       if (org) {
         // Check if email is in the allowed list
         const isEmailAuthorized = org.employeeEmails?.some(
-          emp => emp.email.toLowerCase() === user.email.toLowerCase()
+          emp => emp.email.toLowerCase() === email.toLowerCase()
         );
 
         if (isEmailAuthorized) {

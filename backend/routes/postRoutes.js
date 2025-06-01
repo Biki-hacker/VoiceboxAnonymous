@@ -1,6 +1,8 @@
 // backend/routes/postRoutes.js
 const express = require('express');
 const router = express.Router();
+const { param } = require('express-validator');
+const { authMiddleware } = require('../middleware/auth');
 const {
   createPost,
   reactToPost,
@@ -14,47 +16,62 @@ const {
   deletePost,
   getReactionStatus
 } = require('../controllers/postController');
-const { param } = require('express-validator');
-
-const { authMiddleware } = require('../middleware/auth');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// Post routes with stats first (more specific)
+// Create a new post
 router.post('/', createPost);
-router.get('/stats/:orgId', getPostStats);
 
-// Post reactions
-router.route('/:postId/reactions')
-  .get(getReactionStatus) // Get post reactions
-  .post(reactToPost);      // React to post
+// Get post statistics for an organization
+router.get('/stats/:orgId', [
+  param('orgId').isMongoId().withMessage('Invalid organization ID')
+], getPostStats);
 
-// Comments
-router.route('/:postId/comments')
-  .post(commentOnPost);    // Create comment
-
-// Comment-specific routes
-router.route('/:postId/comments/:commentId')
-  .put(editComment)        // Edit comment
-  .delete(deleteComment);   // Delete comment
-
-// Comment reactions
-router.route('/:postId/comments/:commentId/reactions')
-  .get(getReactionStatus)  // Get comment reactions
-  .post(reactToComment);    // React to comment
-
-// Post CRUD operations (less specific routes last)
-router.get('/:orgId', [
+// Get posts by organization
+router.get('/org/:orgId', [
   param('orgId').isMongoId().withMessage('Invalid organization ID')
 ], getPostsByOrg);
 
-router.put('/:postId', [
-  param('postId').isMongoId().withMessage('Invalid post ID')
-], editPost);
+// Post reactions
+router.route('/:postId/reactions')
+  .all([
+    param('postId').isMongoId().withMessage('Invalid post ID')
+  ])
+  .get(getReactionStatus)
+  .post(reactToPost);
 
-router.delete('/:postId', [
-  param('postId').isMongoId().withMessage('Invalid post ID')
-], deletePost);
+// Comments
+router.route('/:postId/comments')
+  .all([
+    param('postId').isMongoId().withMessage('Invalid post ID')
+  ])
+  .post(commentOnPost);
+
+// Comment-specific routes
+router.route('/:postId/comments/:commentId')
+  .all([
+    param('postId').isMongoId().withMessage('Invalid post ID'),
+    param('commentId').isMongoId().withMessage('Invalid comment ID')
+  ])
+  .put(editComment)
+  .delete(deleteComment);
+
+// Comment reactions
+router.route('/:postId/comments/:commentId/reactions')
+  .all([
+    param('postId').isMongoId().withMessage('Invalid post ID'),
+    param('commentId').isMongoId().withMessage('Invalid comment ID')
+  ])
+  .get(getReactionStatus)
+  .post(reactToComment);
+
+// Update and delete posts
+router.route('/:postId')
+  .all([
+    param('postId').isMongoId().withMessage('Invalid post ID')
+  ])
+  .put(editPost)
+  .delete(deletePost);
 
 module.exports = router;

@@ -33,7 +33,8 @@ const authMiddleware = async (req, res, next) => {
     const publicRoutes = [
       '/health',
       '/auth/refresh-token',
-      '/auth/verify-email'
+      '/auth/verify-email',
+      '/auth/verify-status'
     ];
     
     if (publicRoutes.some(route => req.path.startsWith(route))) {
