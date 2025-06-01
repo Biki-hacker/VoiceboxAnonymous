@@ -183,6 +183,7 @@ const AdminDashboard = () => {
     const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
     const [postToDelete, setPostToDelete] = useState(null);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
+    const [deletingComment, setDeletingComment] = useState(null);
     const ws = useRef(null); // WebSocket reference
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
