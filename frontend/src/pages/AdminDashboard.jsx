@@ -358,6 +358,51 @@ const AdminDashboard = () => {
     }, [selectedOrg]);
 
     // --- Post Deletion Handlers ---
+    const handleDeletePost = async (postId) => {
+        if (!selectedOrg || !postId) return;
+        
+        try {
+            const storedToken = localStorage.getItem('token');
+            if (!storedToken) {
+                throw new Error('No authentication token found');
+            }
+            
+            const response = await api.delete(`/posts/${postId}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${storedToken}`
+                },
+                data: { organizationId: selectedOrg._id }
+            });
+            
+            // Remove the deleted post from the UI
+            setPosts(prev => prev.filter(p => p._id !== postId));
+            
+            // Close the delete dialog
+            setShowDeletePostDialog(false);
+            setPostToDelete(null);
+            
+            // Show success message
+            setPostSuccess('Post deleted successfully');
+            setTimeout(() => setPostSuccess(''), 3000);
+            
+            // Refresh stats
+            if (selectedOrg?._id) {
+                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                setStats(statsRes.data);
+            }
+            
+            return response;
+        } catch (error) {
+            console.error('Error deleting post:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
+            setPostError(errorMessage);
+            throw error;
+        } finally {
+            setIsDeletingPost(false);
+        }
+    };
+
     const confirmDeletePost = (post) => {
         setPostToDelete(post);
         setShowDeletePostDialog(true);
@@ -380,39 +425,6 @@ const AdminDashboard = () => {
             setTimeout(() => setPostError(''), 3000);
         } finally {
             setIsDeletingPost(false);
-        }
-    };
-    
-    const handleDeletePost = async (postId) => {
-        if (!selectedOrg || !postId) return;
-        
-        try {
-            const response = await api.delete(`/posts/org/${selectedOrg._id}/${postId}`);
-            
-            // Remove the deleted post from the UI
-            setPosts(prev => prev.filter(p => p._id !== postId));
-            
-            // Close the delete dialog
-            setShowDeletePostDialog(false);
-            setPostToDelete(null);
-            
-            // Show success message
-            const isAdminDelete = response.data?.deletedByAdmin;
-            if (isAdminDelete) {
-                setPostSuccess('Post deleted successfully');
-                setTimeout(() => setPostSuccess(''), 3000);
-            }
-            
-            // Refresh stats if needed
-            if (selectedOrg?._id) {
-                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-                setStats(statsRes.data);
-            }
-        } catch (error) {
-            console.error('Error deleting post:', error);
-            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
-            setPostError(errorMessage);
-            setTimeout(() => setPostError(''), 3000);
         }
     };
 
@@ -1551,16 +1563,14 @@ const AdminDashboard = () => {
                                                 value={selectedRegion} 
                                                 onChange={setSelectedRegion} 
                                                 options={regionOptions} 
-                                                icon={MapPinIcon} 
-                                                disabled={uniqueRegions.length === 0} 
+                                                icon={MapPinIcon}
                                             />
                                             <CustomSelect 
                                                 label="Department" 
                                                 value={selectedDepartment} 
                                                 onChange={setSelectedDepartment} 
                                                 options={departmentOptions} 
-                                                icon={BuildingLibraryIcon} 
-                                                disabled={uniqueDepartments.length === 0} 
+                                                icon={BuildingLibraryIcon}
                                             />
                                         </div>
                                     </div>
@@ -2301,51 +2311,68 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
     }
   };
 
+  // Handle comment deletion
+  const handleDeleteComment = async (commentId) => {
+    if (!selectedOrg?._id || !postId || !commentId) {
+      throw new Error('Missing required parameters for comment deletion');
+    }
+    
+    const storedToken = localStorage.getItem('token');
+    if (!storedToken) {
+      throw new Error('No authentication token found');
+    }
+
+    // Delete the comment using the correct endpoint format
+    const response = await api.delete(`/posts/${postId}/comments/${commentId}`, {
+      headers: {
+        'Authorization': `Bearer ${storedToken}`,
+        'Content-Type': 'application/json'
+      },
+      data: {
+        organizationId: selectedOrg._id
+      }
+    });
+
+    // Show success message if this was an admin deletion
+    if (response.data?.deletedByAdmin) {
+      setError('Comment deleted by admin.');
+      setTimeout(() => setError(''), 3000);
+    }
+
+    // Refresh comments after successful deletion
+    await fetchPostWithComments();
+    
+    return response;
+  };
+
+  // Handle delete button click - shows confirmation dialog
   const handleDeleteClick = (commentId) => {
-    const comment = localComments.find(c => c._id === commentId);
-    const preview = comment?.text?.substring(0, 100) + (comment?.text?.length > 100 ? '...' : '');
     setCommentToDelete(commentId);
     setShowDeleteDialog(true);
   };
 
+  // Handle cancel delete action
   const handleCancelDelete = () => {
     setShowDeleteDialog(false);
     setCommentToDelete(null);
   };
 
+  // Handle confirm delete action
   const handleConfirmDelete = async () => {
-    if (!commentToDelete || deletingComment) return;
+    if (!commentToDelete) return;
     
-    setDeletingComment(true);
-    setShowDeleteDialog(false);
-    setError(null);
-
     try {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found');
-      }
-
-      const response = await api.delete(`/api/posts/org/${selectedOrg._id}/${postId}/comments/${commentToDelete}`, {
-        headers: {
-          'Authorization': `Bearer ${storedToken}`
-        }
-      });
-
-      // Show success message if this was an admin deletion
-      if (response.data?.deletedByAdmin) {
-        setError('Comment deleted by admin.');
-      }
-
-      // Refresh comments after successful deletion
-      await fetchPostWithComments();
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to delete comment';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
+      setDeletingComment(true);
+      await handleDeleteComment(commentToDelete);
+      
+      // Close the dialog and reset state on success
+      setShowDeleteDialog(false);
       setCommentToDelete(null);
+    } catch (error) {
+      console.error('Error in delete confirmation:', error);
+      // Error is already set in handleDeleteComment
+    } finally {
+      setDeletingComment(false);
     }
   };
   
@@ -2355,49 +2382,17 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   return (
     <div className="mt-4 space-y-4">
       {/* Delete Confirmation Dialog for Comments */}
-      <Modal 
-        isOpen={showDeleteDialog} 
+      <DeletionConfirmation
+        isOpen={showDeleteDialog}
         onClose={handleCancelDelete}
+        onConfirm={handleConfirmDelete}
         title="Delete Comment"
-        size="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-800 dark:text-slate-200">
-            Are you sure you want to delete this comment? This action cannot be undone.
-          </p>
-          {commentToDelete && (
-            <div className="bg-gray-100 dark:bg-slate-700 p-3 rounded-md">
-              <p className="text-sm text-gray-700 dark:text-slate-200 italic">
-                "{localComments.find(c => c._id === commentToDelete)?.text}"
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end space-x-3 pt-2">
-            <button
-              onClick={handleCancelDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[100px]"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Deleting...
-                </>
-              ) : 'Delete'}
-            </button>
-          </div>
-        </div>
-      </Modal>
+        itemType="comment"
+        itemPreview={commentToDelete ? localComments.find(c => c._id === commentToDelete)?.text : ''}
+        isDeleting={deletingComment}
+        confirmButtonText={deletingComment ? 'Deleting...' : 'Delete'}
+        cancelButtonText="Cancel"
+      />
 
       {error && (
         <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">

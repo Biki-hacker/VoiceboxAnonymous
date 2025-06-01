@@ -3,7 +3,7 @@ import React, { useEffect, useState, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Dialog, Transition } from '@headlessui/react';
+import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { Fragment } from 'react';
 import { api } from '../utils/axios';  // Consolidated axios instance
 import { uploadMedia } from '../utils/uploadMedia';
@@ -19,6 +19,7 @@ import {
   BuildingOfficeIcon,
   HandThumbUpIcon as ThumbUpIcon,
   HeartIcon,
+  CheckIcon as CheckIconOutline,
   FaceSmileIcon as EmojiHappyIcon,
   FaceFrownIcon as EmojiSadIcon,
   XCircleIcon,
@@ -28,7 +29,11 @@ import {
   PaperClipIcon,
   PaperAirplaneIcon,
   Bars3Icon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  TagIcon,
+  MapPinIcon,
+  BuildingLibraryIcon,
+  ChevronUpDownIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import PostCreation from '../components/PostCreation';
@@ -66,6 +71,53 @@ const useTheme = () => {
   };
 
   return [theme, toggleTheme];
+};
+
+// --- Custom Select Component ---
+const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => {
+  const selectedOption = options.find(opt => opt.value === value) || (options.length > 0 ? options[0] : {label: 'Select', value: ''});
+  return (
+    <Listbox value={value} onChange={onChange} disabled={disabled}>
+      {({ open }) => (
+        <div className="relative w-full sm:w-40">
+          <Listbox.Label className="flex items-center text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
+            {Icon && <Icon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500" />}
+            {label}
+          </Listbox.Label>
+          <Listbox.Button className={`relative w-full cursor-default rounded-md py-3 pl-3 pr-10 text-left text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
+            <span className="block truncate text-gray-900 dark:text-slate-100">{selectedOption.label || 'Select'}</span>
+            <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+              <ChevronUpDownIcon className="h-5 w-5 text-gray-400 dark:text-slate-400" aria-hidden="true" />
+            </span>
+          </Listbox.Button>
+          <Transition show={open} as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
+            <Listbox.Options className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-slate-700 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+              {options.map((option) => (
+                <Listbox.Option 
+                  key={option.value} 
+                  className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-slate-100'}`} 
+                  value={option.value}
+                >
+                  {({ selected }) => (
+                    <>
+                      <span className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}>
+                        {option.label}
+                      </span>
+                      {selected && (
+                        <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600 dark:text-blue-400">
+                          <CheckIconOutline className="h-5 w-5" aria-hidden="true" />
+                        </span>
+                      )}
+                    </>
+                  )}
+                </Listbox.Option>
+              ))}
+            </Listbox.Options>
+          </Transition>
+        </div>
+      )}
+    </Listbox>
+  );
 };
 
 // --- Theme Toggle Button ---
@@ -731,6 +783,7 @@ const EmployeeDashboard = () => {
   const [theme, toggleTheme] = useTheme();
   const [employeeEmail, setEmployeeEmail] = useState("");
   const [organizationId, setOrganizationId] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
   const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -769,6 +822,21 @@ const EmployeeDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const ws = useRef(null); // WebSocket reference
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
+
+  // --- Fetch Organization Details ---
+  const fetchOrganizationDetails = async (orgId) => {
+    try {
+      const response = await api.get(`/organizations/${orgId}`);
+      if (response.data && response.data.name) {
+        setOrganizationName(response.data.name);
+        localStorage.setItem('organizationName', response.data.name);
+      }
+    } catch (error) {
+      console.error('Error fetching organization details:', error);
+      // Set a default name if there's an error
+      setOrganizationName('VoiceBox');
+    }
+  };
 
   // --- Authentication Effect ---
   useEffect(() => {
@@ -811,7 +879,11 @@ const EmployeeDashboard = () => {
           
           setEmployeeEmail(storedEmail);
           setOrganizationId(storedOrgId);
-          fetchPosts(); // Fetch posts after successful authentication
+          // Fetch organization details and posts in parallel
+          await Promise.all([
+            fetchOrganizationDetails(storedOrgId),
+            fetchPosts()
+          ]);
         } else {
           localStorage.clear();
           navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
@@ -1342,8 +1414,11 @@ const EmployeeDashboard = () => {
       // Fetch fresh posts to ensure we have the latest data
       await fetchPosts();
       
-      // Switch back to dashboard view
-      setViewMode('dashboard');
+      // Switch to view mode to show the posts list
+      setViewMode('view');
+      
+      // Scroll to the top of the posts list
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       
       return response.data; // Return the created post data
     } catch (err) {
@@ -1528,43 +1603,44 @@ const EmployeeDashboard = () => {
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
               <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
-                <select
-                  value={selectedPostType}
-                  onChange={(e) => setSelectedPostType(e.target.value)}
-                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Types</option>
-                  <option value="feedback">Feedback</option>
-                  <option value="complaint">Complaint</option>
-                  <option value="suggestion">Suggestion</option>
-                  <option value="public">Public</option>
-                </select>
-                <select
-                  value={selectedRegion}
-                  onChange={(e) => setSelectedRegion(e.target.value)}
-                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Regions</option>
-                  {[...new Set(posts.map(post => post.region).filter(Boolean))].map(region => (
-                    <option key={region} value={region}>{region}</option>
-                  ))}
-                </select>
-                <select
-                  value={selectedDepartment}
-                  onChange={(e) => setSelectedDepartment(e.target.value)}
-                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
-                >
-                  <option value="all">All Departments</option>
-                  {[...new Set(posts.map(post => post.department).filter(Boolean))].map(dept => (
-                    <option key={dept} value={dept}>{dept}</option>
-                  ))}
-                </select>
-                <input
-                  type="text"
-                  placeholder="Search posts..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="block w-full sm:w-48 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                <CustomSelect 
+                  label="Type" 
+                  value={selectedPostType} 
+                  onChange={setSelectedPostType} 
+                  options={[
+                    { value: 'all', label: 'All Types' },
+                    { value: 'feedback', label: 'Feedback' },
+                    { value: 'complaint', label: 'Complaint' },
+                    { value: 'suggestion', label: 'Suggestion' },
+                    { value: 'public', label: 'Public' }
+                  ]} 
+                  icon={TagIcon} 
+                />
+                <CustomSelect 
+                  label="Region" 
+                  value={selectedRegion} 
+                  onChange={setSelectedRegion} 
+                  options={[
+                    { value: 'all', label: 'All Regions' },
+                    ...Array.from(new Set(posts.map(post => post.region).filter(Boolean))).map(region => ({
+                      value: region,
+                      label: region
+                    }))
+                  ]} 
+                  icon={MapPinIcon}
+                />
+                <CustomSelect 
+                  label="Department" 
+                  value={selectedDepartment} 
+                  onChange={setSelectedDepartment} 
+                  options={[
+                    { value: 'all', label: 'All Departments' },
+                    ...Array.from(new Set(posts.map(post => post.department).filter(Boolean))).map(department => ({
+                      value: department,
+                      label: department
+                    }))
+                  ]} 
+                  icon={BuildingLibraryIcon}
                 />
               </div>
             </div>
@@ -1767,7 +1843,7 @@ const EmployeeDashboard = () => {
               className="mb-8"
             >
               <h2 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-slate-100">
-                Welcome to {localStorage.getItem('organizationName') || 'VoiceBox'} 👋
+                Welcome to VoiceBox 👋
               </h2>
               <p className="text-gray-600 dark:text-slate-400 mt-1">
                 Here are your available actions. Your contributions are valued.
@@ -1775,7 +1851,7 @@ const EmployeeDashboard = () => {
               <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-slate-400">
                 <span className="font-medium">Current Organization:</span>
                 <span className="ml-2 px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-200">
-                  {localStorage.getItem('organizationName') || 'Not specified'}
+                  {organizationName || 'Loading...'}
                 </span>
               </div>
             </motion.div>
