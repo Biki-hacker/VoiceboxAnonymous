@@ -238,6 +238,7 @@ const ContactModal = ({ isOpen, onClose, onSubmit }) => {
 
 
 export default function Home() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const controls = useAnimation();
   const heroRef = useRef(null);
