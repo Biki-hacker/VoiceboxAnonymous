@@ -235,7 +235,7 @@ const AdminDashboard = () => {
             
             // Refresh stats if needed
             if (selectedOrg?._id) {
-                const statsRes = await api.get(`/api/posts/org/${selectedOrg._id}/stats`);
+                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
                 setStats(statsRes.data);
             }
         } catch (error) {
@@ -1784,7 +1784,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       
       try {
         // Try with orgId first if available
-        const endpoint = buildEndpoint('/api/posts', true);
+        const endpoint = buildEndpoint('/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -1804,7 +1804,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         // If we have an orgId and got a 404, try without orgId
         if (orgId && error.response?.status === 404) {
           try {
-            const fallbackEndpoint = buildEndpoint('/api/posts', false);
+            const fallbackEndpoint = buildEndpoint('/posts', false);
             const fallbackResponse = await api.get(fallbackEndpoint, {
               headers: { 
                 'Content-Type': 'application/json',
@@ -1977,7 +1977,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       try {
         // Get the specific post with comments and author info populated
-        const response = await api.get(`/api/posts/org/${orgId}?postId=${postId}`);
+        const response = await api.get(`/posts/org/${orgId}?postId=${postId}`);
         
         if (!response.data) {
           throw new Error('No data received from server');
@@ -2048,7 +2048,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
-        `/api/posts/org/${selectedOrg._id}/${postId}/comments`,
+        `/posts/org/${selectedOrg._id}/${postId}/comments`, 
         { 
           text: commentText  // Only send the text, let backend handle the rest
         },

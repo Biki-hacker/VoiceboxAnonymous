@@ -30,14 +30,16 @@ const ProtectedRoute = ({ children, requiredRole }) => {
           const now = new Date().getTime();
           console.log('[ProtectedRoute] lastVerified:', lastVerified, 'now:', now);
           
+          // If we have a valid token and role, we should verify it
+          // Don't rely on cached verification if it's too old
           if (lastVerified && (now - parseInt(lastVerified, 10)) < 5 * 60 * 1000) {
             console.log('[ProtectedRoute] Using cached auth, granting access');
             if (isMounted) setIsAuthorized(true);
             return;
           }
-        }
-        
-        if (!token) {
+          
+          // If cached verification is too old, we'll verify it again below
+        } else if (!token) {
           console.log('[ProtectedRoute] No token found in localStorage, redirecting');
           if (isMounted) setIsAuthorized(false);
           return;

@@ -116,7 +116,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         if (!storedToken) return;
         
         // Try with orgId first if available
-        const endpoint = buildEndpoint('/api/posts', true);
+        const endpoint = buildEndpoint('/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -253,7 +253,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
     
     try {
       // Get the specific post with comments and author info populated
-      const response = await api.get(`/api/posts/org/${orgId}?postId=${postId}`);
+      const response = await api.get(`/posts/org/${orgId}?postId=${postId}`);
       
       console.log('Received post data:', response.data);
       
@@ -315,7 +315,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       
       console.log('Posting comment to post:', postId, 'in org:', orgId);
       const response = await api.post(
-        `/api/posts/org/${orgId}/${postId}/comments`,
+        `/posts/org/${orgId}/${postId}/comments`, 
         { 
           text: commentText  // Only send the text, let backend handle the rest
         },
@@ -388,7 +388,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       }
       
       await api.delete(
-        `/api/posts/org/${orgId}/${postId}/comments/${commentToDelete}`,
+        `/posts/org/${orgId}/${postId}/comments/${commentToDelete}`, 
         { 
           headers: { 
             'Content-Type': 'application/json',
