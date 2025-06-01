@@ -433,7 +433,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       }
       
       await api.delete(
-        `/posts/org/${orgId}/posts/${postId}/comments/${commentToDelete}`,  
+        `/posts/${postId}/comments/${commentToDelete}`,  
         { 
           headers: { 
             'Content-Type': 'application/json',

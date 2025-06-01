@@ -2294,6 +2294,8 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   };
 
   const handleDeleteClick = (commentId) => {
+    const comment = localComments.find(c => c._id === commentId);
+    const preview = comment?.text?.substring(0, 100) + (comment?.text?.length > 100 ? '...' : '');
     setCommentToDelete(commentId);
     setShowDeleteDialog(true);
   };
@@ -2304,9 +2306,9 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   };
 
   const handleConfirmDelete = async () => {
-    if (!commentToDelete || isLoading) return;
+    if (!commentToDelete || deletingComment) return;
     
-    setIsLoading(true);
+    setDeletingComment(true);
     setShowDeleteDialog(false);
     setError(null);
 
@@ -2466,38 +2468,17 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       })}
 
       {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Comment</h3>
-            <p className="text-gray-600 dark:text-slate-300 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={handleCancelDelete}
-                disabled={isLoading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleConfirmDelete}
-                disabled={isLoading}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
-              >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Deleting...
-                  </>
-                ) : 'Delete'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <DeletionConfirmation
+        isOpen={showDeleteDialog}
+        onClose={handleCancelDelete}
+        title="Delete Comment"
+        itemType="comment"
+        itemPreview={commentToDelete ? localComments.find(c => c._id === commentToDelete)?.text : ''}
+        isDeleting={deletingComment}
+        onConfirm={handleConfirmDelete}
+        confirmButtonText="Delete Comment"
+        cancelButtonText="Cancel"
+      />
     </div>
   );
 };

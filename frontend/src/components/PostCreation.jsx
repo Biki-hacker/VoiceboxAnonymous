@@ -261,7 +261,7 @@ const PostCreation = ({
           )}
           <button
             type="submit"
-            disabled={isLoading || isUploading || (!message.trim() && mediaUrls.length === 0)}
+            disabled={isLoading || isUploading || (!message.trim() && mediaUrls.length === 0)} // Disabled during loading, upload, or empty content
             className={`inline-flex items-center justify-center px-4 py-2.5 sm:py-2 border border-transparent text-sm sm:text-base font-medium rounded-lg sm:rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${buttonClassName}`}
           >
             {isUploading ? (
