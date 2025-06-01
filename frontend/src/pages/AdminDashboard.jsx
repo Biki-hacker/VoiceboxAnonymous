@@ -2118,6 +2118,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState(null);
+  const [deletingComment, setDeletingComment] = useState(false);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
