@@ -2019,7 +2019,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     
     try {
       // First try with orgId if available
-      const endpoint = buildEndpoint('/api/posts', true);
+      const endpoint = buildEndpoint('/posts', true);
       
       const response = await api.post(
         endpoint, 
@@ -2042,7 +2042,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       // If we have an orgId and got a 404, try without orgId
       if (orgId && error.response?.status === 404) {
         try {
-          const fallbackEndpoint = buildEndpoint('/api/posts', false);
+          const fallbackEndpoint = buildEndpoint('/posts', false);
           const fallbackResponse = await api.post(
             fallbackEndpoint,
             { type },
@@ -2217,9 +2217,15 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
-        `/posts/org/${selectedOrg._id}/${postId}/comments`, 
+        `/api/posts/org/${selectedOrg._id}/${postId}/comments`, 
         { 
           text: commentText  // Only send the text, let backend handle the rest
+        },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${storedToken}`
+          }
         },
         {
           headers: {
