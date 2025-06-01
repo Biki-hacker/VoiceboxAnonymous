@@ -3,16 +3,6 @@
     {
       "source": "/(.*)",
       "destination": "/index.html"
-    },
-    {
-      "source": "/updatepassword",
-      "destination": "/index.html"
-    },
-    {
-      "source": "/(.*)",
-      "destination": "/index.html"
     }
-  ],
-  "trailingSlash": false,
-  "cleanUrls": true
+  ]
 }
