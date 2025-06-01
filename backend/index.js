@@ -40,6 +40,15 @@ const allowedOrigins = [
   'https://voicebox-anonymous.vercel.app'
 ];
 
+// Health check endpoint
+app.get('/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'ok',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
 app.use(cors({
   origin: function (origin, callback) {
     if (!origin || allowedOrigins.indexOf(origin) !== -1) {
@@ -48,7 +57,7 @@ app.use(cors({
       console.warn(`🚨 CORS blocked for origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
-  },
+  }, 
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Cache-Control', 'Pragma']
