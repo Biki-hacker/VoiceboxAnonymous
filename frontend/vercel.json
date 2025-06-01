@@ -1,8 +1,9 @@
 {
-  "rewrites": [
-    { "source": "/updatepassword", "destination": "/index.html" },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "cleanUrls": true,
-  "trailingSlash": false
+  "routes": [
+    {
+      "src": "/[^.]+",
+      "dest": "/index.html",
+      "status": 200
+    }
+  ]
 }
