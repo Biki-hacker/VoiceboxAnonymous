@@ -1086,7 +1086,7 @@ const EmployeeDashboard = () => {
       const trimmedOrgId = organizationId.trim();
       
       // Use the correct endpoint format with organization ID as URL parameter
-      const response = await api.get(`/api/posts/org/${trimmedOrgId}`, {
+      const response = await api.get(`/posts/org/${trimmedOrgId}`, {
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${storedToken}`

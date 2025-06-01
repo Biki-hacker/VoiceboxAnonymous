@@ -217,7 +217,7 @@ const AdminDashboard = () => {
         if (!selectedOrg || !postId) return;
         
         try {
-            const response = await api.delete(`/api/posts/org/${selectedOrg._id}/${postId}`);
+            const response = await api.delete(`/posts/org/${selectedOrg._id}/${postId}`);
             
             // Remove the deleted post from the UI
             setPosts(prev => prev.filter(p => p._id !== postId));
@@ -324,7 +324,7 @@ const AdminDashboard = () => {
                     return { data: null };
                 }),
                 // Fetch posts with error handling
-                api.get(`/api/posts/org/${org._id}`, {
+                api.get(`/posts/org/${org._id}`, {
                     validateStatus: status => status < 500 // Don't throw for 4xx errors
                 }).catch(err => {
                     console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
