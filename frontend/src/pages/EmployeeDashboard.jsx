@@ -97,8 +97,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const orgId = localStorage.getItem('orgId');
 
   // Helper function to build the API endpoint
-  const buildEndpoint = (includeOrgId = true) => {
-    const basePath = '/posts';
+  const buildEndpoint = (basePath, includeOrgId = true) => {
     if (includeOrgId && orgId) {
       return commentId 
         ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
@@ -112,11 +111,12 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   // Fetch reaction status on mount and when postId/commentId/type changes
   useEffect(() => {
     const fetchReactionStatus = async () => {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) return;
+      
       try {
-        const storedToken = localStorage.getItem('token');
-        if (!storedToken) return;
-        
-        const endpoint = buildEndpoint(true);
+        // Try with orgId first if available
+        const endpoint = buildEndpoint('/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -124,7 +124,6 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
           }
         });
 
-        // Update local state with server data
         if (response.data?.success && response.data?.data) {
           const reactionData = response.data.data[type];
           if (reactionData) {
@@ -133,12 +132,35 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
           }
         }
       } catch (error) {
-        console.error('Error fetching reaction status:', error);
+        // If we have an orgId and got a 404, try without orgId
+        if (orgId && error.response?.status === 404) {
+          try {
+            const fallbackEndpoint = buildEndpoint('/posts', false);
+            const fallbackResponse = await api.get(fallbackEndpoint, {
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              }
+            });
+
+            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
+              const reactionData = fallbackResponse.data.data[type];
+              if (reactionData) {
+                setIsReacted(reactionData.hasReacted);
+                setCurrentCount(reactionData.count);
+              }
+            }
+          } catch (fallbackError) {
+            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
+          }
+        } else {
+          console.error('Error fetching reaction status:', error);
+        }
       }
     };
 
     fetchReactionStatus();
-  }, [postId, commentId, type]);
+  }, [postId, commentId, type, orgId]);
 
   const handleReaction = async () => {
     if (isLoading) return;
@@ -158,7 +180,9 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
     
     try {
-      const endpoint = buildEndpoint(true);
+      // First try with orgId if available
+      const endpoint = buildEndpoint('/posts', true);
+      
       const response = await api.post(
         endpoint, 
         { type },
@@ -174,15 +198,37 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       if (response.data?.success && response.data?.reaction) {
         setIsReacted(response.data.reaction.hasReacted);
         setCurrentCount(response.data.reaction.count);
-        
-        // Update local storage to persist the reaction state
-        toggleReaction(commentId || postId, type);
+        return;
       }
     } catch (error) {
-      console.error('Error updating reaction:', error);
-      // Revert optimistic updates on error
-      setIsReacted(wasReacted);
-      setCurrentCount(count);
+      // If we have an orgId and got a 404, try without orgId
+      if (orgId && error.response?.status === 404) {
+        try {
+          const fallbackEndpoint = buildEndpoint('/posts', false);
+          const fallbackResponse = await api.post(
+            fallbackEndpoint,
+            { type },
+            { 
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              } 
+            }
+          );
+
+          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
+            setIsReacted(fallbackResponse.data.reaction.hasReacted);
+            setCurrentCount(fallbackResponse.data.reaction.count);
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('Error updating reaction via fallback endpoint:', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        console.error('Error updating reaction:', error);
+        throw error;
+      }
     } finally {
       setIsLoading(false);
     }
@@ -314,7 +360,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       
       console.log('Posting comment to post:', postId, 'in org:', orgId);
       const response = await api.post(
-        `/posts/org/${orgId}/posts/${postId}/comments`,  
+        `/posts/${postId}/comments`, 
         { 
           text: commentText  // Only send the text, let backend handle the rest
         },

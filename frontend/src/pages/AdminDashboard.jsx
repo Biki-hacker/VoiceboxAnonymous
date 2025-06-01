@@ -1270,12 +1270,13 @@ const AdminDashboard = () => {
                             <nav className="mt-5 flex flex-col space-y-4 items-center">
                                 {sidebarNavItems.map((item) => (<button key={item.name} onClick={() => { item.action(); setIsMobileSidebarOpen(false);}} className={`w-full flex items-center px-3 py-3 rounded-md text-sm font-medium group transition-colors duration-150 ${item.current ? 'bg-gray-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-slate-100'}`}><item.icon className="h-6 w-6 mr-3 flex-shrink-0" />{item.name}</button>))}
                             </nav>
-                            <div className="mt-auto flex flex-col items-center space-y-4">
-                                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                                <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                                    <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-                                    <span className="sr-only">Logout</span>
-                                </button>
+                            <div className="mt-auto border-t border-gray-200 dark:border-slate-700 p-4">
+                                <div className="flex justify-between items-center">
+                                    <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+                                    <button onClick={handleLogout} className="p-2 rounded-full text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors">
+                                        <ArrowLeftOnRectangleIcon className="h-6 w-6" />
+                                    </button>
+                                </div>
                             </div>
                         </Dialog.Panel>
                     </Transition.Child>
@@ -2217,10 +2218,8 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
-        `/posts/org/${selectedOrg._id}/${postId}/comments`, 
-        { 
-          text: commentText  // Only send the text, let backend handle the rest
-        },
+        `/posts/${postId}/comments`,
+        { text: commentText },
         {
           headers: {
             'Content-Type': 'application/json',
