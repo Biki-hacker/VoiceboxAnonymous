@@ -6,6 +6,37 @@ import { useNavigate, Link, useLocation } from 'react-router-dom';
 
 export default function SignUp() {
   const location = useLocation();
+  const navigate = useNavigate();
+
+  // Check if user is logged in and redirect based on role
+  useEffect(() => {
+    const checkAuthAndRedirect = () => {
+      const token = localStorage.getItem('token');
+      const email = localStorage.getItem('email');
+      const role = localStorage.getItem('role');
+
+      if (token && email && role) {
+        // Redirect based on role
+        switch (role.toLowerCase()) {
+          case 'admin':
+            navigate('/admin');
+            break;
+          case 'employee':
+            navigate('/employee');
+            break;
+          default:
+            // Clear localStorage if role is invalid
+            localStorage.removeItem('token');
+            localStorage.removeItem('email');
+            localStorage.removeItem('role');
+            localStorage.removeItem('supabaseToken');
+        }
+      }
+    };
+
+    checkAuthAndRedirect();
+  }, [navigate]);
+
   const [email, setEmail]             = useState('');
   const [password, setPassword]       = useState('');
   const [confirmPassword, setConfirm] = useState('');
@@ -20,7 +51,6 @@ export default function SignUp() {
     // Initialize fromPricing based on navigation state
     return location.state?.fromPricing || false;
   });
-  const navigate = useNavigate();
 
   useEffect(() => {
     // Update state if location state changes

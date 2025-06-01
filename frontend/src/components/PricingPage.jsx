@@ -25,10 +25,38 @@ const MenuButton = ({ isOpen, toggle }) => (
 );
 
 const PricingPage = () => {
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isScrolled, setIsScrolled] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // Check if user is logged in and redirect based on role
+  useEffect(() => {
+    const checkAuthAndRedirect = () => {
+      const token = localStorage.getItem('token');
+      const email = localStorage.getItem('email');
+      const role = localStorage.getItem('role');
+
+      if (token && email && role) {
+        // Redirect based on role
+        switch (role.toLowerCase()) {
+          case 'admin':
+            navigate('/admin');
+            break;
+          case 'employee':
+            navigate('/employee');
+            break;
+          default:
+            // Clear localStorage if role is invalid
+            localStorage.removeItem('token');
+            localStorage.removeItem('email');
+            localStorage.removeItem('role');
+        }
+      }
+    };
+
+    checkAuthAndRedirect();
+  }, [navigate]);
 
   // Handle navigation to home page sections
   const navigateToSection = (e, sectionId) => {

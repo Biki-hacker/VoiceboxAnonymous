@@ -281,6 +281,33 @@ export default function Home() {
   }
 
   useEffect(() => {
+    const checkAuthAndRedirect = () => {
+      const token = localStorage.getItem('token');
+      const email = localStorage.getItem('email');
+      const role = localStorage.getItem('role');
+
+      if (token && email && role) {
+        // Redirect based on role
+        switch (role.toLowerCase()) {
+          case 'admin':
+            navigate('/admin');
+            break;
+          case 'employee':
+            navigate('/employee');
+            break;
+          default:
+            // Clear localStorage if role is invalid
+            localStorage.removeItem('token');
+            localStorage.removeItem('email');
+            localStorage.removeItem('role');
+        }
+      }
+    };
+
+    checkAuthAndRedirect();
+  }, [navigate]);
+
+  useEffect(() => {
     const onMouseMove = (e) => {
       const x = e.clientX; const y = e.clientY; setCursorPos({ x, y });
       const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
