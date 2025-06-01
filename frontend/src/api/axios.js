@@ -8,8 +8,8 @@ const getBaseUrl = () => {
   if (import.meta.env.MODE === 'development') {
     return 'http://localhost:5000/api';
   }
-  // In production, use relative URL
-  return '/api';
+  // In production, use the full backend URL
+  return 'https://voiceboxanonymous.onrender.com/api';
 };
 
 // Create axios instance with default config

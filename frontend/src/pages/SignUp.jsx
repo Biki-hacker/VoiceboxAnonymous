@@ -1,7 +1,7 @@
 // src/pages/SignUp.jsx
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { api } from '../api/axios'; // axios instance pointed at your backend
+import { api } from '../utils/axios'; // Consolidated axios instance
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 
 export default function SignUp() {

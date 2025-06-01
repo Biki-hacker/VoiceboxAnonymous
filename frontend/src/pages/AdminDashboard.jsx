@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Helmet } from 'react-helmet';
-import { api } from '../api/axios'; // This is the axios instance with auth interceptor
+import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import { Bar, Pie } from 'react-chartjs-2';
 import {

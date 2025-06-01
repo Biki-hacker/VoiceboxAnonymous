@@ -1,6 +1,6 @@
 // src/components/EmployeeVerification.jsx
 import React, { useState, useEffect } from 'react';
-import { api } from '../api/axios';
+import { api } from '../utils/axios';  // Consolidated axios instance
 import { useNavigate } from 'react-router-dom';
 import { CheckCircleIcon, XCircleIcon, ArrowLeftIcon } from '@heroicons/react/24/outline';
 

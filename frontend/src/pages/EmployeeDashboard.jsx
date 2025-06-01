@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition } from '@headlessui/react';
 import { Fragment } from 'react';
-import { api } from '../api/axios';
+import { api } from '../utils/axios';  // Consolidated axios instance
 import { uploadMedia } from '../utils/uploadMedia';
 import { hasReacted, toggleReaction } from '../utils/reactions';
 import {

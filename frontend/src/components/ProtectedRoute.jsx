@@ -1,7 +1,7 @@
 // src/components/ProtectedRoute.jsx
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { api } from '../api/axios';
+import { api } from '../utils/axios';  // Consolidated axios instance
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [isAuthorized, setIsAuthorized] = useState(null);

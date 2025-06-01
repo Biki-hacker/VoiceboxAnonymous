@@ -1,8 +1,8 @@
 // src/pages/SignIn.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { supabase } from '../supabaseClient';
+import { api } from '../utils/axios'; // Use the consolidated axios instance
 
 export default function SignIn() {
   const [formData, setFormData] = useState({ email: '', password: '' });
@@ -49,14 +49,13 @@ export default function SignIn() {
         return;
       }
 
-      // 3) Get backend JWT token using the full API URL
+      // 3) Get backend JWT token using the consolidated axios instance
       console.log('Attempting to authenticate with backend...');
-      console.log('API URL:', `${import.meta.env.VITE_API_URL}/api/auth/login`);
       
       let backendResponse;
       try {
-        backendResponse = await axios.post(
-          `${import.meta.env.VITE_API_URL}/api/auth/login`,
+        backendResponse = await api.post(
+          '/auth/login',
           {
             email,
             supabaseToken: signInData.session.access_token
@@ -75,10 +74,10 @@ export default function SignIn() {
           message: err.message,
           response: err.response?.data,
           status: err.response?.status,
-          headers: err.response?.headers,
           config: {
             url: err.config?.url,
             method: err.config?.method,
+            baseURL: err.config?.baseURL,
             headers: err.config?.headers
           }
         });
