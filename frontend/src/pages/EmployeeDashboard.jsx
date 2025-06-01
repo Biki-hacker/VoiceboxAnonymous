@@ -237,7 +237,7 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
     
     try {
       // Get the specific post with comments and author info populated
-      const response = await api.get(`/posts/${orgId}?postId=${postId}`);
+      const response = await api.get(`/api/posts/org/${orgId}?postId=${postId}`);
       
       console.log('Received post data:', response.data);
       
@@ -700,7 +700,7 @@ const EmployeeDashboard = () => {
         const storedEmail = localStorage.getItem('email');
         const storedRole = localStorage.getItem('role');
         const storedToken = localStorage.getItem('token');
-        const storedOrgId = localStorage.getItem('orgId');
+        const storedOrgId = localStorage.getItem('orgId')?.trim(); // Trim any whitespace from orgId
 
         if (!storedEmail || !storedRole || !storedToken || !storedOrgId || storedRole !== 'employee') {
           navigate('/signin', { state: { message: 'Employee access required. Please sign in.' } });
@@ -1056,8 +1056,11 @@ const EmployeeDashboard = () => {
     try {
       const storedToken = localStorage.getItem('token');
       
+      // Ensure organizationId is trimmed before making the API call
+      const trimmedOrgId = organizationId.trim();
+      
       // Use the correct endpoint format with organization ID as URL parameter
-      const response = await api.get(`/posts/${organizationId}`, {
+      const response = await api.get(`/api/posts/org/${trimmedOrgId}`, {
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${storedToken}`
@@ -1238,6 +1241,9 @@ const EmployeeDashboard = () => {
         }
       }
 
+      // Ensure organizationId is trimmed before making the API call
+      const trimmedOrgId = organizationId.trim();
+      
       // Create the post with the uploaded media URLs
       const response = await api.post('/posts', {
         content: postData.content.trim(),
@@ -1245,7 +1251,7 @@ const EmployeeDashboard = () => {
         mediaUrls,
         region: postData.region || '',
         department: postData.department || '',
-        orgId: organizationId,
+        orgId: trimmedOrgId,
         isAnonymous: true
       });
 

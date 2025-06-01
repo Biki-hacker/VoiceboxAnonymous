@@ -53,7 +53,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('userId', user._id); // Store MongoDB user ID
       
       if (user.organizationId) {
-        localStorage.setItem('orgId', user.organizationId);
+        // Trim any whitespace from organization ID before storing
+        const trimmedOrgId = user.organizationId.toString().trim();
+        localStorage.setItem('orgId', trimmedOrgId);
+        console.log('Stored organization ID (trimmed):', trimmedOrgId);
       }
       
       console.log('User logged in:', { email, userId: user._id, role: user.role });
@@ -88,7 +91,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('userId', user._id); // Store MongoDB user ID
       
       if (organizationId) {
-        localStorage.setItem('orgId', organizationId);
+        // Trim any whitespace from organization ID before storing
+        const trimmedOrgId = organizationId.toString().trim();
+        localStorage.setItem('orgId', trimmedOrgId);
+        console.log('Stored organization ID (trimmed):', trimmedOrgId);
       }
       
       console.log('User registered:', { email, userId: user._id, role });
