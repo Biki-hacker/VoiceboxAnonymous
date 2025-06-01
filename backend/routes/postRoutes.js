@@ -14,18 +14,16 @@ const {
   deletePost,
   getReactionStatus
 } = require('../controllers/postController');
+const { param } = require('express-validator');
 
 const { authMiddleware } = require('../middleware/auth');
 
 // Apply auth middleware to all routes
 router.use(authMiddleware);
 
-// Post routes
+// Post routes with stats first (more specific)
 router.post('/', createPost);
 router.get('/stats/:orgId', getPostStats);
-router.get('/:orgId', getPostsByOrg);
-router.put('/:postId', editPost);
-router.delete('/:postId', deletePost);
 
 // Post reactions
 router.route('/:postId/reactions')
@@ -45,5 +43,18 @@ router.route('/:postId/comments/:commentId')
 router.route('/:postId/comments/:commentId/reactions')
   .get(getReactionStatus)  // Get comment reactions
   .post(reactToComment);    // React to comment
+
+// Post CRUD operations (less specific routes last)
+router.get('/:orgId', [
+  param('orgId').isMongoId().withMessage('Invalid organization ID')
+], getPostsByOrg);
+
+router.put('/:postId', [
+  param('postId').isMongoId().withMessage('Invalid post ID')
+], editPost);
+
+router.delete('/:postId', [
+  param('postId').isMongoId().withMessage('Invalid post ID')
+], deletePost);
 
 module.exports = router;
