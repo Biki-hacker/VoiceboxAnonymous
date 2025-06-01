@@ -217,7 +217,7 @@ const AdminDashboard = () => {
         if (!selectedOrg || !postId) return;
         
         try {
-            const response = await api.delete(`/posts/${postId}`);
+            const response = await api.delete(`/api/posts/org/${selectedOrg._id}/${postId}`);
             
             // Remove the deleted post from the UI
             setPosts(prev => prev.filter(p => p._id !== postId));
@@ -235,7 +235,7 @@ const AdminDashboard = () => {
             
             // Refresh stats if needed
             if (selectedOrg?._id) {
-                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                const statsRes = await api.get(`/api/posts/org/${selectedOrg._id}/stats`);
                 setStats(statsRes.data);
             }
         } catch (error) {
@@ -324,7 +324,7 @@ const AdminDashboard = () => {
                     return { data: null };
                 }),
                 // Fetch posts with error handling
-                api.get(`/posts/${org._id}`, {
+                api.get(`/api/posts/org/${org._id}`, {
                     validateStatus: status => status < 500 // Don't throw for 4xx errors
                 }).catch(err => {
                     console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
@@ -1768,8 +1768,8 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const buildEndpoint = (basePath, includeOrgId = true) => {
     if (includeOrgId && orgId) {
       return commentId 
-        ? `${basePath}/${orgId}/${postId}/comments/${commentId}/reactions`
-        : `${basePath}/${orgId}/${postId}/reactions`;
+        ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
+        : `${basePath}/org/${orgId}/${postId}/reactions`;
     }
     return commentId 
       ? `${basePath}/${postId}/comments/${commentId}/reactions`
@@ -1784,7 +1784,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       
       try {
         // Try with orgId first if available
-        const endpoint = buildEndpoint('/posts', true);
+        const endpoint = buildEndpoint('/api/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -1804,7 +1804,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
         // If we have an orgId and got a 404, try without orgId
         if (orgId && error.response?.status === 404) {
           try {
-            const fallbackEndpoint = buildEndpoint('/posts', false);
+            const fallbackEndpoint = buildEndpoint('/api/posts', false);
             const fallbackResponse = await api.get(fallbackEndpoint, {
               headers: { 
                 'Content-Type': 'application/json',
@@ -1850,7 +1850,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     
     try {
       // First try with orgId if available
-      const endpoint = buildEndpoint('/posts', true);
+      const endpoint = buildEndpoint('/api/posts', true);
       
       const response = await api.post(
         endpoint, 
@@ -1873,7 +1873,7 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       // If we have an orgId and got a 404, try without orgId
       if (orgId && error.response?.status === 404) {
         try {
-          const fallbackEndpoint = buildEndpoint('/posts', false);
+          const fallbackEndpoint = buildEndpoint('/api/posts', false);
           const fallbackResponse = await api.post(
             fallbackEndpoint,
             { type },
@@ -1977,7 +1977,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       try {
         // Get the specific post with comments and author info populated
-        const response = await api.get(`/posts/${orgId}?postId=${postId}`);
+        const response = await api.get(`/api/posts/org/${orgId}?postId=${postId}`);
         
         if (!response.data) {
           throw new Error('No data received from server');
@@ -2048,7 +2048,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
-        `/posts/${postId}/comments`,
+        `/api/posts/org/${selectedOrg._id}/${postId}/comments`,
         { 
           text: commentText  // Only send the text, let backend handle the rest
         },
@@ -2148,7 +2148,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
         throw new Error('No authentication token found');
       }
 
-      const response = await api.delete(`/posts/${postId}/comments/${commentToDelete}`, {
+      const response = await api.delete(`/api/posts/org/${selectedOrg._id}/${postId}/comments/${commentToDelete}`, {
         headers: {
           'Authorization': `Bearer ${storedToken}`
         }

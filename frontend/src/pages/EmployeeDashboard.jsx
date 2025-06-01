@@ -94,16 +94,29 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const [isReacted, setIsReacted] = useState(false);
   const [currentCount, setCurrentCount] = useState(count);
   const [isLoading, setIsLoading] = useState(false);
+  const orgId = localStorage.getItem('orgId');
+
+  // Helper function to build the API endpoint
+  const buildEndpoint = (basePath, includeOrgId = true) => {
+    if (includeOrgId && orgId) {
+      return commentId 
+        ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
+        : `${basePath}/org/${orgId}/${postId}/reactions`;
+    }
+    return commentId 
+      ? `${basePath}/${postId}/comments/${commentId}/reactions`
+      : `${basePath}/${postId}/reactions`;
+  };
 
   // Fetch reaction status on mount and when postId/commentId/type changes
   useEffect(() => {
     const fetchReactionStatus = async () => {
       try {
         const storedToken = localStorage.getItem('token');
-        const endpoint = commentId 
-          ? `/posts/${postId}/comments/${commentId}/reactions`
-          : `/posts/${postId}/reactions`;
-
+        if (!storedToken) return;
+        
+        // Try with orgId first if available
+        const endpoint = buildEndpoint('/api/posts', true);
         const response = await api.get(endpoint, {
           headers: { 
             'Content-Type': 'application/json',
@@ -132,6 +145,12 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     
     const wasReacted = isReacted;
     const newIsReacted = !wasReacted;
+    const storedToken = localStorage.getItem('token');
+    
+    if (!storedToken) {
+      console.error('No authentication token found');
+      return;
+    }
     
     // Optimistic UI updates
     setIsLoading(true);
@@ -139,11 +158,8 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
     
     try {
-      const storedToken = localStorage.getItem('token');
-      const endpoint = commentId 
-        ? `/posts/${postId}/comments/${commentId}/reactions`
-        : `/posts/${postId}/reactions`;
-
+      // First try with orgId if available
+      const endpoint = buildEndpoint('/api/posts', true);
       const response = await api.post(
         endpoint, 
         { type },
@@ -292,9 +308,14 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
         throw new Error('No authentication token found');
       }
       
-      console.log('Posting comment to post:', postId);
+      const orgId = localStorage.getItem('orgId');
+      if (!orgId) {
+        throw new Error('Organization ID not found');
+      }
+      
+      console.log('Posting comment to post:', postId, 'in org:', orgId);
       const response = await api.post(
-        `/posts/${postId}/comments`,
+        `/api/posts/org/${orgId}/${postId}/comments`,
         { 
           text: commentText  // Only send the text, let backend handle the rest
         },
@@ -361,8 +382,13 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
     
     try {
       const storedToken = localStorage.getItem('token');
+      const orgId = localStorage.getItem('orgId');
+      if (!orgId) {
+        throw new Error('Organization ID not found');
+      }
+      
       await api.delete(
-        `/posts/${postId}/comments/${commentToDelete}`,
+        `/api/posts/org/${orgId}/${postId}/comments/${commentToDelete}`,
         { 
           headers: { 
             'Content-Type': 'application/json',
