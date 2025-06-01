@@ -71,7 +71,9 @@ router.route('/:orgId/emails')
   );
 
 // Legacy routes (for backward compatibility)
-router.get('/admin/:adminEmail', orgController.getOrgByAdminId);
+router.get('/admin/:adminEmail', [
+  param('adminEmail').isEmail().withMessage('Invalid email format')
+], orgController.getOrgByAdminId);
 router.put(
   '/:orgId/verification-params',
   orgIdValidation,
