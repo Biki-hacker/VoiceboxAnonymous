@@ -761,6 +761,12 @@ const EmployeeDashboard = () => {
   const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
+  
+  // Post filters
+  const [selectedPostType, setSelectedPostType] = useState('all');
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const ws = useRef(null); // WebSocket reference
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
 
@@ -1460,6 +1466,33 @@ const EmployeeDashboard = () => {
     name: localStorage.getItem('email') || "Anonymous Employee"
   };
 
+  // Filter posts based on selected filters
+  const filteredPosts = useMemo(() => {
+    return posts.filter(post => {
+      // Filter by post type
+      if (selectedPostType !== 'all' && post.postType !== selectedPostType) {
+        return false;
+      }
+      
+      // Filter by region
+      if (selectedRegion !== 'all' && post.region !== selectedRegion) {
+        return false;
+      }
+      
+      // Filter by department
+      if (selectedDepartment !== 'all' && post.department !== selectedDepartment) {
+        return false;
+      }
+      
+      // Filter by search query
+      if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+        return false;
+      }
+      
+      return true;
+    });
+  }, [posts, selectedPostType, selectedRegion, selectedDepartment, searchQuery]);
+
   const renderContent = () => {
     switch (viewMode) {
       case 'create':
@@ -1492,20 +1525,67 @@ const EmployeeDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
-            <div className="mb-6">
+            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+              <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
+                <select
+                  value={selectedPostType}
+                  onChange={(e) => setSelectedPostType(e.target.value)}
+                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                >
+                  <option value="all">All Types</option>
+                  <option value="feedback">Feedback</option>
+                  <option value="complaint">Complaint</option>
+                  <option value="suggestion">Suggestion</option>
+                  <option value="public">Public</option>
+                </select>
+                <select
+                  value={selectedRegion}
+                  onChange={(e) => setSelectedRegion(e.target.value)}
+                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                >
+                  <option value="all">All Regions</option>
+                  {[...new Set(posts.map(post => post.region).filter(Boolean))].map(region => (
+                    <option key={region} value={region}>{region}</option>
+                  ))}
+                </select>
+                <select
+                  value={selectedDepartment}
+                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  className="block w-full sm:w-40 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                >
+                  <option value="all">All Departments</option>
+                  {[...new Set(posts.map(post => post.department).filter(Boolean))].map(dept => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+                <input
+                  type="text"
+                  placeholder="Search posts..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="block w-full sm:w-48 px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white"
+                />
+              </div>
             </div>
-            {posts.length === 0 ? (
+            {filteredPosts.length === 0 ? (
               <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
             ) : (
               <div className="space-y-4">
-                {posts.map((post, i) => (
+                {posts.length === 0 ? (
+                  <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Showing {filteredPosts.length} of {posts.length} posts
+                  </p>
+                )}
+                {filteredPosts.map((post) => (
                   <motion.div
                     key={post._id}
                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
+                    transition={{ delay: 0.03 }}
                   >
                     <div className="flex justify-between items-start mb-1 sm:mb-2">
                       <div className="flex items-center gap-2">
@@ -1692,6 +1772,12 @@ const EmployeeDashboard = () => {
               <p className="text-gray-600 dark:text-slate-400 mt-1">
                 Here are your available actions. Your contributions are valued.
               </p>
+              <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-slate-400">
+                <span className="font-medium">Current Organization:</span>
+                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-200">
+                  {localStorage.getItem('organizationName') || 'Not specified'}
+                </span>
+              </div>
             </motion.div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {actions.map((action) => (
