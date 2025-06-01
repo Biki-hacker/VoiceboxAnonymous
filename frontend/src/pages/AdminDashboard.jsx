@@ -2217,15 +2217,9 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
-        `/api/posts/org/${selectedOrg._id}/${postId}/comments`, 
+        `/posts/org/${selectedOrg._id}/${postId}/comments`, 
         { 
           text: commentText  // Only send the text, let backend handle the rest
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${storedToken}`
-          }
         },
         {
           headers: {
