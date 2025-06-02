@@ -1,6 +1,7 @@
 // src/pages/AdminDashboard.jsx
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
 import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
@@ -151,6 +152,7 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState({ orgList: true, orgDetails: false, modal: false, deleteOrg: {} });
     const [error, setError] = useState({ page: null, modal: null });
     const navigate = useNavigate();
+    const { logout } = useAuth();
     const [userData, setUserData] = useState(null);
     const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
     const [isEditParamsModalOpen, setIsEditParamsModalOpen] = useState(false);
@@ -1249,7 +1251,10 @@ const AdminDashboard = () => {
     // Post deletion is now handled by the handleDeletePost function above
     // which uses a modal dialog for confirmation
     
-    const handleLogout = () => { localStorage.clear(); navigate('/signin'); };
+    const handleLogout = () => {
+        logout();
+        navigate('/signin');
+    };
 
     // State for Co-admin Orgs Modal
     const [isCoAdminOrgsModalOpen, setIsCoAdminOrgsModalOpen] = useState(false);

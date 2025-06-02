@@ -1,5 +1,6 @@
 // src/pages/EmployeeDashboard.jsx
 import React, { useEffect, useState, useRef, useMemo } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Helmet } from 'react-helmet';
@@ -780,6 +781,7 @@ const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [theme, toggleTheme] = useTheme();
   const [employeeEmail, setEmployeeEmail] = useState("");
   const [organizationId, setOrganizationId] = useState("");
@@ -1972,7 +1974,7 @@ const EmployeeDashboard = () => {
                   <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
                   <button
                     onClick={() => {
-                      handleLogout();
+                      logout();
                       setIsMobileSidebarOpen(false);
                     }}
                     className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
@@ -2007,7 +2009,7 @@ const EmployeeDashboard = () => {
         <div className="mt-auto flex flex-col items-center space-y-5">
           <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
           <button
-            onClick={handleLogout}
+            onClick={logout}
             title="Logout"
             className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
           >
