@@ -836,8 +836,11 @@ const EmployeeDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching organization details:', error);
-      // Set a descriptive message if organization is not found
-      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+      // Set a descriptive message if organization is not found or 404 occurs
+      const errorMessage = error.response?.status === 404 
+        ? 'Probably the admin edited the employee email list or deleted the organization'
+        : 'Error loading organization status';
+      setOrganizationName(errorMessage);
     }
   };
 
