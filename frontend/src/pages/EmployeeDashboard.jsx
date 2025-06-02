@@ -1975,6 +1975,7 @@ const EmployeeDashboard = () => {
                   <button
                     onClick={() => {
                       logout();
+                      navigate('/signin');
                       setIsMobileSidebarOpen(false);
                     }}
                     className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
@@ -2009,7 +2010,10 @@ const EmployeeDashboard = () => {
         <div className="mt-auto flex flex-col items-center space-y-5">
           <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
           <button
-            onClick={logout}
+            onClick={() => {
+              logout();
+              navigate('/signin');
+            }}
             title="Logout"
             className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
           >
