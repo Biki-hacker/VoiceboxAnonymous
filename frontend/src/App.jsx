@@ -19,6 +19,7 @@ import PricingPage from './components/PricingPage';
 import Subscriptions from './components/Subscriptions';
 import ProtectedRoute from './components/ProtectedRoute';
 import TermsPolicy from './components/TermsPolicy';
+import AuthCallback from './pages/AuthCallback';
 
 // Component to handle page title and meta updates
 const PageMetadata = () => {
@@ -95,6 +96,11 @@ function AppRoutes() {
       <Route path="/signup" element={<SignUp />} />
       <Route path="/forgotpassword" element={<ForgotPassword />} />
       <Route path="/updatepassword" element={<UpdatePassword />} />
+      
+      {/* OAuth Callback Routes */}
+      <Route path="/auth/callback" element={<AuthCallback />} />
+      <Route path="/auth/callback/admin" element={<AuthCallback />} />
+      <Route path="/auth/callback/employee" element={<AuthCallback />} />
 
       {/* Protected Routes with Role-Based Access */}
       <Route

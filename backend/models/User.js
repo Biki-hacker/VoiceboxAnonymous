@@ -14,11 +14,18 @@ const userSchema = new mongoose.Schema({
   password: { 
     type: String, 
     required: [
-      function() { return this.role === 'admin' || !this.isNew; }, 
-      'Password is required for admin users'
+      function() { 
+        // Password is required for non-OAuth users or admin users
+        return (this.role === 'admin' || !this.isOAuth) && !this.isNew; 
+      }, 
+      'Password is required for non-OAuth users and admin users'
     ],
     select: false 
-  }, 
+  },
+  isOAuth: {
+    type: Boolean,
+    default: false
+  },
   role: { 
     type: String, 
     enum: {
