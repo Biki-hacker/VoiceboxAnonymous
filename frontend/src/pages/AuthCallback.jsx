@@ -82,19 +82,30 @@ export default function AuthCallback() {
         localStorage.removeItem('oauth_role');
         localStorage.removeItem('redirectAfterSignIn');
         
-        // Handle redirection
-        if (redirectPath) {
-          // If we have a stored redirect path, use it
-          navigate(redirectPath);
-        } else if (role === 'admin') {
-          navigate('/admin-dashboard');
-        } else if (role === 'employee') {
-          // Check if employee is verified
-          const verified = localStorage.getItem('verified') === 'true';
-          navigate(verified ? '/employee-dashboard' : '/employee/verify');
-        } else {
-          navigate('/');
+        // Handle redirection based on role and verification status
+        const verified = response?.data?.verified || localStorage.getItem('verified') === 'true';
+        
+        // Store verification status in localStorage
+        if (typeof verified === 'boolean') {
+          localStorage.setItem('verified', verified.toString());
         }
+        
+        // Clear any existing redirect path if it exists
+        const cleanRedirectPath = redirectPath && redirectPath !== '/signin' ? redirectPath : null;
+        
+        // Determine the target path based on role and verification status
+        let targetPath = '/';
+        
+        if (role === 'admin') {
+          targetPath = '/admin-dashboard';
+        } else if (role === 'employee') {
+          targetPath = verified ? '/employee-dashboard' : '/employee/verify';
+        }
+        
+        // Use the clean redirect path if available, otherwise use the role-based path
+        const finalPath = cleanRedirectPath || targetPath;
+        console.log(`[AuthCallback] Redirecting to: ${finalPath}`);
+        navigate(finalPath, { replace: true });
         
       } catch (err) {
         console.error('Authentication callback error:', err);
