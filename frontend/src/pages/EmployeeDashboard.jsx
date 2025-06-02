@@ -786,6 +786,7 @@ const EmployeeDashboard = () => {
   const [employeeEmail, setEmployeeEmail] = useState("");
   const [organizationId, setOrganizationId] = useState("");
   const [organizationName, setOrganizationName] = useState("");
+  const [isEmailVerified, setIsEmailVerified] = useState(true); // Track if email is verified in organization
   const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -835,8 +836,31 @@ const EmployeeDashboard = () => {
       }
     } catch (error) {
       console.error('Error fetching organization details:', error);
-      // Set a default name if there's an error
-      setOrganizationName('VoiceBox');
+      // Set a descriptive message if organization is not found
+      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+    }
+  };
+
+  // --- Check if email is in organization's verified emails ---
+  const verifyEmailInOrganization = async (email, orgId) => {
+    try {
+      const response = await api.get(`/organizations/${orgId}/verify-email`, {
+        params: { email }
+      });
+      
+      if (response.data?.success && response.data?.data?.isVerified) {
+        setIsEmailVerified(true);
+        return true;
+      } else {
+        setIsEmailVerified(false);
+        setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error verifying email with organization:', error);
+      setIsEmailVerified(false);
+      setOrganizationName('Error verifying organization access. Please try again later.');
+      return false;
     }
   };
 
@@ -851,6 +875,13 @@ const EmployeeDashboard = () => {
 
         if (!storedEmail || !storedRole || !storedToken || !storedOrgId || storedRole !== 'employee') {
           navigate('/signin', { state: { message: 'Employee access required. Please sign in.' } });
+          return;
+        }
+        
+        // First verify the email is still in the organization's verified list
+        const isEmailValid = await verifyEmailInOrganization(storedEmail, storedOrgId);
+        if (!isEmailValid) {
+          // Don't proceed further if email is not in organization
           return;
         }
 
@@ -1199,7 +1230,11 @@ const EmployeeDashboard = () => {
 
   // --- Fetch Posts ---
   const fetchPosts = async () => {
-    if (!organizationId) return;
+    // Don't fetch posts if not verified or no organization ID
+    if (!isEmailVerified || !organizationId) {
+      setPosts([]); // Clear any existing posts
+      return;
+    }
 
     setLoading(prev => ({ ...prev, posts: true }));
     setError(null);
@@ -1509,12 +1544,18 @@ const EmployeeDashboard = () => {
   const actions = [
     {
       title: "Create New Post",
-      description: "Share your feedback, complaints, or suggestions. Tag region & department if needed.",
+      description: isEmailVerified 
+        ? "Share your feedback, complaints, or suggestions. Tag region & department if needed."
+        : "Please verify your email with the organization to create posts.",
       buttonText: "Create Post",
-      onClick: () => setViewMode('create'),
+      onClick: isEmailVerified ? () => setViewMode('create') : () => {},
       icon: PencilSquareIcon,
-      bgColorClass: "bg-blue-50 dark:bg-blue-900/30",
-      accentColorClass: "text-blue-600 dark:text-blue-400"
+      bgColorClass: isEmailVerified 
+        ? "bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800/40" 
+        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70",
+      accentColorClass: isEmailVerified 
+        ? "text-blue-600 dark:text-blue-400" 
+        : "text-gray-500 dark:text-gray-400"
     },
     {
       title: "View Posts",
@@ -1931,20 +1972,42 @@ const EmployeeDashboard = () => {
             transition={{ type: 'tween', duration: 0.2 }}
             className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col z-50 md:hidden"
           >
-            <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
-                  <BuildingOfficeIcon className="h-6 w-6" />
-                </div>
-                <span className="font-semibold text-gray-800 dark:text-white">VoiceBox</span>
-              </div>
+            <header className="fixed top-0 left-0 right-0 h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center px-4 z-30 md:hidden">
               <button
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700"
+                onClick={() => setIsMobileSidebarOpen(true)}
+                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
               >
-                <XMarkIcon className="h-6 w-6" />
+                <Bars3Icon className="h-6 w-6" />
               </button>
-            </div>
+              <div className="ml-4 font-semibold text-gray-800 dark:text-white">VoiceBox</div>
+              <div className="ml-auto flex items-center space-x-2">
+                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
+                <button
+                  onClick={handleLogout}
+                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                  title="Sign out"
+                >
+                  <ArrowLeftOnRectangleIcon className="h-5 w-5" />
+                </button>
+              </div>
+            </header>
+            {/* Access denied message */}
+            {!isEmailVerified && (
+              <div className="fixed top-14 left-0 right-0 z-20">
+                <div className="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4">
+                  <div className="flex">
+                    <div className="flex-shrink-0">
+                      <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" aria-hidden="true" />
+                    </div>
+                    <div className="ml-3">
+                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                        {organizationName}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             <nav className="flex-1 overflow-y-auto py-4 px-2">
               <div className="space-y-1">
                 {actions.map((action) => (
