@@ -913,8 +913,8 @@ const EmployeeDashboard = () => {
     if (ws.current && ws.current.readyState !== WebSocket.CLOSED && ws.current.readyState !== WebSocket.CLOSING) {
         // Initialize WebSocket connection when organizationId is available
     } else {
-        // Use a hardcoded WebSocket URL since process.env is not available in the browser
-        const wsUrl = 'ws://localhost:5000';
+        // Use WebSocket URL from environment variable with fallback
+        const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:5000';
         console.log(`Connecting to WebSocket at ${wsUrl}`);
         ws.current = new WebSocket(wsUrl);
 

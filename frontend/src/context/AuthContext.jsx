@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setError(null);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, {
         email,
         password
       });
@@ -71,7 +71,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, role, organizationId) => {
     try {
       setError(null);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, {
         email,
         password,
         role,
@@ -110,7 +110,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, {
+        await axios.post(`${import.meta.env.VITE_API_URL}/auth/logout`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
       }
