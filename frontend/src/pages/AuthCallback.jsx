@@ -89,13 +89,17 @@ export default function AuthCallback() {
         localStorage.removeItem('oauth_role');
         localStorage.removeItem('redirectAfterSignIn');
         
-        // Handle verification status
-        // For admins, always set verified to true
-        const verified = isAdmin ? true : (
-          authResponse?.data?.verified || 
-          authResponse?.data?.user?.verified || 
-          localStorage.getItem('verified') === 'true'
-        );
+        // For admins, always go to admin dashboard
+        if (isAdmin) {
+          console.log('[AuthCallback] Admin login detected, redirecting to admin dashboard');
+          navigate('/admin-dashboard', { replace: true });
+          return; // Exit early to skip the rest of the function
+        }
+        
+        // For non-admin users, handle verification status
+        const verified = authResponse?.data?.verified || 
+                        authResponse?.data?.user?.verified || 
+                        localStorage.getItem('verified') === 'true';
         
         // Store verification status in localStorage
         localStorage.setItem('verified', verified.toString());
@@ -103,18 +107,9 @@ export default function AuthCallback() {
         // Clear any existing redirect path if it exists
         const cleanRedirectPath = redirectPath && redirectPath !== '/signin' ? redirectPath : null;
         
-        // Determine the target path based on role and verification status
-        let targetPath = '/';
-        
-        if (isAdmin) {
-          // Always redirect admins to admin dashboard
-          targetPath = '/admin-dashboard';
-          console.log('[AuthCallback] Admin login detected, redirecting to admin dashboard');
-        } else if (role === 'employee') {
-          // For employees, check verification status
-          targetPath = verified ? '/employee-dashboard' : '/employee/verify';
-          console.log('[AuthCallback] Employee login - verification status:', { verified });
-        }
+        // For employees, check verification status
+        let targetPath = verified ? '/employee-dashboard' : '/employee/verify';
+        console.log('[AuthCallback] Employee login - verification status:', { verified });
         
         // Use the clean redirect path if available, otherwise use the role-based path
         const finalPath = cleanRedirectPath || targetPath;
