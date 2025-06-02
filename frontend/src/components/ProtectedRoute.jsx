@@ -24,6 +24,13 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         console.log('[ProtectedRoute] localStorage token:', token);
         console.log('[ProtectedRoute] localStorage role:', role);
         
+        // If we're on the OAuth callback route, let it through
+        if (window.location.pathname.includes('/auth/callback')) {
+          console.log('[ProtectedRoute] OAuth callback detected, allowing pass-through');
+          if (isMounted) setIsAuthorized(true);
+          return;
+        }
+        
         // If we have a token and role matches, we can be optimistic
         if (token && role === requiredRole) {
           const lastVerified = localStorage.getItem('lastVerified');

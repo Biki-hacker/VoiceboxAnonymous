@@ -9,6 +9,13 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
+      // Clear any existing auth data to prevent conflicts
+      localStorage.removeItem('token');
+      localStorage.removeItem('role');
+      localStorage.removeItem('email');
+      localStorage.removeItem('orgId');
+      localStorage.removeItem('lastVerified');
+      
       let authResponse = null;
       let role = '';
       let session = null;
