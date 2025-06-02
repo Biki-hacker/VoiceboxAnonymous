@@ -23,9 +23,11 @@ export default function AuthCallback() {
           throw new Error('Authentication failed. Please try again.');
         }
 
-        // For sign-in, we'll determine the role from the user's existing account
-        // For sign-up, we'll use the role from localStorage if available
+        // Get role from localStorage (set during OAuth initiation) or default to 'employee'
         role = localStorage.getItem('oauth_role') || 'employee';
+        
+        // For admin logins, we'll skip some verifications
+        const isAdmin = role === 'admin';
         
         // Try to log in first
         try {
@@ -87,10 +89,13 @@ export default function AuthCallback() {
         localStorage.removeItem('oauth_role');
         localStorage.removeItem('redirectAfterSignIn');
         
-        // Handle redirection based on role and verification status
-        const verified = authResponse?.data?.verified || 
-                        authResponse?.data?.user?.verified || 
-                        localStorage.getItem('verified') === 'true';
+        // Handle verification status
+        // For admins, always set verified to true
+        const verified = isAdmin ? true : (
+          authResponse?.data?.verified || 
+          authResponse?.data?.user?.verified || 
+          localStorage.getItem('verified') === 'true'
+        );
         
         // Store verification status in localStorage
         localStorage.setItem('verified', verified.toString());
@@ -101,10 +106,14 @@ export default function AuthCallback() {
         // Determine the target path based on role and verification status
         let targetPath = '/';
         
-        if (role === 'admin') {
+        if (isAdmin) {
+          // Always redirect admins to admin dashboard
           targetPath = '/admin-dashboard';
+          console.log('[AuthCallback] Admin login detected, redirecting to admin dashboard');
         } else if (role === 'employee') {
+          // For employees, check verification status
           targetPath = verified ? '/employee-dashboard' : '/employee/verify';
+          console.log('[AuthCallback] Employee login - verification status:', { verified });
         }
         
         // Use the clean redirect path if available, otherwise use the role-based path
@@ -125,10 +134,29 @@ export default function AuthCallback() {
         
       } catch (err) {
         console.error('Authentication callback error:', err);
+        
+        // Prepare error message
+        let errorMessage = err.message || 'Authentication failed. Please try again.';
+        
+        // Provide more specific error messages for admin logins
+        if (isAdmin && err.response?.status === 403) {
+          errorMessage = 'Admin access denied. Please check your admin privileges.';
+        } else if (isAdmin && err.response?.status === 404) {
+          errorMessage = 'Admin account not found. Please contact support.';
+        }
+        
+        // Log the error for debugging
+        console.error('Auth error details:', {
+          role,
+          error: err,
+          isAdmin,
+          timestamp: new Date().toISOString()
+        });
+        
         // Redirect to signup page with error
         navigate('/signup', { 
           state: { 
-            error: err.message || 'Authentication failed. Please try again.' 
+            error: errorMessage
           } 
         });
       }
