@@ -9,9 +9,15 @@ export default function AuthCallback() {
 
   useEffect(() => {
     const handleAuth = async () => {
+      let authResponse = null;
+      let role = '';
+      let session = null;
+      
       try {
         // Get the session from the URL
-        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        const sessionData = await supabase.auth.getSession();
+        session = sessionData?.data?.session;
+        const authError = sessionData?.error;
         
         if (authError || !session) {
           throw new Error('Authentication failed. Please try again.');
@@ -19,57 +25,56 @@ export default function AuthCallback() {
 
         // For sign-in, we'll determine the role from the user's existing account
         // For sign-up, we'll use the role from localStorage if available
-        const role = localStorage.getItem('oauth_role') || 'employee';
+        role = localStorage.getItem('oauth_role') || 'employee';
         
+        // Try to log in first
         try {
-          // For OAuth, we'll use the login endpoint which handles both login and registration
-          const response = await api.post('/auth/login', {
+          const loginResponse = await api.post('/auth/login', {
             email: session.user.email,
             supabaseToken: session.access_token,
-            isOAuth: true, // Indicate this is an OAuth login
-            role // Pass the role from localStorage or default
+            isOAuth: true,
+            role
           });
           
-          // If we get here, the user was either logged in or created successfully
-          console.log('OAuth login successful:', response.data);
+          console.log('OAuth login successful:', loginResponse.data);
+          authResponse = loginResponse;
           
-          // Store the token from our backend
-          if (response.data.token) {
-            localStorage.setItem('token', response.data.token);
-          }
+        } catch (loginError) {
+          console.log('Login failed, attempting to register...', loginError);
           
-          // Store user data
-          if (response.data.user) {
-            const { email, role } = response.data.user;
-            localStorage.setItem('email', email);
-            localStorage.setItem('role', role);
-          }
-        } catch (apiError) {
-          console.error('API Error during OAuth login:', apiError);
-          
-          // If there's an error, try to create the user directly
-          console.log('Attempting to create user directly...');
+          // If login fails, try to register
           try {
             const registerResponse = await api.post('/auth/register', {
               email: session.user.email,
               role,
-              isOAuth: true // Let the backend know this is an OAuth user
+              isOAuth: true
             });
             
-            if (registerResponse.data.token) {
-              localStorage.setItem('token', registerResponse.data.token);
-              
-              // Store user data
-              if (registerResponse.data.user) {
-                const { email, role } = registerResponse.data.user;
-                localStorage.setItem('email', email);
-                localStorage.setItem('role', role);
-              }
-            }
+            console.log('User registration successful:', registerResponse.data);
+            authResponse = registerResponse;
+            
           } catch (registerError) {
-            console.error('Failed to create user:', registerError);
-            throw new Error('Failed to create user account. Please try again.');
+            console.error('Registration failed:', registerError);
+            throw new Error('Failed to authenticate or create user account. Please try again.');
           }
+        }
+        
+        // If we get here, we have a successful authResponse
+        if (!authResponse?.data) {
+          throw new Error('Authentication response is invalid');
+        }
+        
+        // Store the token and user data
+        if (authResponse.data.token) {
+          localStorage.setItem('token', authResponse.data.token);
+        }
+        
+        // Update role from response if available
+        if (authResponse.data.user) {
+          const { email: userEmail, role: userRole } = authResponse.data.user;
+          role = userRole || role;
+          localStorage.setItem('email', userEmail);
+          localStorage.setItem('role', role);
         }
 
         // Store Supabase session data
@@ -82,11 +87,9 @@ export default function AuthCallback() {
         localStorage.removeItem('oauth_role');
         localStorage.removeItem('redirectAfterSignIn');
         
-        // Get the response from either the login or register flow
-        const authResponse = response || registerResponse;
-        
         // Handle redirection based on role and verification status
-        const verified = authResponse?.data?.verified || authResponse?.data?.user?.verified || 
+        const verified = authResponse?.data?.verified || 
+                        authResponse?.data?.user?.verified || 
                         localStorage.getItem('verified') === 'true';
         
         // Store verification status in localStorage
@@ -110,7 +113,12 @@ export default function AuthCallback() {
           role, 
           verified,
           cleanRedirectPath,
-          targetPath
+          targetPath,
+          authResponse: {
+            hasToken: !!authResponse?.data?.token,
+            hasUser: !!authResponse?.data?.user,
+            verified: authResponse?.data?.verified || authResponse?.data?.user?.verified
+          }
         });
         
         navigate(finalPath, { replace: true });
