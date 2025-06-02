@@ -94,6 +94,11 @@ const ProtectedRoute = ({ children, requiredRole }) => {
             console.log('[ProtectedRoute] Admin user detected, skipping email verification');
             // Set verified to true for admin to bypass verification
             userData.verified = true;
+            // Ensure admin role is properly set in localStorage
+            localStorage.setItem('role', 'admin');
+            // Grant access to any route if user is admin
+            if (isMounted) setIsAuthorized(true);
+            return;
           }
           
           console.log('[ProtectedRoute] Backend verification successful. User role:', userRole, 'Required role:', requiredRole);

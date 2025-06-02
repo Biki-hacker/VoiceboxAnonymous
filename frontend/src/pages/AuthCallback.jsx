@@ -26,9 +26,6 @@ export default function AuthCallback() {
         // Get role from localStorage (set during OAuth initiation) or default to 'employee'
         role = localStorage.getItem('oauth_role') || 'employee';
         
-        // For admin logins, we'll skip some verifications
-        const isAdmin = role === 'admin';
-        
         // Try to log in first
         try {
           const loginResponse = await api.post('/auth/login', {
@@ -74,24 +71,40 @@ export default function AuthCallback() {
         // Update role from response if available
         if (authResponse.data.user) {
           const { email: userEmail, role: userRole } = authResponse.data.user;
-          role = userRole || role;
+          // Always use the role from the backend response if available
+          if (userRole) {
+            role = userRole;
+            console.log('[AuthCallback] Updated role from backend:', role);
+          }
           localStorage.setItem('email', userEmail);
+          localStorage.setItem('role', role);
+        } else if (authResponse.data.role) {
+          // Handle case where role is in the root of the response
+          role = authResponse.data.role;
+          console.log('[AuthCallback] Updated role from root response:', role);
           localStorage.setItem('role', role);
         }
 
         // Store Supabase session data
         localStorage.setItem('supabaseToken', session.access_token);
         localStorage.setItem('email', session.user.email);
-        localStorage.setItem('role', role);
+        // Don't override role here, we already set it from the response
         
         // Clean up stored data
         const redirectPath = localStorage.getItem('redirectAfterSignIn');
         localStorage.removeItem('oauth_role');
         localStorage.removeItem('redirectAfterSignIn');
         
+        // Check for admin role after updating from response
+        const isAdmin = role === 'admin';
+        
         // For admins, always go to admin dashboard
         if (isAdmin) {
-          console.log('[AuthCallback] Admin login detected, redirecting to admin dashboard');
+          console.log('[AuthCallback] Admin login detected, redirecting to admin dashboard', { 
+            roleFromResponse: authResponse.data.user?.role,
+            roleInLocalStorage: role,
+            isAdmin: true
+          });
           navigate('/admin-dashboard', { replace: true });
           return; // Exit early to skip the rest of the function
         }
