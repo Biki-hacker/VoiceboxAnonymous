@@ -1591,15 +1591,23 @@ const EmployeeDashboard = () => {
     },
     {
       title: "View Posts",
-      description: "Browse all anonymous posts within your organization",
+      description: isEmailVerified 
+        ? "Browse all anonymous posts within your organization"
+        : "Please verify your email with the organization to view posts.",
       buttonText: "View Posts",
-      onClick: () => {
-        fetchPosts();
-        setViewMode('view');
-      },
+      onClick: isEmailVerified 
+        ? () => {
+            fetchPosts();
+            setViewMode('view');
+          }
+        : () => setShowOrgAccessModal(true),
       icon: EyeIcon,
-      bgColorClass: "bg-indigo-50 dark:bg-indigo-900/30",
-      accentColorClass: "text-indigo-600 dark:text-indigo-400"
+      bgColorClass: isEmailVerified 
+        ? "bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/40" 
+        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70 hover:opacity-100 transition-opacity",
+      accentColorClass: isEmailVerified 
+        ? "text-indigo-600 dark:text-indigo-400" 
+        : "text-gray-500 dark:text-gray-400"
     },
     {
       title: "Organization Verification",
