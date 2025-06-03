@@ -40,6 +40,37 @@ import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
 
+// --- Organization Access Modal Component ---
+const OrgAccessModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center mb-4">
+          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-2" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Access Restricted</h3>
+        </div>
+        <div className="mt-2">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Probably the admin edited the employee email list or deleted the organization.
+            Please contact your organization administrator for assistance.
+          </p>
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-600 dark:hover:bg-blue-700"
+          >
+            Close
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // --- Theme Hook ---
 const useTheme = () => {
   const [theme, setThemeState] = useState(() => {
@@ -817,6 +848,7 @@ const EmployeeDashboard = () => {
   const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
+  const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
   
   // Post filters
   const [selectedPostType, setSelectedPostType] = useState('all');
@@ -1548,11 +1580,11 @@ const EmployeeDashboard = () => {
         ? "Share your feedback, complaints, or suggestions. Tag region & department if needed."
         : "Please verify your email with the organization to create posts.",
       buttonText: "Create Post",
-      onClick: isEmailVerified ? () => setViewMode('create') : () => {},
+      onClick: isEmailVerified ? () => setViewMode('create') : () => setShowOrgAccessModal(true),
       icon: PencilSquareIcon,
       bgColorClass: isEmailVerified 
         ? "bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800/40" 
-        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70",
+        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70 hover:opacity-100 transition-opacity",
       accentColorClass: isEmailVerified 
         ? "text-blue-600 dark:text-blue-400" 
         : "text-gray-500 dark:text-gray-400"
@@ -1932,6 +1964,11 @@ const EmployeeDashboard = () => {
 
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`} itemScope itemType="http://schema.org/WebApplication">
+      {/* Organization Access Modal */}
+      <OrgAccessModal 
+        isOpen={showOrgAccessModal} 
+        onClose={() => setShowOrgAccessModal(false)} 
+      />
       {/* SEO Meta Tags */}
       <Helmet>
         <title>Employee Dashboard | VoiceBox</title>
