@@ -56,6 +56,9 @@ const OrgAccessModal = ({ isOpen, onClose }) => {
             Probably the admin edited the employee email list or deleted the organization.
             Please contact your organization administrator for assistance.
           </p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            Re-verify the organization access if anything changed.
+          </p>
         </div>
         <div className="mt-6 flex justify-end">
           <button
