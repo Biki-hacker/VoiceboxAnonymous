@@ -3,12 +3,13 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 import { api } from '../utils/axios'; // Use the consolidated axios instance
-import { FaGithub } from 'react-icons/fa';
+import { FaGithub, FaEye, FaEyeSlash } from 'react-icons/fa';
 
 export default function SignIn() {
   const [formData, setFormData] = useState({ email: '', password: '' });
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -282,15 +283,26 @@ export default function SignIn() {
             value={formData.email}
             onChange={handleChange}
           />
-          <input
-            name="password"
-            type="password"
-            placeholder="Password"
-            required
-            className="p-2 rounded text-black"
-            value={formData.password}
-            onChange={handleChange}
-          />
+          <div className="relative">
+            <input
+              name="password"
+              type={showPassword ? 'text' : 'password'}
+              placeholder="Password"
+              required
+              className="p-2 pr-10 rounded text-black w-full"
+              value={formData.password}
+              onChange={handleChange}
+            />
+            <button
+              type="button"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-black"
+              tabIndex={-1}
+              onClick={() => setShowPassword((prev) => !prev)}
+              aria-label={showPassword ? 'Hide password' : 'Show password'}
+            >
+              {showPassword ? <FaEyeSlash size={18} /> : <FaEye size={18} />}
+            </button>
+          </div>
           <button
             type="submit"
             disabled={loading}
