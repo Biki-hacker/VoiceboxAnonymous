@@ -859,7 +859,7 @@ const EmployeeDashboard = () => {
     } catch (error) {
       console.error('Error verifying email with organization:', error);
       setIsEmailVerified(false);
-      setOrganizationName('Error verifying organization access. Please try again later.');
+      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
       return false;
     }
   };
