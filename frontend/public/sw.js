@@ -1,26 +1,33 @@
 // Service Worker for Voicebox Anonymous
-// Version: 1.0
-const CACHE_NAME = 'voicebox-anonymous-cache-v1';
-const urlsToCache = [
+// Version: 1.1
+const CACHE_NAME = 'voicebox-anonymous-cache-v1.1';
+
+// Start with just the essential files we know should exist
+const CORE_ASSETS = [
   '/',
   '/index.html',
-  '/static/js/bundle.js',
-  '/static/js/main.chunk.js',
-  '/static/js/0.chunk.js',
-  '/static/css/main.chunk.css',
   '/manifest.json',
-  '/favicon.ico',
-  '/logo192.png',
-  '/logo512.png'
+  '/favicon.ico'
 ];
 
 // Install event - cache the application shell
 self.addEventListener('install', event => {
+  // Skip waiting to activate the new service worker immediately
+  self.skipWaiting();
+  
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then(cache => {
         console.log('Opened cache');
-        return cache.addAll(urlsToCache);
+        // First, add core assets that definitely exist
+        return Promise.all(
+          CORE_ASSETS.map(url => {
+            return cache.add(url).catch(err => {
+              console.warn(`Couldn't cache ${url}:`, err);
+              return null;
+            });
+          })
+        );
       })
   );
 });
