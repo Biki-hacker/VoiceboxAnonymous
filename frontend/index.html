@@ -36,9 +36,12 @@
     
     <!-- Load web fonts asynchronously -->
     <script>
-      // Load Google Fonts asynchronously
+      // Load Google Fonts asynchronously with font-display: swap
       WebFontConfig = {
-        google: { families: ['Inter:300,400,500,600,700'] }
+        google: { 
+          families: ['Inter:300,400,500,600,700'],
+          display: 'swap'
+        }
       };
       (function(d) {
         var wf = d.createElement('script'), s = d.scripts[0];
