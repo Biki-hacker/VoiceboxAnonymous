@@ -1,34 +1,43 @@
 // Service Worker for Voicebox Anonymous
-// Version: 1.1
-const CACHE_NAME = 'voicebox-anonymous-cache-v1.1';
+// Version: 1.2 - BFCache Optimized
+const CACHE_NAME = 'voicebox-anonymous-cache-v1.2';
 
-// Start with just the essential files we know should exist
+// Only cache essential static assets
 const CORE_ASSETS = [
   '/',
   '/index.html',
-  '/manifest.json',
-  '/favicon.ico'
+  '/manifest.json'
+];
+
+// Skip caching for these paths (API routes, etc.)
+const IGNORE_PATHS = [
+  '/api/',
+  '/socket.io/',
+  '/sockjs-node/'
 ];
 
 // Install event - cache the application shell
 self.addEventListener('install', event => {
-  // Skip waiting to activate the new service worker immediately
-  self.skipWaiting();
-  
+  // Don't skip waiting here to prevent potential bfcache issues
   event.waitUntil(
-    caches.open(CACHE_NAME)
-      .then(cache => {
-        console.log('Opened cache');
-        // First, add core assets that definitely exist
-        return Promise.all(
-          CORE_ASSETS.map(url => {
-            return cache.add(url).catch(err => {
-              console.warn(`Couldn't cache ${url}:`, err);
-              return null;
-            });
-          })
-        );
-      })
+    (async () => {
+      try {
+        const cache = await caches.open(CACHE_NAME);
+        console.log('[Service Worker] Opened cache');
+        
+        // Cache core assets one by one with better error handling
+        for (const url of CORE_ASSETS) {
+          try {
+            await cache.add(new Request(url, { cache: 'reload' }));
+            console.log(`[Service Worker] Cached: ${url}`);
+          } catch (err) {
+            console.warn(`[Service Worker] Failed to cache ${url}:`, err);
+          }
+        }
+      } catch (error) {
+        console.error('[Service Worker] Installation failed:', error);
+      }
+    })()
   );
 });
 
@@ -48,45 +57,81 @@ self.addEventListener('activate', event => {
   );
 });
 
+// Check if a request should be handled by the service worker
+function shouldHandleRequest(request) {
+  const url = new URL(request.url);
+  
+  // Skip cross-origin requests
+  if (!url.origin.startsWith(self.location.origin)) {
+    return false;
+  }
+  
+  // Skip non-GET requests
+  if (request.method !== 'GET') {
+    return false;
+  }
+  
+  // Skip ignored paths
+  if (IGNORE_PATHS.some(path => url.pathname.startsWith(path))) {
+    return false;
+  }
+  
+  return true;
+}
+
 // Fetch event - serve from cache, falling back to network
 self.addEventListener('fetch', event => {
-  // Skip cross-origin requests, like those to your API or external resources
-  if (!event.request.url.startsWith(self.location.origin)) {
+  // Skip requests we shouldn't handle
+  if (!shouldHandleRequest(event.request)) {
     return;
   }
-
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request).then(response => {
-      // Cache hit - return response
-      if (response) {
-        return response;
-      }
-
-      // Clone the request (a stream can only be consumed once)
-      const fetchRequest = event.request.clone();
-
-      return fetch(fetchRequest).then(response => {
-        // Check if we received a valid response
-        if (!response || response.status !== 200 || response.type !== 'basic') {
-          return response;
+  
+  // For navigation requests, use a more bfcache-friendly approach
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      (async () => {
+        try {
+          // Try network first for navigation requests
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.status === 200) {
+            const cache = await caches.open(CACHE_NAME);
+            await cache.put(event.request, networkResponse.clone());
+            return networkResponse;
+          }
+        } catch (error) {
+          console.log('[Service Worker] Network fetch failed, falling back to cache');
         }
-
-        // Clone the response (stream can only be consumed once)
-        const responseToCache = response.clone();
-
-        caches.open(CACHE_NAME).then(cache => {
-          cache.put(event.request, responseToCache);
-        });
-
-        return response;
-      });
-    })
-  );
+        
+        // Fall back to cache if network fails
+        const cachedResponse = await caches.match(event.request);
+        return cachedResponse || new Response('Offline', { status: 503, statusText: 'Offline' });
+      })()
+    );
+  } else {
+    // For non-navigation requests, use cache-first strategy
+    event.respondWith(
+      (async () => {
+        try {
+          // Try cache first
+          const cachedResponse = await caches.match(event.request);
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          
+          // If not in cache, try network
+          const networkResponse = await fetch(event.request);
+          if (networkResponse && networkResponse.status === 200) {
+            const cache = await caches.open(CACHE_NAME);
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        } catch (error) {
+          console.error('[Service Worker] Fetch failed:', error);
+          return new Response('Network error', { status: 500 });
+        }
+      })()
+    );
+  }
 });
 
 // Message event - handle messages from the page
