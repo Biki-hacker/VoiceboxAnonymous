@@ -21,8 +21,17 @@ export default function SignUp() {
   const [showRoleError, setShowRoleError] = useState(false);
   const [message, setMessage]         = useState('');
   const [error, setError]             = useState('');
+  // Check URL for fromPricing parameter first, then check location state
   const [fromPricing, setFromPricing] = useState(() => {
-    // Initialize fromPricing based on navigation state
+    // Check URL parameters first
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromPricingParam = urlParams.get('fromPricing');
+    
+    if (fromPricingParam !== null) {
+      return fromPricingParam === 'true';
+    }
+    
+    // Fall back to location state
     return location.state?.fromPricing || false;
   });
   
@@ -36,8 +45,17 @@ export default function SignUp() {
   }, []);
 
   useEffect(() => {
-    // Update state if location state changes
-    if (location.state?.fromPricing) {
+    // This effect runs when the component mounts and when location.state changes
+    const urlParams = new URLSearchParams(window.location.search);
+    const fromPricingParam = urlParams.get('fromPricing');
+    
+    if (fromPricingParam !== null) {
+      const value = fromPricingParam === 'true';
+      setFromPricing(value);
+      if (value) {
+        setRole('admin');
+      }
+    } else if (location.state?.fromPricing) {
       setFromPricing(true);
       setRole('admin');
     } else {
@@ -292,7 +310,34 @@ export default function SignUp() {
   ];
 
   const RoleInstructions = () => {
-    if (!role) return <p className="text-gray-400 text-sm mt-2">Choose your role first</p>;
+    if (fromPricing) {
+      return (
+        <div className="mt-4 p-4 bg-gray-800/50 rounded-lg">
+          <h3 className="font-medium text-lg mb-2 text-blue-400">
+            Start Your Organization's VoiceBox
+          </h3>
+          <p className="text-sm text-gray-300 mb-4">
+            You're signing up as an Admin to create your organization's VoiceBox account. 
+            After signing up, you can subscribe to a plan from your dashboard to get started.
+          </p>
+          <p className="text-sm text-gray-400 italic">
+            Note: To sign up as an Employee or access the regular signup page, please{' '}
+            <Link 
+              to="/signup" 
+              className="text-blue-400 hover:underline"
+              onClick={() => {
+                // Clear any location state that might be set
+                window.history.replaceState({}, document.title, '/signup');
+              }}
+            >
+              click here
+            </Link>.
+          </p>
+        </div>
+      );
+    }
+
+    if (!role) return <p className="text-gray-400 text-base font-medium mt-2">Choose your role first</p>;
     
     return (
       <div className="mt-4 p-4 bg-gray-800/50 rounded-lg">
@@ -389,64 +434,76 @@ export default function SignUp() {
             </div>
 
             <div className="pt-2">
-              <Listbox 
-                value={role} 
-                onChange={(value) => {
-                  setRole(value);
-                  setShowRoleError(false);
-                }}
-              >
-                <div 
-                  className="relative" 
-                  onClick={() => setShowRoleError(false)}
-                >
-                  <Listbox.Button className="relative w-full cursor-default rounded-lg bg-gray-800 py-2.5 pl-3 pr-10 text-left border border-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-opacity-75 text-sm">
-                    <span className={`block truncate ${!role ? 'text-gray-400' : ''}`}>
-                      {role ? roles.find(r => r.value === role)?.name : 'Choose your role'}
-                    </span>
+              {fromPricing ? (
+                <div className="relative">
+                  <div className="relative w-full rounded-lg bg-gray-800/50 py-2.5 pl-3 pr-10 text-left border border-gray-700 text-sm text-gray-400">
+                    Admin (required for organization setup)
                     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                      <HiSelector className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                      <HiSelector className="h-4 w-4 text-gray-600" aria-hidden="true" />
                     </span>
-                  </Listbox.Button>
-                  <Transition
-                    as={Fragment}
-                    leave="transition ease-in duration-100"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                  >
-                    <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
-                      {roles.map((roleItem) => (
-                        <Listbox.Option
-                          key={roleItem.id}
-                          className={({ active }) =>
-                            `relative cursor-default select-none py-2 pl-10 pr-4 ${
-                              active ? 'bg-blue-600 text-white' : 'text-gray-300'
-                            }`
-                          }
-                          value={roleItem.value}
-                        >
-                          {({ selected }) => (
-                            <>
-                              <span
-                                className={`block truncate ${
-                                  selected ? 'font-medium' : 'font-normal'
-                                }`}
-                              >
-                                {roleItem.name}
-                              </span>
-                              {selected ? (
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-400">
-                                  <HiCheck className="h-5 w-5" aria-hidden="true" />
-                                </span>
-                              ) : null}
-                            </>
-                          )}
-                        </Listbox.Option>
-                      ))}
-                    </Listbox.Options>
-                  </Transition>
+                  </div>
+                  <input type="hidden" name="role" value="admin" />
                 </div>
-              </Listbox>
+              ) : (
+                <Listbox 
+                  value={role} 
+                  onChange={(value) => {
+                    setRole(value);
+                    setShowRoleError(false);
+                  }}
+                >
+                  <div 
+                    className="relative" 
+                    onClick={() => setShowRoleError(false)}
+                  >
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg bg-gray-800 py-2.5 pl-3 pr-10 text-left border border-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-opacity-75 text-sm">
+                      <span className={`block truncate ${!role ? 'text-gray-400' : ''}`}>
+                        {role ? roles.find(r => r.value === role)?.name : 'Choose your role'}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <HiSelector className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      as={Fragment}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                    >
+                      <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+                        {roles.map((roleItem) => (
+                          <Listbox.Option
+                            key={roleItem.id}
+                            className={({ active }) =>
+                              `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                                active ? 'bg-blue-600 text-white' : 'text-gray-300'
+                              }`
+                            }
+                            value={roleItem.value}
+                          >
+                            {({ selected }) => (
+                              <>
+                                <span
+                                  className={`block truncate ${
+                                    selected ? 'font-medium' : 'font-normal'
+                                  }`}
+                                >
+                                  {roleItem.name}
+                                </span>
+                                {selected ? (
+                                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-400">
+                                    <HiCheck className="h-5 w-5" aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                              </>
+                            )}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
+              )}
               {showRoleError && <p className="mt-1 text-sm text-red-500">Please select a role</p>}
             </div>
 
@@ -507,64 +564,75 @@ export default function SignUp() {
             </div>
             
             <div className="mt-2">
-              <Listbox 
-                value={role} 
-                onChange={(value) => {
-                  setRole(value);
-                  setShowRoleError(false);
-                }}
-              >
-                <div 
-                  className="relative"
-                  onClick={() => setShowRoleError(false)}
-                >
-                  <Listbox.Button className="relative w-full cursor-default rounded-lg bg-gray-800 py-2 pl-3 pr-10 text-left border border-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-opacity-75 text-sm">
-                    <span className={`block truncate ${!role ? 'text-gray-400' : ''}`}>
-                      {role ? roles.find(r => r.value === role)?.name : 'Select role for social sign-in'}
-                    </span>
+              {fromPricing ? (
+                <div className="relative">
+                  <div className="relative w-full rounded-lg bg-gray-800/50 py-2 pl-3 pr-10 text-left border border-gray-700 text-sm text-gray-400">
+                    Admin (required for organization setup)
                     <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
-                      <HiSelector className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                      <HiSelector className="h-4 w-4 text-gray-600" aria-hidden="true" />
                     </span>
-                  </Listbox.Button>
-                  <Transition
-                    as={Fragment}
-                    leave="transition ease-in duration-100"
-                    leaveFrom="opacity-100"
-                    leaveTo="opacity-0"
-                  >
-                    <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
-                      {roles.map((roleItem) => (
-                        <Listbox.Option
-                          key={roleItem.id}
-                          className={({ active }) =>
-                            `relative cursor-default select-none py-2 pl-10 pr-4 ${
-                              active ? 'bg-blue-600 text-white' : 'text-gray-300'
-                            }`
-                          }
-                          value={roleItem.value}
-                        >
-                          {({ selected }) => (
-                            <>
-                              <span
-                                className={`block truncate ${
-                                  selected ? 'font-medium' : 'font-normal'
-                                }`}
-                              >
-                                {roleItem.name}
-                              </span>
-                              {selected ? (
-                                <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-400">
-                                  <HiCheck className="h-4 w-4" aria-hidden="true" />
-                                </span>
-                              ) : null}
-                            </>
-                          )}
-                        </Listbox.Option>
-                      ))}
-                    </Listbox.Options>
-                  </Transition>
+                  </div>
                 </div>
-              </Listbox>
+              ) : (
+                <Listbox 
+                  value={role} 
+                  onChange={(value) => {
+                    setRole(value);
+                    setShowRoleError(false);
+                  }}
+                >
+                  <div 
+                    className="relative"
+                    onClick={() => setShowRoleError(false)}
+                  >
+                    <Listbox.Button className="relative w-full cursor-default rounded-lg bg-gray-800 py-2 pl-3 pr-10 text-left border border-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-opacity-75 text-sm">
+                      <span className={`block truncate ${!role ? 'text-gray-400' : ''}`}>
+                        {role ? roles.find(r => r.value === role)?.name : 'Select role for social sign-in'}
+                      </span>
+                      <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2">
+                        <HiSelector className="h-4 w-4 text-gray-400" aria-hidden="true" />
+                      </span>
+                    </Listbox.Button>
+                    <Transition
+                      as={Fragment}
+                      leave="transition ease-in duration-100"
+                      leaveFrom="opacity-100"
+                      leaveTo="opacity-0"
+                    >
+                      <Listbox.Options className="absolute mt-1 max-h-60 w-full overflow-auto rounded-md bg-gray-800 py-1 text-sm shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+                        {roles.map((roleItem) => (
+                          <Listbox.Option
+                            key={roleItem.id}
+                            className={({ active }) =>
+                              `relative cursor-default select-none py-2 pl-10 pr-4 ${
+                                active ? 'bg-blue-600 text-white' : 'text-gray-300'
+                              }`
+                            }
+                            value={roleItem.value}
+                          >
+                            {({ selected }) => (
+                              <>
+                                <span
+                                  className={`block truncate ${
+                                    selected ? 'font-medium' : 'font-normal'
+                                  }`}
+                                >
+                                  {roleItem.name}
+                                </span>
+                                {selected ? (
+                                  <span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-400">
+                                    <HiCheck className="h-4 w-4" aria-hidden="true" />
+                                  </span>
+                                ) : null}
+                              </>
+                            )}
+                          </Listbox.Option>
+                        ))}
+                      </Listbox.Options>
+                    </Transition>
+                  </div>
+                </Listbox>
+              )}
               {showRoleError && <p className="mt-1 text-sm text-red-500">Please select a role</p>}
             </div>
 
@@ -592,11 +660,13 @@ export default function SignUp() {
 
         {/* Right side - Instructions */}
         <div className="hidden md:flex md:w-1/2 bg-gradient-to-br from-blue-900/30 to-purple-900/30 flex-col items-center justify-center p-12">
-        <div className="max-w-md">
-          <h1 className="text-4xl font-bold mb-6">VoiceBox Anonymous</h1>
-          <RoleInstructions />
+          <div className="max-w-md">
+            <h1 className="text-4xl font-bold mb-6">
+              {fromPricing ? 'Start Your Organization' : 'VoiceBox Anonymous'}
+            </h1>
+            <RoleInstructions />
+          </div>
         </div>
-      </div>
       
       {/* Mobile instructions */}
       <div className="md:hidden p-6 bg-gradient-to-r from-blue-900/30 to-purple-900/30">
