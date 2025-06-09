@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
 import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
+import Sidebar from '../components/Sidebar';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
     Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
@@ -1266,49 +1267,15 @@ const AdminDashboard = () => {
 
     // --- Sidebar Items ---
     const sidebarNavItems = [
+        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
         { name: 'Add Organization', icon: PlusIcon, action: handleOpenAddOrgModal, current: isAddOrgModalOpen },
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
         { name: 'Subscriptions', icon: CreditCardIcon, action: () => navigate('/subscriptions'), current: window.location.pathname === '/subscriptions' },
         { name: 'Co-admin Orgs', icon: UserGroupIcon, action: handleOpenCoAdminOrgsModal, current: isCoAdminOrgsModalOpen },
-        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
     ];
 
-    // --- Mobile Sidebar Component ---
-    const MobileSidebar = () => (
-        <Transition.Root show={isMobileSidebarOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-40 md:hidden" onClose={setIsMobileSidebarOpen}>
-                <Transition.Child as={Fragment} enter="transition-opacity ease-linear duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="transition-opacity ease-linear duration-300" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-gray-600/75 dark:bg-slate-900/75" /></Transition.Child>
-                <div className="fixed inset-0 z-40 flex">
-                    <Transition.Child as={Fragment} enter="transition ease-in-out duration-300 transform" enterFrom="-translate-x-full" enterTo="translate-x-0" leave="transition ease-in-out duration-300 transform" leaveFrom="translate-x-0" leaveTo="-translate-x-full">
-                        <Dialog.Panel className="relative flex w-full max-w-xs flex-1 flex-col bg-white dark:bg-slate-900 pt-5 pb-4">
-                            <Transition.Child as={Fragment} enter="ease-in-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in-out duration-300" leaveFrom="opacity-100" leaveTo="opacity-0">
-                                <div className="absolute top-0 right-0 -mr-12 pt-2"><button type="button" className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setIsMobileSidebarOpen(false)}><span className="sr-only">Close sidebar</span> <XMarkIcon className="h-6 w-6 text-white" aria-hidden="true" /></button></div>
-                            </Transition.Child>
-                            <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200 dark:border-slate-700 flex-shrink-0"><BuildingOffice2Icon className="h-8 w-8 text-blue-600 dark:text-blue-500" /><span className="ml-2 text-xl font-semibold text-gray-800 dark:text-slate-100">Admin</span></div>
-                            <nav className="mt-5 flex flex-col space-y-4 items-center">
-                                {sidebarNavItems.map((item) => (<button key={item.name} onClick={() => { item.action(); setIsMobileSidebarOpen(false);}} className={`w-full flex items-center px-3 py-3 rounded-md text-sm font-medium group transition-colors duration-150 ${item.current ? 'bg-gray-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-slate-100'}`}><item.icon className="h-6 w-6 mr-3 flex-shrink-0" />{item.name}</button>))}
-                            </nav>
-                            <div className="mt-auto border-t border-gray-200 dark:border-slate-700 p-4">
-                                <div className="flex items-center justify-between">
-                                    <div className="flex items-center space-x-2">
-                                        <UserCircleIcon className="h-7 w-7 text-gray-500 dark:text-slate-400" />
-                                        <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Anonymous Admin</span>
-                                    </div>
-                                    <div className="flex items-center space-x-2">
-                                        <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                                        <button onClick={handleLogout} className="p-2 rounded-full text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                                            <ArrowLeftOnRectangleIcon className="h-5 w-5" />
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </Dialog.Panel>
-                    </Transition.Child>
-                    <div className="w-14 flex-shrink-0" aria-hidden="true"></div>
-                </div>
-            </Dialog>
-        </Transition.Root>
-    );
+    // Logo component for the sidebar
+    const Logo = BuildingOffice2Icon;
 
     // --- Main Render ---
     return (
@@ -1322,20 +1289,19 @@ const AdminDashboard = () => {
                 </script>
             </Helmet>
             <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
-            <MobileSidebar />
-            <aside className="hidden md:flex md:w-20 lg:w-24 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-5 shadow-sm flex-shrink-0">
-                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7" /></div>
-                <nav className="flex flex-col space-y-4 items-center">
-                    {sidebarNavItems.map((item) => (<button key={item.name} onClick={item.action} title={item.name} className={`p-3 lg:p-3 rounded-lg transition-colors duration-150 ${item.current ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'}`}><item.icon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">{item.name}</span></button>))}
-                </nav>
-                <div className="mt-auto flex flex-col items-center space-y-4">
-                    <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                    <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/30 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                        <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-                        <span className="sr-only">Logout</span>
-                    </button>
-                </div>
-            </aside>
+            <Sidebar
+                isMobileSidebarOpen={isMobileSidebarOpen}
+                setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+                sidebarNavItems={sidebarNavItems}
+                logo={Logo}
+                title="Admin"
+                userEmail={userData?.email}
+                theme={theme}
+                toggleTheme={toggleTheme}
+                onLogout={handleLogout}
+                viewMode={viewMode}
+                isAdmin={true}
+            />
 
             <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
                 <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
@@ -2518,89 +2484,8 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   );
 };
 
-// --- Media Viewer Modal Component ---
-const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
-  const modalRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Close modal when clicking outside the content
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
-
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  // Toggle fullscreen mode
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.log);
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
-          aria-label="Close media viewer"
-        >
-          <XCircleIcon className="h-8 w-8" />
-        </button>
-        
-        <div 
-          ref={modalRef} 
-          className="relative max-w-full max-h-full flex items-center justify-center"
-        >
-          {mediaType === 'image' ? (
-            <img
-              src={mediaUrl}
-              alt="Full size media"
-              className="max-w-full max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <video
-              src={mediaUrl}
-              className="max-w-full max-h-[90vh]"
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+// --- Import MediaViewer Component ---
+import MediaViewer from '../components/MediaViewer';
 
 // Animation variants for Framer Motion
 export const fadeInUp = { 

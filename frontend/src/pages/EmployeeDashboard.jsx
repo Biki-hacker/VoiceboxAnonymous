@@ -34,9 +34,12 @@ import {
   TagIcon,
   MapPinIcon,
   BuildingLibraryIcon,
-  ChevronUpDownIcon
+  ChevronUpDownIcon,
+  HomeIcon,
+  DocumentTextIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
+import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
 
@@ -727,90 +730,8 @@ const ActionCard = ({
   </motion.div>
 );
 
-// --- Media Viewer Modal Component ---
-const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
-  const modalRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Close modal when clicking outside the content
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
-
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  // Toggle fullscreen
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.log);
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
-          aria-label="Close media viewer"
-        >
-          <XCircleIcon className="h-8 w-8" />
-        </button>
-        {/* Fullscreen button removed as per user request */}
-        
-        <div 
-          ref={modalRef} 
-          className="relative max-w-full max-h-full flex items-center justify-center"
-        >
-          {mediaType === 'image' ? (
-            <img
-              src={mediaUrl}
-              alt="Full size media"
-              className="max-w-full max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <video
-              src={mediaUrl}
-              className="max-w-full max-h-[90vh]"
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+// --- Import MediaViewer Component ---
+import MediaViewer from '../components/MediaViewer';
 
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
@@ -1520,6 +1441,8 @@ const EmployeeDashboard = () => {
     navigate('/signin');
   };
 
+
+
   // --- Handle Comment Submit ---
   // This function is no longer needed as CommentSection handles its own submission
   const handleCommentSubmit = async (postId, text) => {
@@ -1620,6 +1543,37 @@ const EmployeeDashboard = () => {
       icon: CheckBadgeIcon,
       bgColorClass: "bg-emerald-50 dark:bg-emerald-900/30",
       accentColorClass: "text-emerald-600 dark:text-emerald-400"
+    }
+  ];
+
+  // Navigation items for the sidebar
+  const navItems = [
+    { 
+      name: 'Create Post', 
+      icon: PencilSquareIcon, 
+      action: isEmailVerified 
+        ? () => setViewMode('create')
+        : () => setShowOrgAccessModal(true),
+      current: viewMode === 'create',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'View Posts', 
+      icon: EyeIcon, 
+      action: isEmailVerified 
+        ? () => {
+            fetchPosts();
+            setViewMode('view');
+          }
+        : () => setShowOrgAccessModal(true),
+      current: viewMode === 'view',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'Verify Details', 
+      icon: CheckBadgeIcon, 
+      action: () => navigate('/employee/verify'),
+      current: false
     }
   ];
 
@@ -1996,142 +1950,39 @@ const EmployeeDashboard = () => {
           {JSON.stringify(structuredData)}
         </script>
       </Helmet>
-      {/* Mobile sidebar overlay */}
-      <AnimatePresence>
-        {isMobileSidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => setIsMobileSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Mobile sidebar */}
-      <AnimatePresence>
-        {isMobileSidebarOpen && (
-          <motion.aside
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'tween', duration: 0.2 }}
-            className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col z-50 md:hidden"
-          >
-            <header className="fixed top-0 left-0 right-0 h-14 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center px-4 z-30 md:hidden">
-              <button
-                onClick={() => setIsMobileSidebarOpen(true)}
-                className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
-              >
-                <Bars3Icon className="h-6 w-6" />
-              </button>
-              <div className="ml-4 font-semibold text-gray-800 dark:text-white">VoiceBox</div>
-              <div className="ml-auto flex items-center space-x-2">
-                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                <button
-                  onClick={handleLogout}
-                  className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                  title="Sign out"
-                >
-                  <ArrowLeftOnRectangleIcon className="h-5 w-5" />
-                </button>
-              </div>
-            </header>
-            {/* Access denied message */}
-            {!isEmailVerified && (
-              <div className="fixed top-14 left-0 right-0 z-20">
-                <div className="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4">
-                  <div className="flex">
-                    <div className="flex-shrink-0">
-                      <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" aria-hidden="true" />
-                    </div>
-                    <div className="ml-3">
-                      <p className="text-sm text-yellow-700 dark:text-yellow-300">
-                        {organizationName}
-                      </p>
-                    </div>
-                  </div>
+      {/* Sidebar */}
+      <Sidebar
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+        sidebarNavItems={navItems}
+        logo={BuildingOfficeIcon}
+        title="VoiceBox"
+        userEmail={localStorage.getItem('email')}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onLogout={() => {
+          localStorage.clear();
+          navigate('/signin');
+        }}
+        viewMode={viewMode}
+        isAdmin={false}
+        additionalHeaderContent={!isEmailVerified ? (
+          <div className="fixed top-14 left-0 right-0 z-20">
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" aria-hidden="true" />
                 </div>
-              </div>
-            )}
-            <nav className="flex-1 overflow-y-auto py-4 px-2">
-              <div className="space-y-1">
-                {actions.map((action) => (
-                  <button
-                    key={action.title}
-                    onClick={() => {
-                      action.onClick();
-                      setIsMobileSidebarOpen(false);
-                    }}
-                    className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <action.icon className="h-5 w-5 mr-3" />
-                    {action.title}
-                  </button>
-                ))}
-              </div>
-            </nav>
-            <div className="p-4 border-t border-gray-200 dark:border-slate-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                    Anonymous Employee
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                  <button
-                    onClick={() => {
-                      logout();
-                      navigate('/signin');
-                      setIsMobileSidebarOpen(false);
-                    }}
-                    className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                    title="Logout"
-                  >
-                    <ArrowLeftOnRectangleIcon className="h-5 w-5" />
-                  </button>
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    {organizationName}
+                  </p>
                 </div>
               </div>
             </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
-        <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
-          <BuildingOfficeIcon className="h-7 w-7 md:h-8" />
-        </div>
-        <nav className="flex flex-col space-y-5 items-center">
-          {actions.slice(0, 2).map(action => (
-            <button
-              key={action.title}
-              onClick={action.onClick}
-              title={action.title}
-              className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              <action.icon className="h-6 w-6" />
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto flex flex-col items-center space-y-5">
-          <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-          <button
-            onClick={() => {
-              logout();
-              navigate('/signin');
-            }}
-            title="Logout"
-            className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-          >
-            <ArrowLeftOnRectangleIcon className="h-6 w-6" />
-          </button>
-        </div>
-      </aside>
+          </div>
+        ) : null}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
@@ -2141,6 +1992,7 @@ const EmployeeDashboard = () => {
               type="button"
               className="mr-2 p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 md:hidden"
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              aria-label="Toggle menu"
             >
               <Bars3Icon className="h-6 w-6" aria-hidden="true" />
             </button>

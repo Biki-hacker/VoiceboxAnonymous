@@ -7,8 +7,56 @@ const {
   validateOrgId, 
   validateEmailParam,
   handleValidationErrors,
-  validateEmployeeEmails 
+  validateEmployeeEmails,
+  validateCoAdminEmails
 } = require('../middleware/validation');
+
+// Middleware to check if user is an admin or co-admin of the organization
+const checkOrgAdminOrCoAdmin = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user._id;
+    const userEmail = req.user.email;
+    
+    // Find the organization
+    const org = await Organization.findById(id);
+    if (!org) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization not found',
+        code: 'ORGANIZATION_NOT_FOUND'
+      });
+    }
+    
+    // Check if the current user is the admin of this organization
+    const isAdmin = org.adminId.toString() === userId.toString();
+    
+    // Check if the current user is a co-admin of this organization
+    const isCoAdmin = org.coAdminEmails.some(
+      emailObj => emailObj.normalizedEmail === userEmail.toLowerCase()
+    );
+    
+    if (!isAdmin && !isCoAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to perform this action',
+        code: 'UNAUTHORIZED_ACCESS'
+      });
+    }
+    
+    // Attach organization and user role to request for use in route handlers
+    req.organization = org;
+    req.userRole = isAdmin ? 'admin' : 'co-admin';
+    next();
+  } catch (error) {
+    console.error('Error in checkOrgAdminOrCoAdmin middleware:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Internal server error',
+      code: 'SERVER_ERROR'
+    });
+  }
+};
 
 // Middleware to check if user is an admin of the organization
 const checkOrgAdmin = async (req, res, next) => {
@@ -629,5 +677,161 @@ exports.updateVerificationParams = async (req, res) => {
   } catch (err) {
     console.error('Error updating verification schema:', err);
     res.status(500).json({ message: 'Error updating verification schema' });
+  }
+};
+
+/**
+ * Update co-admin emails for an organization
+ * @route PUT /api/organizations/:orgId/coadmin-emails
+ * @access Private (Admin only)
+ */
+exports.updateCoAdminEmails = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const userId = req.user._id;
+    
+    // Find the organization
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization not found',
+        code: 'ORGANIZATION_NOT_FOUND'
+      });
+    }
+    
+    // Check if user is the admin of this organization
+    if (org.adminId.toString() !== userId.toString()) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to update co-admin emails for this organization',
+        code: 'UNAUTHORIZED_ACCESS'
+      });
+    }
+    
+    // Update co-admin emails with validated data from middleware
+    org.coAdminEmails = (req.validatedEmails || []).map(email => ({
+      email: email.email, // Preserve original email
+      normalizedEmail: email.normalizedEmail || email.email.toLowerCase(),
+      verificationToken: email.verificationToken || uuidv4(),
+      isVerified: email.isVerified || false,
+      addedAt: email.addedAt || new Date()
+    }));
+    
+    org.updatedAt = new Date();
+    
+    await org.save();
+    
+    // Prepare response data without sensitive information
+    const responseData = {
+      id: org._id,
+      name: org.name,
+      coAdminCount: org.coAdminEmails.length,
+      updatedAt: org.updatedAt
+    };
+    
+    res.status(200).json({
+      success: true,
+      message: 'Co-admin emails updated successfully',
+      data: responseData
+    });
+  } catch (error) {
+    console.error('Error updating co-admin emails:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update co-admin emails',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get co-admin emails for an organization
+ * @route GET /api/organizations/:orgId/coadmin-emails
+ * @access Private (Admin and Co-admins)
+ */
+exports.getCoAdminEmails = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    const userId = req.user._id;
+    const userEmail = req.user.email.toLowerCase();
+    
+    // Find the organization
+    const org = await Organization.findById(orgId);
+    if (!org) {
+      return res.status(404).json({
+        success: false,
+        message: 'Organization not found',
+        code: 'ORGANIZATION_NOT_FOUND'
+      });
+    }
+    
+    // Check if user is the admin or a co-admin of this organization
+    const isAdmin = org.adminId.toString() === userId.toString();
+    const isCoAdmin = org.coAdminEmails.some(
+      emailObj => emailObj.normalizedEmail === userEmail
+    );
+    
+    if (!isAdmin && !isCoAdmin) {
+      return res.status(403).json({
+        success: false,
+        message: 'You are not authorized to view co-admin emails for this organization',
+        code: 'UNAUTHORIZED_ACCESS'
+      });
+    }
+    
+    // Return co-admin emails (sensitive fields like verificationToken are not included)
+    const coAdminEmails = org.coAdminEmails.map(email => ({
+      email: email.email,
+      isVerified: email.isVerified,
+      addedAt: email.addedAt
+    }));
+    
+    res.status(200).json({
+      success: true,
+      data: {
+        coAdminEmails,
+        isAdmin // Include role information in the response
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching co-admin emails:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch co-admin emails',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+};
+
+/**
+ * Get organizations where the current user is a co-admin
+ * @route GET /api/organizations/coadmin
+ * @access Private
+ */
+exports.getOrgsByCoAdmin = async (req, res) => {
+  try {
+    const userEmail = req.user.email.toLowerCase();
+    
+    // Find all organizations where the user is a co-admin
+    const orgs = await Organization.find({
+      coAdminEmails: { $elemMatch: { email: userEmail } }
+    }).select('name adminEmail createdAt');
+    
+    res.status(200).json({
+      success: true,
+      count: orgs.length,
+      data: orgs
+    });
+  } catch (error) {
+    console.error('Error fetching co-admin organizations:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch co-admin organizations',
+      code: 'SERVER_ERROR',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
 };

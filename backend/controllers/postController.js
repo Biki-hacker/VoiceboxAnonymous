@@ -56,17 +56,10 @@ exports.getPostsByOrg = async (req, res) => {
     const { orgId } = req.params;
     const { postId } = req.query;
     
-    // For admin users, check if they created this organization
-    if (req.user.role === 'admin') {
-      const organization = await Organization.findById(orgId);
-      if (!organization || organization.adminEmail !== req.user.email) {
-        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
-      }
-    } else {
-      // For employees, check if this is their verified organization
-      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
-        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
-      }
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
     }
 
     // If postId is provided, return just that post
@@ -762,21 +755,179 @@ exports.deletePost = async (req, res) => {
   }
 };
 
+// Helper function to check organization access
+const checkOrgAccess = async (req, orgId) => {
+  try {
+    console.log('=== checkOrgAccess called ===');
+    console.log('Request user:', {
+      id: req.user?._id,
+      email: req.user?.email,
+      role: req.user?.role,
+      organizationId: req.user?.organizationId
+    });
+    console.log('Checking access for orgId:', orgId);
+
+    // For admin and co-admin users, check if they have access to this organization
+    if (req.user?.role === 'admin' || req.user?.role === 'co-admin') {
+      console.log('User is admin/co-admin, checking organization access');
+      
+      const organization = await Organization.findById(orgId).lean();
+      
+      if (!organization) {
+        console.error(`Organization not found: ${orgId}`);
+        return { hasAccess: false, message: 'Organization not found' };
+      }
+      
+      console.log('Organization found:', {
+        _id: organization._id,
+        name: organization.name,
+        adminEmail: organization.adminEmail,
+        coAdminEmails: organization.coAdminEmails,
+        coAdminEmails: organization.coAdminEmails // Check both spellings
+      });
+      
+      // Normalize emails for comparison
+      const userEmail = req.user.email?.toLowerCase().trim();
+      const adminEmail = organization.adminEmail?.toLowerCase().trim();
+      
+      if (!userEmail) {
+        console.error('No user email found in request');
+        return { hasAccess: false, message: 'User email not found' };
+      }
+      
+      // Handle both coAdminEmails and coAdminEmails (typo in field name)
+      const coAdminEmails = [];
+      
+      // Helper function to safely process email strings
+      const processEmail = (email) => {
+        // If email is an object with an email property, use that
+        if (email && typeof email === 'object' && 'email' in email) {
+          const processed = String(email.email || '').toLowerCase().trim();
+          console.log(`Processed email object:`, email, '->', processed);
+          return processed;
+        }
+        // If it's already a string
+        if (typeof email === 'string') {
+          const processed = email.toLowerCase().trim();
+          console.log(`Processed email string: ${email} -> ${processed}`);
+          return processed;
+        }
+        // Fallback for any other case
+        const processed = String(email || '').toLowerCase().trim();
+        console.log(`Processed fallback email:`, email, '->', processed);
+        return processed;
+      };
+      
+      // Check both possible field names for co-admin emails
+      if (Array.isArray(organization.coAdminEmails)) {
+        console.log('Found coAdminEmails:', organization.coAdminEmails);
+        coAdminEmails.push(...organization.coAdminEmails
+          .filter(email => {
+            const valid = email != null;
+            if (!valid) console.log('Filtered out null/undefined email');
+            return valid;
+          })
+          .map(email => {
+            const processed = processEmail(email);
+            console.log(`Processed co-admin email: ${email} -> ${processed}`);
+            return processed;
+          })
+          .filter(email => {
+            const valid = !!email;
+            if (!valid) console.log('Filtered out empty email after processing');
+            return valid;
+          })
+        );
+      }
+      
+      // Check for the other possible field name (in case of typo)
+      if (Array.isArray(organization.coAdminEmails)) {
+        console.log('Found coAdminEmails (alt spelling):', organization.coAdminEmails);
+        coAdminEmails.push(...organization.coAdminEmails
+          .filter(email => {
+            const valid = email != null;
+            if (!valid) console.log('Filtered out null/undefined email (alt)');
+            return valid;
+          })
+          .map(email => {
+            const processed = processEmail(email);
+            console.log(`Processed co-admin email (alt): ${email} -> ${processed}`);
+            return processed;
+          })
+          .filter(email => {
+            const valid = !!email;
+            if (!valid) console.log('Filtered out empty email after processing (alt)');
+            return valid;
+          })
+        );
+      }
+      
+      // Remove duplicates and empty values
+      const uniqueCoAdminEmails = [...new Set(coAdminEmails)].filter(Boolean);
+      
+      // Check if user is either the admin or a co-admin of this organization
+      const isAdmin = adminEmail === userEmail;
+      const isCoAdmin = uniqueCoAdminEmails.includes(userEmail);
+      
+      console.log('Access check results:', {
+        userEmail,
+        isAdmin,
+        isCoAdmin,
+        adminEmail,
+        coAdminEmails: uniqueCoAdminEmails,
+        userRole: req.user.role,
+        orgId: organization._id,
+        organizationFields: Object.keys(organization)
+      });
+      
+      if (!isAdmin && !isCoAdmin) {
+        console.error('Access denied - User is neither admin nor co-admin', {
+          userEmail,
+          adminEmail,
+          isAdmin,
+          isCoAdmin,
+          coAdminEmails: uniqueCoAdminEmails
+        });
+        return { hasAccess: false, message: 'Access denied: Not authorized to access this organization' };
+      }
+      
+      // If user is a co-admin, elevate to admin role for this request
+      if (isCoAdmin && !isAdmin) {
+        console.log(`Elevating co-admin ${userEmail} to admin role for org ${orgId}`);
+        req.user.role = 'admin';
+        req.user.isCoAdmin = true; // Add flag to indicate this is a co-admin
+      }
+      
+      console.log('Access granted to organization');
+      return { hasAccess: true, organization };
+    } 
+    
+    // For regular employees, check if this is their verified organization
+    console.log('User is not an admin/co-admin, checking organization membership');
+    if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
+      console.error(`User ${req.user._id} is not a member of org ${orgId}`, {
+        userOrgId: req.user.organizationId,
+        requestedOrgId: orgId
+      });
+      return { hasAccess: false, message: 'Access denied: Not a member of this organization' };
+    }
+    
+    console.log('Access granted - Regular user is a member of the organization');
+    return { hasAccess: true };
+  } catch (error) {
+    console.error('Error in checkOrgAccess:', error);
+    return { hasAccess: false, message: 'Error checking organization access' };
+  }
+};
+
 exports.getPostStats = async (req, res) => {
   try {
     const { orgId } = req.params;
 
-    // For admin users, check if they created this organization
-    if (req.user.role === 'admin') {
-      const organization = await Organization.findById(orgId);
-      if (!organization || organization.adminEmail !== req.user.email) {
-        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
-      }
-    } else {
-      // For employees, check if this is their verified organization
-      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
-        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
-      }
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
     }
 
     const stats = await Post.aggregate([

@@ -123,16 +123,6 @@ const authMiddleware = async (req, res, next) => {
         });
       }
 
-      // Attach user to request
-      req.user = {
-        _id: user._id,
-        email: user.email,
-        role: user.role,
-        organizationId: user.organizationId,
-        verified: user.verified
-      };
-      req.token = token;
-
       // Add security headers
       res.setHeader('X-Content-Type-Options', 'nosniff');
       res.setHeader('X-Frame-Options', 'DENY');
