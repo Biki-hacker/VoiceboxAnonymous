@@ -989,7 +989,7 @@ const AdminDashboard = () => {
 
     const handleOpenEditAdminEmailsModal = (e) => {
         e?.target?.blur();
-        const currentEmails = selectedOrg.adminEmails?.map(e => e.email) || [];
+        const currentEmails = selectedOrg.coAdminEmails?.map(e => e.email) || [];
         setAdminEmailsInput(currentEmails.join(', '));
         setIsEditAdminEmailsModalOpen(true);
     };
@@ -1031,7 +1031,7 @@ const AdminDashboard = () => {
                 throw new Error(`Invalid organization ID format: ${orgId}`);
             }
 
-            await api.put(`/organizations/${orgId}/admin-emails`, requestData);
+            await api.put(`/organizations/${orgId}/coadmin-emails`, requestData);
             
             // Refresh organization data
             const { data: updatedOrg } = await api.get(`/organizations/${orgId}`);
@@ -1484,15 +1484,12 @@ const AdminDashboard = () => {
                                                 <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Emails</h4>
                                                 <p className="text-sm text-gray-500 dark:text-slate-400">
                                                     {selectedOrg.employeeEmails?.length > 0
-                                                        ? `${selectedOrg.employeeEmails.length} email(s) configured`
-                                                        : 'No employee emails added'}
+                                                        ? `${selectedOrg.employeeEmails.length} of 25 employee emails configured`
+                                                        : 'No employee emails added (0/25)'}
                                                 </p>
                                                 {selectedOrg.employeeEmails?.length > 0 && (
                                                     <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                                                        <p>First email: {selectedOrg.employeeEmails[0].email}</p>
-                                                        {selectedOrg.employeeEmails.length > 1 && (
-                                                            <p>+ {selectedOrg.employeeEmails.length - 1} more</p>
-                                                        )}
+                                                        {selectedOrg.employeeEmails.length} email(s) configured
                                                     </div>
                                                 )}
                                             </div>
@@ -1515,18 +1512,15 @@ const AdminDashboard = () => {
                                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Admin Emails</h4>
+                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Co-Admin Emails</h4>
                                                 <p className="text-sm text-gray-500 dark:text-slate-400">
-                                                    {selectedOrg.adminEmails?.length > 0
-                                                        ? `${selectedOrg.adminEmails.length} admin email(s) configured`
-                                                        : 'No admin emails added'}
+                                                    {selectedOrg.coAdminEmails?.length > 0
+                                                        ? `${selectedOrg.coAdminEmails.length} of 5 co-admin emails configured`
+                                                        : 'No co-admin emails added (0/5)'}
                                                 </p>
-                                                {selectedOrg.adminEmails?.length > 0 && (
+                                                {selectedOrg.coAdminEmails?.length > 0 && (
                                                     <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                                                        <p>First admin: {selectedOrg.adminEmails[0].email}</p>
-                                                        {selectedOrg.adminEmails.length > 1 && (
-                                                            <p>+ {selectedOrg.adminEmails.length - 1} more</p>
-                                                        )}
+                                                        {selectedOrg.coAdminEmails.length} email(s) configured
                                                     </div>
                                                 )}
                                             </div>
