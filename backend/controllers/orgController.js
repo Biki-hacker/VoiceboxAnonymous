@@ -815,10 +815,14 @@ exports.getOrgsByCoAdmin = async (req, res) => {
   try {
     const userEmail = req.user.email.toLowerCase();
     
+    console.log('Searching for co-admin organizations for email:', userEmail);
+    
     // Find all organizations where the user is a co-admin
     const orgs = await Organization.find({
       coAdminEmails: { $elemMatch: { email: userEmail } }
     }).select('name adminEmail createdAt');
+    
+    console.log('Found co-admin organizations:', orgs);
     
     res.status(200).json({
       success: true,

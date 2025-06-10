@@ -15,7 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
     BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon,
-    UserCircleIcon, UserGroupIcon, ChevronDownIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
+    UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
@@ -1257,12 +1257,89 @@ const AdminDashboard = () => {
         navigate('/signin');
     };
 
-    // State for Co-admin Orgs Modal
+        // State for Co-admin Orgs Modal
     const [isCoAdminOrgsModalOpen, setIsCoAdminOrgsModalOpen] = useState(false);
+    const [coAdminOrgs, setCoAdminOrgs] = useState([]);
+    const [loadingCoAdminOrgs, setLoadingCoAdminOrgs] = useState(false);
+    const [selectedCoAdminOrg, setSelectedCoAdminOrg] = useState(null);
     
     // Handler for opening Co-admin Orgs modal
-    const handleOpenCoAdminOrgsModal = () => {
+    const handleOpenCoAdminOrgsModal = async () => {
         setIsCoAdminOrgsModalOpen(true);
+        setLoadingCoAdminOrgs(true);
+        setError(prev => ({ ...prev, coAdminOrgs: null }));
+        
+        try {
+            console.log('Current user email:', userData?.email);
+            console.log('Auth token:', localStorage.getItem('token'));
+            
+            console.log('Fetching co-admin organizations...');
+            const response = await api.get('/organizations/coadmin', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                withCredentials: true
+            });
+            
+            console.log('Co-admin orgs response status:', response.status);
+            console.log('Full response:', response);
+            
+            // Handle different response formats
+            let orgs = [];
+            if (response.data?.success) {
+                // Handle standard success response with data array
+                orgs = Array.isArray(response.data.data) ? response.data.data : [];
+            } else if (Array.isArray(response.data)) {
+                // Handle case where response is directly an array
+                orgs = response.data;
+            } else if (response.data) {
+                // Handle case where data is a single object
+                orgs = [response.data];
+            }
+            
+            console.log('Processed orgs:', orgs);
+            setCoAdminOrgs(orgs);
+            
+            // If no orgs found, show a specific message
+            if (orgs.length === 0) {
+                setError(prev => ({
+                    ...prev,
+                    coAdminOrgs: 'You are not listed as a co-admin for any organizations.'
+                }));
+            }
+            
+        } catch (err) {
+            console.error('Full error object:', err);
+            console.error('Error response:', err.response?.data);
+            
+            let errorMessage = 'Failed to load co-admin organizations';
+            if (err.response) {
+                // Server responded with error status
+                errorMessage = err.response.data?.message || 
+                              err.response.data?.error || 
+                              `Server error: ${err.response.status}`;
+            } else if (err.request) {
+                // Request was made but no response received
+                errorMessage = 'No response from server. Please check your connection.';
+            } else {
+                // Something happened in setting up the request
+                errorMessage = err.message || 'Error setting up request';
+            }
+            
+            setError(prev => ({
+                ...prev,
+                coAdminOrgs: `Error: ${errorMessage}`
+            }));
+            setCoAdminOrgs([]);
+        } finally {
+            setLoadingCoAdminOrgs(false);
+        }
+    };
+    
+    // Handler for clicking on a co-admin organization
+    const handleCoAdminOrgClick = (org) => {
+        setSelectedCoAdminOrg(org);
     };
 
     // --- Sidebar Items ---
@@ -1761,6 +1838,81 @@ const AdminDashboard = () => {
                 </main>
             </div>
         </div>
+
+        {/* Co-admin Orgs Modal */}
+        <Modal 
+            isOpen={isCoAdminOrgsModalOpen} 
+            onClose={() => {
+                setIsCoAdminOrgsModalOpen(false);
+                setSelectedCoAdminOrg(null);
+            }} 
+            title="Your Organizations"
+            size="max-w-sm"
+        >
+            <div className="space-y-4">
+                {loadingCoAdminOrgs ? (
+                    <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    </div>
+                ) : error.coAdminOrgs ? (
+                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-md">
+                        <p>{error.coAdminOrgs}</p>
+                    </div>
+                ) : coAdminOrgs.length === 0 ? (
+                    <div className="text-center py-6">
+                        <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500" />
+                        <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">You don't have co-admin access to any organizations.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-2">
+                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
+                            <ul className="space-y-2">
+                                {coAdminOrgs.map((org) => (
+                                    <li key={org._id}>
+                                        <div className="text-gray-900 dark:text-white font-medium">
+                                            {org.name}
+                                        </div>
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
+                            {coAdminOrgs.length} organization{coAdminOrgs.length !== 1 ? 's' : ''} found
+                        </p>
+                    </div>
+                )}
+            </div>
+        </Modal>
+
+        {/* Co-admin Org Details Modal */}
+        <Modal
+            isOpen={!!selectedCoAdminOrg}
+            onClose={() => setSelectedCoAdminOrg(null)}
+            title="Organization Details"
+        >
+            <div className="text-center py-6">
+                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
+                    <BuildingOffice2Icon className="h-6 w-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+                </div>
+                <h3 className="mt-3 text-lg font-medium text-gray-900 dark:text-slate-100">
+                    {selectedCoAdminOrg?.name}
+                </h3>
+                <div className="mt-2 px-4 py-3">
+                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                        In Development
+                    </p>
+                </div>
+                <div className="mt-5">
+                    <button
+                        type="button"
+                        className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        onClick={() => setSelectedCoAdminOrg(null)}
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
 
         {/* Media Viewer Modal */}
         {viewingMedia.isOpen && (
