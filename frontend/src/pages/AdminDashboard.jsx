@@ -14,7 +14,7 @@ import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
-    BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon,
+    BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
     UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
@@ -1846,8 +1846,8 @@ const AdminDashboard = () => {
                 setIsCoAdminOrgsModalOpen(false);
                 setSelectedCoAdminOrg(null);
             }} 
-            title="Your Organizations"
-            size="max-w-sm"
+            title="Co-admin Organizations"
+            size="max-w-md"
         >
             <div className="space-y-4">
                 {loadingCoAdminOrgs ? (
@@ -1864,20 +1864,39 @@ const AdminDashboard = () => {
                         <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">You don't have co-admin access to any organizations.</p>
                     </div>
                 ) : (
-                    <div className="space-y-2">
-                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow p-4">
-                            <ul className="space-y-2">
-                                {coAdminOrgs.map((org) => (
-                                    <li key={org._id}>
-                                        <div className="text-gray-900 dark:text-white font-medium">
-                                            {org.name}
+                    <div className="space-y-3">
+                        <ul className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 -mr-2">
+                            {coAdminOrgs.map((org) => (
+                                <li key={org._id}>
+                                    <button
+                                        onClick={() => setSelectedCoAdminOrg(org)}
+                                        className="w-full text-left group"
+                                    >
+                                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors group-hover:bg-blue-50/50 dark:group-hover:bg-slate-700/50">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                        {org.name}
+                                                    </p>
+                                                    {org.createdAt && (
+                                                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                                            Created on {new Date(org.createdAt).toLocaleDateString(undefined, { 
+                                                                year: 'numeric', 
+                                                                month: 'short', 
+                                                                day: 'numeric' 
+                                                            })}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-500" />
+                                            </div>
                                         </div>
-                                    </li>
-                                ))}
-                            </ul>
-                        </div>
-                        <p className="text-xs text-gray-500 dark:text-slate-400 text-center">
-                            {coAdminOrgs.length} organization{coAdminOrgs.length !== 1 ? 's' : ''} found
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 text-center mt-4">
+                            {coAdminOrgs.length} organization{coAdminOrgs.length !== 1 ? 's' : ''} found • Click to view details
                         </p>
                     </div>
                 )}
@@ -1888,25 +1907,33 @@ const AdminDashboard = () => {
         <Modal
             isOpen={!!selectedCoAdminOrg}
             onClose={() => setSelectedCoAdminOrg(null)}
-            title="Organization Details"
+            title="Upgrade Required"
         >
-            <div className="text-center py-6">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100 dark:bg-blue-900/30">
-                    <BuildingOffice2Icon className="h-6 w-6 text-blue-600 dark:text-blue-400" aria-hidden="true" />
+            <div className="text-center py-6 px-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                    <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500 dark:text-yellow-400" aria-hidden="true" />
                 </div>
-                <h3 className="mt-3 text-lg font-medium text-gray-900 dark:text-slate-100">
-                    {selectedCoAdminOrg?.name}
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-slate-100">
+                    Co-admin Feature Locked
                 </h3>
-                <div className="mt-2 px-4 py-3">
-                    <p className="text-sm text-gray-500 dark:text-slate-400">
-                        In Development
+                <div className="mt-3">
+                    <p className="text-sm text-gray-600 dark:text-slate-300">
+                        The admin of this organization is currently on a free plan. So, the co-admin feature is currently unavailable.
                     </p>
                 </div>
-                <div className="mt-5">
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
                     <button
                         type="button"
-                        className="inline-flex justify-center rounded-md border border-transparent bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                        onClick={() => navigate('/pricing')}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        <ArrowUpTrayIcon className="-ml-1 mr-2 h-4 w-4" />
+                        Check Plans
+                    </button>
+                    <button
+                        type="button"
                         onClick={() => setSelectedCoAdminOrg(null)}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                     >
                         Close
                     </button>
@@ -2056,19 +2083,6 @@ const AdminDashboard = () => {
             </div>
         </Modal>
 
-        {/* Co-admin Orgs Modal */}
-        <Modal 
-            isOpen={isCoAdminOrgsModalOpen} 
-            onClose={() => setIsCoAdminOrgsModalOpen(false)} 
-            title="Co-admin Organizations"
-            size="max-w-md"
-        >
-            <div className="text-center py-8">
-                <FolderOpenIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-slate-100 mb-2">No Organizations</h3>
-                <p className="text-gray-500 dark:text-slate-400">There are no co-admin organizations to display.</p>
-            </div>
-        </Modal>
 
         {/* Delete Post Confirmation Dialog */}
         <DeletionConfirmation
