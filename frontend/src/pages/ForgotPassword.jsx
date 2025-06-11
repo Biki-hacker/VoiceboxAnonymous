@@ -6,16 +6,33 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
 
+  const [isLoading, setIsLoading] = useState(false);
+
   const handleResetPassword = async (e) => {
     e.preventDefault();
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: 'http://localhost:5173/updatepassword',
-    });
+    setIsLoading(true);
+    setMessage('');
+    
+    try {
+      // Ensure we have the correct protocol (http/https) and host
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      const redirectUrl = `${protocol}//${host}/updatepassword`;
+      
+      console.log('Sending password reset email to:', email);
+      console.log('Using redirect URL:', redirectUrl);
+      
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectUrl,
+      });
 
-    if (error) {
-      setMessage(error.message);
-    } else {
+      if (error) throw error;
+      
       setMessage("Check your email for a password reset link.");
+    } catch (error) {
+      setMessage(error.message || 'An error occurred. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -30,8 +47,30 @@ export default function ForgotPassword() {
           onChange={(e) => setEmail(e.target.value)}
           required
         />
-        <button className="bg-white text-black px-4 py-2 rounded hover:bg-gray-300">Send Reset Link</button>
-        {message && <p className="text-sm mt-2 text-green-400">{message}</p>}
+        <button 
+          type="submit"
+          className={`w-full flex justify-center items-center px-4 py-2 rounded-md font-medium transition-colors ${
+            isLoading 
+              ? 'bg-blue-400 cursor-not-allowed text-white' 
+              : 'bg-white text-black hover:bg-gray-200'
+          }`}
+          disabled={isLoading}
+        >
+          {isLoading ? (
+            <>
+              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Sending...
+            </>
+          ) : 'Send Reset Link'}
+        </button>
+        {message && (
+          <p className={`text-sm mt-2 ${message.includes('Check your email') ? 'text-green-400' : 'text-red-400'}`}>
+            {message}
+          </p>
+        )}
       </form>
     </div>
   );
