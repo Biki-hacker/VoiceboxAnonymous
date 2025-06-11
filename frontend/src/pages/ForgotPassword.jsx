@@ -14,7 +14,7 @@ export default function ForgotPassword() {
     setMessage('');
     
     try {
-      // Ensure we have the correct protocol (http/https) and host
+      // Ensure we have the correct protocol (http/https) and host..
       const protocol = window.location.protocol;
       const host = window.location.host;
       const redirectUrl = `${protocol}//${host}/updatepassword`;

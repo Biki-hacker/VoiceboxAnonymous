@@ -32,7 +32,7 @@ export default function UpdatePassword() {
     
     console.log('URL Parameters:', { accessToken: !!accessToken, refreshToken: !!refreshToken, type });
     
-    // Only allow access if it's a password recovery flow
+    // Only allow access if it's a password recovery flow..
     if (type === 'recovery' && accessToken) {
       console.log('Attempting to set session with access token');
       
