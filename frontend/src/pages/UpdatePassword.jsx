@@ -24,36 +24,18 @@ export default function UpdatePassword() {
   }, [newPassword, confirmPassword]);
 
   useLayoutEffect(() => {
-    const handleHash = () => {
-      // Check sessionStorage for the hash first, falling back to the window location.
-      const storedHash = sessionStorage.getItem('supabase_password_recovery_hash');
-      const hash = storedHash ? storedHash.slice(1) : window.location.hash.slice(1);
-
-      // Once read, remove it from storage so it's not accidentally reused.
-      if (storedHash) {
-        sessionStorage.removeItem('supabase_password_recovery_hash');
-      }
-      const params = {};
-      if (hash) {
-        hash.split('&').forEach(pair => {
-          const [key, value] = pair.split('=');
-          if (key && value !== undefined) {
-            params[key] = value; // Preserve original value (no decoding)
-          }
-        });
-      }
-
-      const accessToken = params.access_token || null;
-      const refreshToken = params.refresh_token || null;
-      const type = params.type || null;
-
-      console.log('From hash:', { accessToken, refreshToken, type });
-      
+    // Parse query parameters from the URL
+    const getParams = () => {
+      const params = new URLSearchParams(window.location.search);
+      const accessToken = params.get('access_token') || null;
+      const refreshToken = params.get('refresh_token') || null;
+      const type = params.get('type') || null;
+      console.log('From query:', { accessToken, refreshToken, type });
       return { accessToken, refreshToken, type };
     };
 
     // Initial run immediately
-    const { accessToken, refreshToken, type } = handleHash();
+    const { accessToken, refreshToken, type } = getParams();
     
     if (type === 'recovery' && accessToken) {
       supabase.auth
