@@ -24,14 +24,26 @@ export default function ForgotPassword() {
       // Ensure we have the correct protocol (http/https) and host
       const protocol = window.location.protocol;
       const host = window.location.host;
-      const redirectUrl = `${protocol}//${host}/updatepassword`;
+      
+      // Important: The URL must exactly match your site URL in Supabase settings
+      // and must include the full path to your update password page
+      const siteUrl = `${protocol}//${host}`;
+      const redirectUrl = `${siteUrl}/updatepassword`;
       
       console.log('[Password Reset] Sending password reset email to:', email);
+      console.log('[Password Reset] Site URL:', siteUrl);
       console.log('[Password Reset] Using redirect URL:', redirectUrl);
       
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      // First, sign out any existing session
+      await supabase.auth.signOut();
+      
+      // Then send the reset email
+      const { error } = await supabase.auth.api.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
+      
+      // Debug: Log the API response
+      console.log('[Password Reset] Reset email response:', { error });
 
       if (error) {
         console.error('[Password Reset] Error sending reset email:', error);

@@ -24,22 +24,36 @@ export default function UpdatePassword() {
   }, [newPassword, confirmPassword]);
 
   useLayoutEffect(() => {
-    // Function to parse hash parameters from URL
-    const parseHash = () => {
-      // Get the hash part of the URL (e.g., '#access_token=...&refresh_token=...&type=recovery')
-      const hash = window.location.hash.substring(1); // Remove the leading '#'
-      const params = new URLSearchParams(hash);
+    // Function to parse parameters from URL - checks both hash and query params
+    const parseParams = () => {
+      // First try to get from hash (preferred for Supabase)
+      const hash = window.location.hash.substring(1);
+      const hashParams = new URLSearchParams(hash);
       
-      const accessToken = params.get('access_token') || null;
-      const refreshToken = params.get('refresh_token') || null;
-      const type = params.get('type') || null;
+      // Then try to get from query parameters (fallback)
+      const searchParams = new URLSearchParams(window.location.search);
       
-      console.log('From URL hash:', { accessToken, refreshToken, type });
+      // Get from hash first, fall back to query params
+      const accessToken = hashParams.get('access_token') || searchParams.get('access_token') || null;
+      const refreshToken = hashParams.get('refresh_token') || searchParams.get('refresh_token') || null;
+      const type = hashParams.get('type') || searchParams.get('type') || null;
+      
+      console.log('URL parameters:', { 
+        hash: window.location.hash,
+        search: window.location.search,
+        accessToken: !!accessToken,
+         refreshToken: !!refreshToken,
+        type
+      });
+      
       return { accessToken, refreshToken, type };
     };
+    
+    // Also log the full URL for debugging
+    console.log('Current URL:', window.location.href);
 
-    // Initial check for hash parameters
-    const { accessToken, refreshToken, type } = parseHash();
+    // Initial check for parameters
+    const { accessToken, refreshToken, type } = parseParams();
     
     if (type === 'recovery' && accessToken) {
       supabase.auth
@@ -67,9 +81,9 @@ export default function UpdatePassword() {
       setLoading(false);
     }
 
-    // Listen for hash changes (e.g., if the user navigates back/forward)
-    const handleHashChange = () => {
-      const { accessToken, refreshToken, type } = parseHash();
+    // Listen for URL changes (e.g., if the user navigates back/forward)
+    const handleUrlChange = () => {
+      const { accessToken, refreshToken, type } = parseParams();
       if (type === 'recovery' && accessToken) {
         supabase.auth.setSession({
           access_token: accessToken,
@@ -77,11 +91,14 @@ export default function UpdatePassword() {
         });
       }
     };
-
-    window.addEventListener('hashchange', handleHashChange);
+    
+    // Listen for both hashchange and popstate events
+    window.addEventListener('hashchange', handleUrlChange);
+    window.addEventListener('popstate', handleUrlChange);
 
     return () => {
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', handleUrlChange);
+      window.removeEventListener('popstate', handleUrlChange);
     };
   }, [loading]);
 
