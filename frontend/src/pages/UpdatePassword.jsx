@@ -25,8 +25,14 @@ export default function UpdatePassword() {
 
   useLayoutEffect(() => {
     const handleHash = () => {
-      // Parse hash parameters manually to preserve special characters
-      const hash = window.location.hash.slice(1);
+      // Check sessionStorage for the hash first, falling back to the window location.
+      const storedHash = sessionStorage.getItem('supabase_password_recovery_hash');
+      const hash = storedHash ? storedHash.slice(1) : window.location.hash.slice(1);
+
+      // Once read, remove it from storage so it's not accidentally reused.
+      if (storedHash) {
+        sessionStorage.removeItem('supabase_password_recovery_hash');
+      }
       const params = {};
       if (hash) {
         hash.split('&').forEach(pair => {
