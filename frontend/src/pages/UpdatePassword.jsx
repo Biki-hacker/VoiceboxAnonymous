@@ -11,20 +11,41 @@ export default function UpdatePassword() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 
-  // Check for password reset hash in URL when component mounts
+  // Handle the password reset flow when component mounts
   useEffect(() => {
-    // Check if we have a password reset hash in the URL
-    const hash = window.location.hash;
-    if (hash.includes('type=recovery')) {
-      // This is a password reset link
-      supabase.auth.onAuthStateChange(async (event, session) => {
-        if (event === 'PASSWORD_RECOVERY') {
-          // We can update the password here if needed
-        } else if (event === 'SIGNED_IN') {
-          // User is signed in, we can proceed
+    const handlePasswordReset = async () => {
+      try {
+        // Check if we have a password reset hash in the URL
+        const hash = window.location.hash;
+        if (hash.includes('type=recovery')) {
+          setLoading(true);
+          
+          // Extract the access token from the URL
+          const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
+          const refreshToken = new URLSearchParams(hash.substring(1)).get('refresh_token');
+          
+          if (accessToken && refreshToken) {
+            // Set the session using the tokens from the URL
+            const { error: sessionError } = await supabase.auth.setSession({
+              access_token: accessToken,
+              refresh_token: refreshToken
+            });
+
+            if (sessionError) throw sessionError;
+
+            // Clear the URL hash to prevent token reuse
+            window.history.replaceState({}, document.title, window.location.pathname);
+          }
         }
-      });
-    }
+      } catch (err) {
+        console.error('Error handling password reset:', err);
+        setError('Failed to process password reset link. Please request a new one.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    handlePasswordReset();
   }, []);
 
   const validatePassword = (pass) => {
@@ -37,48 +58,49 @@ export default function UpdatePassword() {
     e.preventDefault();
     setMessage('');
     setError('');
+
     if (!password || !confirm) {
       setError('Please fill in both fields.');
       return;
     }
+
     if (password !== confirm) {
       setError('Passwords do not match.');
       return;
     }
+
     const passwordError = validatePassword(password);
     if (passwordError) {
       setError(passwordError);
       return;
     }
+
     setLoading(true);
 
     try {
-      // First, check if we have a valid session
-      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      // Get the current session
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       
-      if (sessionError || !sessionData?.session) {
-        // If no session, try to recover the session from the URL
-        const { error: recoverError } = await supabase.auth.getSession();
-        
-        if (recoverError) {
-          throw recoverError;
-        }
+      if (sessionError || !session) {
+        throw new Error('No active session. Please request a new password reset link.');
       }
 
-      // Now update the password
+      // Update the password
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
-      if (updateError) {
-        throw updateError;
-      }
+      if (updateError) throw updateError;
+
+      // Sign out all other sessions
+      await supabase.auth.signOut({ scope: 'others' });
 
       setMessage('Password updated successfully! Redirecting to sign in...');
       setTimeout(() => {
-        // Clear the URL hash to prevent token reuse
-        window.history.replaceState({}, document.title, window.location.pathname);
-        navigate('/signin');
+        // Clear the session and redirect to sign in
+        supabase.auth.signOut().then(() => {
+          navigate('/signin');
+        });
       }, 2000);
     } catch (err) {
       console.error('Error updating password:', err);
