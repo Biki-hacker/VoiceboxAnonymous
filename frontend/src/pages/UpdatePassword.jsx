@@ -1,5 +1,5 @@
 // src/pages/UpdatePassword.jsx
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useLayoutEffect } from 'react';
 import { supabase } from '../supabaseClient';
 import { useNavigate } from 'react-router-dom';
 
@@ -23,25 +23,32 @@ export default function UpdatePassword() {
     }
   }, [newPassword, confirmPassword]);
 
-  useEffect(() => {
-    // Parse hash parameters manually to preserve special characters
-    const hash = window.location.hash.slice(1);
-    const params = {};
-    if (hash) {
-      hash.split('&').forEach(pair => {
-        const [key, value] = pair.split('=');
-        if (key && value !== undefined) {
-          params[key] = value; // Preserve original value (no decoding)
-        }
-      });
-    }
+  useLayoutEffect(() => {
+    const handleHash = () => {
+      // Parse hash parameters manually to preserve special characters
+      const hash = window.location.hash.slice(1);
+      const params = {};
+      if (hash) {
+        hash.split('&').forEach(pair => {
+          const [key, value] = pair.split('=');
+          if (key && value !== undefined) {
+            params[key] = value; // Preserve original value (no decoding)
+          }
+        });
+      }
 
-    const accessToken = params.access_token || null;
-    const refreshToken = params.refresh_token || null;
-    const type = params.type || null;
+      const accessToken = params.access_token || null;
+      const refreshToken = params.refresh_token || null;
+      const type = params.type || null;
 
-    console.log('From hash:', { accessToken, refreshToken, type });
+      console.log('From hash:', { accessToken, refreshToken, type });
+      
+      return { accessToken, refreshToken, type };
+    };
 
+    // Initial run immediately
+    const { accessToken, refreshToken, type } = handleHash();
+    
     if (type === 'recovery' && accessToken) {
       supabase.auth
         .setSession({
@@ -62,12 +69,29 @@ export default function UpdatePassword() {
           setError('Failed to process the password reset link. Please try again.');
           setLoading(false);
         });
-    } else {
+    } else if (!loading) {
       console.error('Missing required parameters:', { accessToken, type });
       setError('Invalid password reset link. Please make sure you used the link from your email.');
       setLoading(false);
     }
-  }, []);
+
+    // Listen for hash changes (e.g., browser navigation)
+    const handleHashChange = () => {
+      const { accessToken, refreshToken, type } = handleHash();
+      if (type === 'recovery' && accessToken) {
+        supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+        });
+      }
+    };
+
+    window.addEventListener('hashchange', handleHashChange);
+
+    return () => {
+      window.removeEventListener('hashchange', handleHashChange);
+    };
+  }, [loading]);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
