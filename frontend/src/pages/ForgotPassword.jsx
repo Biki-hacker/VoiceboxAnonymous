@@ -10,27 +10,40 @@ export default function ForgotPassword() {
 
   const handleResetPassword = async (e) => {
     e.preventDefault();
+    
+    // Basic email validation
+    if (!email || !/\S+@\S+\.\S+/.test(email)) {
+      setMessage('Please enter a valid email address');
+      return;
+    }
+    
     setIsLoading(true);
     setMessage('');
     
     try {
-      // Ensure we have the correct protocol (http/https) and host..
+      // Ensure we have the correct protocol (http/https) and host
       const protocol = window.location.protocol;
       const host = window.location.host;
       const redirectUrl = `${protocol}//${host}/updatepassword`;
       
-      console.log('Sending password reset email to:', email);
-      console.log('Using redirect URL:', redirectUrl);
+      console.log('[Password Reset] Sending password reset email to:', email);
+      console.log('[Password Reset] Using redirect URL:', redirectUrl);
       
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error('[Password Reset] Error sending reset email:', error);
+        throw error;
+      }
       
-      setMessage("Check your email for a password reset link.");
+      console.log('[Password Reset] Password reset email sent successfully');
+      setMessage('Check your email for a password reset link. If you don\'t see it, please check your spam folder.');
     } catch (error) {
-      setMessage(error.message || 'An error occurred. Please try again.');
+      console.error('[Password Reset] Failed to send reset email:', error);
+      const errorMessage = error.message || 'An error occurred while sending the reset link. Please try again.';
+      setMessage(errorMessage);
     } finally {
       setIsLoading(false);
     }

@@ -24,18 +24,22 @@ export default function UpdatePassword() {
   }, [newPassword, confirmPassword]);
 
   useLayoutEffect(() => {
-    // Parse query parameters from the URL
-    const getParams = () => {
-      const params = new URLSearchParams(window.location.search);
+    // Function to parse hash parameters from URL
+    const parseHash = () => {
+      // Get the hash part of the URL (e.g., '#access_token=...&refresh_token=...&type=recovery')
+      const hash = window.location.hash.substring(1); // Remove the leading '#'
+      const params = new URLSearchParams(hash);
+      
       const accessToken = params.get('access_token') || null;
       const refreshToken = params.get('refresh_token') || null;
       const type = params.get('type') || null;
-      console.log('From query:', { accessToken, refreshToken, type });
+      
+      console.log('From URL hash:', { accessToken, refreshToken, type });
       return { accessToken, refreshToken, type };
     };
 
-    // Initial run immediately
-    const { accessToken, refreshToken, type } = getParams();
+    // Initial check for hash parameters
+    const { accessToken, refreshToken, type } = parseHash();
     
     if (type === 'recovery' && accessToken) {
       supabase.auth
@@ -58,14 +62,14 @@ export default function UpdatePassword() {
           setLoading(false);
         });
     } else if (!loading) {
-      console.error('Missing required parameters:', { accessToken, type });
+      console.error('Missing required parameters in URL hash');
       setError('Invalid password reset link. Please make sure you used the link from your email.');
       setLoading(false);
     }
 
-    // Listen for hash changes (e.g., browser navigation)
+    // Listen for hash changes (e.g., if the user navigates back/forward)
     const handleHashChange = () => {
-      const { accessToken, refreshToken, type } = handleHash();
+      const { accessToken, refreshToken, type } = parseHash();
       if (type === 'recovery' && accessToken) {
         supabase.auth.setSession({
           access_token: accessToken,
