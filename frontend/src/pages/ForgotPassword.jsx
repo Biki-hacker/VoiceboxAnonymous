@@ -37,8 +37,8 @@ export default function ForgotPassword() {
       // First, sign out any existing session
       await supabase.auth.signOut();
       
-      // Then send the reset email
-      const { error } = await supabase.auth.api.resetPasswordForEmail(email, {
+      // Then send the reset email using the correct method for Supabase v2
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: redirectUrl,
       });
       
