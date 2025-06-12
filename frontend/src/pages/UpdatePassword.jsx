@@ -52,47 +52,80 @@ export default function UpdatePassword() {
   };
 
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-50 dark:bg-slate-900">
-      <div className="w-full max-w-md p-8 bg-white dark:bg-slate-800 rounded shadow">
-        <h2 className="text-2xl font-bold mb-6 text-center">Set a New Password</h2>
-        <form onSubmit={handleSubmit} className="space-y-4">
+    <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-xl border border-gray-700">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold text-white mb-2">Set a New Password</h2>
+          <p className="text-gray-400">Create a strong and secure password</p>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="password" className="block text-sm font-medium mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
               New Password
             </label>
             <input
               type="password"
               id="password"
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:text-white"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+              placeholder="••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               required
               autoFocus
             />
+            <p className="mt-1 text-xs text-gray-400">Must be at least 6 characters</p>
           </div>
+          
           <div>
-            <label htmlFor="confirm" className="block text-sm font-medium mb-1">
+            <label htmlFor="confirm" className="block text-sm font-medium text-gray-300 mb-2">
               Confirm New Password
             </label>
             <input
               type="password"
               id="confirm"
-              className="w-full px-3 py-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-slate-700 dark:text-white"
+              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+              placeholder="••••••"
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               required
             />
           </div>
+          
           <button
             type="submit"
-            className="w-full py-2 px-4 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-60"
+            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 disabled:opacity-60 flex justify-center items-center"
             disabled={loading}
           >
-            {loading ? 'Updating...' : 'Update Password'}
+            {loading ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Updating...
+              </>
+            ) : 'Update Password'}
           </button>
         </form>
-        {message && <p className="mt-4 text-green-600 text-center">{message}</p>}
-        {error && <p className="mt-4 text-red-600 text-center">{error}</p>}
+        
+        {message && (
+          <div className="mt-6 p-3 bg-green-900/30 border border-green-800 text-green-400 rounded-lg text-center">
+            {message}
+          </div>
+        )}
+        
+        {error && (
+          <div className="mt-6 p-3 bg-red-900/30 border border-red-800 text-red-400 rounded-lg text-center">
+            {error}
+          </div>
+        )}
+        
+        <div className="mt-6 text-center">
+          <a href="/signin" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+            Back to Sign In
+          </a>
+        </div>
       </div>
     </div>
   );
