@@ -1,7 +1,7 @@
 // src/pages/UpdatePassword.jsx
 import { useState, useEffect } from 'react';
 import { supabase } from '../supabaseClient';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 
 export default function UpdatePassword() {
   const [newPassword, setNewPassword] = useState('');
@@ -12,8 +12,9 @@ export default function UpdatePassword() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(true);
   const [isMatching, setIsMatching] = useState(true);
-  
-  // Check if passwords match in real-time
+  const navigate = useNavigate();
+
+  // Validate password match in real-time
   useEffect(() => {
     if (newPassword && confirmPassword) {
       setIsMatching(newPassword === confirmPassword);
@@ -21,44 +22,41 @@ export default function UpdatePassword() {
       setIsMatching(true);
     }
   }, [newPassword, confirmPassword]);
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
 
   useEffect(() => {
-    // Check if we have a valid access token in the URL
-    const accessToken = searchParams.get('access_token');
-    const refreshToken = searchParams.get('refresh_token');
-    const type = searchParams.get('type');
-    
-    console.log('URL Parameters:', { accessToken: !!accessToken, refreshToken: !!refreshToken, type });
-    
-    // Only allow access if it's a password recovery flow..
+    const hashParams = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = hashParams.get('access_token');
+    const refreshToken = hashParams.get('refresh_token');
+    const type = hashParams.get('type');
+
+    console.log('From hash:', { accessToken, refreshToken, type });
+
     if (type === 'recovery' && accessToken) {
-      console.log('Attempting to set session with access token');
-      
-      // Set the session using the access token from the URL
-      supabase.auth.setSession({
-        access_token: accessToken,
-        refresh_token: refreshToken || ''
-      }).then(({ error: sessionError }) => {
-        if (sessionError) {
-          console.error('Session error:', sessionError);
-          setError('Invalid or expired password reset link. Please request a new one.');
-        } else {
-          console.log('Session set successfully');
-        }
-        setLoading(false);
-      }).catch((catchError) => {
-        console.error('Error setting session:', catchError);
-        setError('Failed to process the password reset link. Please try again.');
-        setLoading(false);
-      });
+      supabase.auth
+        .setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+        })
+        .then(({ error: sessionError }) => {
+          if (sessionError) {
+            console.error('Session error:', sessionError);
+            setError('Invalid or expired password reset link. Please request a new one.');
+          } else {
+            console.log('Session set successfully');
+          }
+          setLoading(false);
+        })
+        .catch((catchError) => {
+          console.error('Error setting session:', catchError);
+          setError('Failed to process the password reset link. Please try again.');
+          setLoading(false);
+        });
     } else {
-      console.error('Missing required parameters:', { hasAccessToken: !!accessToken, type });
+      console.error('Missing required parameters:', { accessToken, type });
       setError('Invalid password reset link. Please make sure you used the link from your email.');
       setLoading(false);
     }
-  }, [searchParams]);
+  }, []);
 
   const handleUpdate = async (e) => {
     e.preventDefault();
@@ -76,14 +74,10 @@ export default function UpdatePassword() {
     }
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: newPassword
-      });
-
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) throw error;
-      
+
       setMessage('Password updated successfully! Redirecting to sign in...');
-      // Sign out the user after password reset
       await supabase.auth.signOut();
       setTimeout(() => navigate('/signin'), 2000);
     } catch (error) {
@@ -116,27 +110,24 @@ export default function UpdatePassword() {
               <div className="relative">
                 <input
                   id="newPassword"
-                  name="newPassword"
-                  type={showPassword ? "text" : "password"}
+                  type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full p-2 pr-10 rounded bg-gray-700 border border-gray-600 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  placeholder="Enter new password (min 6 characters)"
+                  placeholder="Enter new password"
                   required
                   minLength={6}
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-blue-400 hover:text-blue-300"
                   onClick={() => setShowPassword(!showPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 text-xs text-blue-400 hover:text-blue-300"
                 >
                   {showPassword ? 'HIDE' : 'SHOW'}
                 </button>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
-                Password must be at least 6 characters
-              </p>
+              <p className="mt-1 text-xs text-gray-400">At least 6 characters required</p>
             </div>
             <div>
               <label htmlFor="confirmPassword" className="block text-sm font-medium mb-1">
@@ -145,8 +136,7 @@ export default function UpdatePassword() {
               <div className="relative">
                 <input
                   id="confirmPassword"
-                  name="confirmPassword"
-                  type={showConfirmPassword ? "text" : "password"}
+                  type={showConfirmPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
@@ -159,21 +149,19 @@ export default function UpdatePassword() {
                 />
                 <button
                   type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center text-xs text-blue-400 hover:text-blue-300"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  className="absolute inset-y-0 right-0 pr-3 text-xs text-blue-400 hover:text-blue-300"
                 >
                   {showConfirmPassword ? 'HIDE' : 'SHOW'}
                 </button>
               </div>
               {confirmPassword && !isMatching && (
-                <p className="mt-1 text-xs text-red-400">
-                  Passwords do not match
-                </p>
+                <p className="mt-1 text-xs text-red-400">Passwords do not match</p>
               )}
             </div>
             <button
               type="submit"
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md transition duration-150 ease-in-out"
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-md"
               disabled={!newPassword || !confirmPassword || !isMatching || newPassword.length < 6}
             >
               Update Password
