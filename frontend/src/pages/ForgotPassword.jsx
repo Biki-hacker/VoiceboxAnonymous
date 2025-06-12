@@ -16,18 +16,25 @@ export default function ForgotPassword() {
       setError('Please enter your email address.');
       return;
     }
+
     setLoading(true);
     try {
+      // Make sure to include the full URL with the hash fragment
+      const redirectTo = `${window.location.origin}/updatepassword#access_token=`;
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/updatepassword`,
+        redirectTo: redirectTo,
       });
+
       if (error) {
-        setError(error.message);
-      } else {
-        setMessage('If this email is registered, a password reset link has been sent. Please check your inbox.');
+        console.error('Error sending reset email:', error);
+        throw error;
       }
+
+      setMessage('If an account exists with this email, you will receive a password reset link. Please check your inbox (and spam folder).');
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+      console.error('Password reset error:', err);
+      setError(err.message || 'Failed to send reset email. Please try again.');
     } finally {
       setLoading(false);
     }

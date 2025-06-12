@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function UpdatePassword() {
@@ -9,6 +9,23 @@ export default function UpdatePassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  // Check for password reset hash in URL when component mounts
+  useEffect(() => {
+    // Check if we have a password reset hash in the URL
+    const hash = window.location.hash;
+    if (hash.includes('type=recovery')) {
+      // This is a password reset link
+      supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          // We can update the password here if needed
+        } else if (event === 'SIGNED_IN') {
+          // User is signed in, we can proceed
+        }
+      });
+    }
+  }, []);
 
   const validatePassword = (pass) => {
     if (pass.length < 6) return 'Password must be at least 6 characters long';
@@ -34,18 +51,38 @@ export default function UpdatePassword() {
       return;
     }
     setLoading(true);
+
     try {
-      const { error } = await supabase.auth.updateUser({ password });
-      if (error) {
-        setError(error.message);
-      } else {
-        setMessage('Password reset successful! You can now sign in with your new password.');
-        setTimeout(() => {
-          navigate('/signin');
-        }, 2000);
+      // First, check if we have a valid session
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+      
+      if (sessionError || !sessionData?.session) {
+        // If no session, try to recover the session from the URL
+        const { error: recoverError } = await supabase.auth.getSession();
+        
+        if (recoverError) {
+          throw recoverError;
+        }
       }
+
+      // Now update the password
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: password
+      });
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      setMessage('Password updated successfully! Redirecting to sign in...');
+      setTimeout(() => {
+        // Clear the URL hash to prevent token reuse
+        window.history.replaceState({}, document.title, window.location.pathname);
+        navigate('/signin');
+      }, 2000);
     } catch (err) {
-      setError('An unexpected error occurred. Please try again.');
+      console.error('Error updating password:', err);
+      setError(err.message || 'Failed to update password. Please try again or request a new reset link.');
     } finally {
       setLoading(false);
     }
