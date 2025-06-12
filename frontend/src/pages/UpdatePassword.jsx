@@ -24,10 +24,21 @@ export default function UpdatePassword() {
   }, [newPassword, confirmPassword]);
 
   useEffect(() => {
-    const hashParams = new URLSearchParams(window.location.hash.slice(1));
-    const accessToken = hashParams.get('access_token');
-    const refreshToken = hashParams.get('refresh_token');
-    const type = hashParams.get('type');
+    // Parse hash parameters manually to preserve special characters
+    const hash = window.location.hash.slice(1);
+    const params = {};
+    if (hash) {
+      hash.split('&').forEach(pair => {
+        const [key, value] = pair.split('=');
+        if (key && value !== undefined) {
+          params[key] = value; // Preserve original value (no decoding)
+        }
+      });
+    }
+
+    const accessToken = params.access_token || null;
+    const refreshToken = params.refresh_token || null;
+    const type = params.type || null;
 
     console.log('From hash:', { accessToken, refreshToken, type });
 
