@@ -290,47 +290,49 @@ export default function Home() {
       // Reset cursor position and disable glow effect on touch devices
       setCursorPos({ x: -100, y: -100 });
       setGlowIntensity(0);
-      return;
+    } else {
+      const onMouseMove = (e) => {
+        const x = e.clientX;
+        const y = e.clientY;
+        setCursorPos({ x, y });
+        const cx = window.innerWidth / 2;
+        const cy = window.innerHeight / 2;
+        const dist = Math.hypot(x - cx, y - cy);
+        setGlowIntensity(1 - Math.min(dist / (window.innerWidth * 0.4), 1));
+        setHoverOffset({ x: x - cx, y: y - cy });
+      };
+
+      window.addEventListener("mousemove", onMouseMove);
+      return () => window.removeEventListener("mousemove", onMouseMove);
     }
-
-    const onMouseMove = (e) => {
-      const x = e.clientX;
-      const y = e.clientY;
-      setCursorPos({ x, y });
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const dist = Math.hypot(x - cx, y - cy);
-      setGlowIntensity(1 - Math.min(dist / (window.innerWidth * 0.4), 1));
-      setHoverOffset({ x: x - cx, y: y - cy });
-    };
-
-    window.addEventListener("mousemove", onMouseMove);
-    return () => window.removeEventListener("mousemove", onMouseMove);
   }, [isTouchDevice]);
 
-  // Ensure proper touch scrolling on mobile
+  // Ensure proper scrolling on mobile
   useEffect(() => {
     if (!isTouchDevice) return;
     
-    // Prevent default touch behavior that could interfere with scrolling
-    const preventDefault = (e) => {
-      if (e.touches.length > 1) {
-        e.preventDefault();
-      }
-    };
+    // Enable smooth scrolling on the document
+    document.documentElement.style.overflow = 'auto';
+    document.documentElement.style.touchAction = 'pan-y';
+    document.documentElement.style.webkitOverflowScrolling = 'touch';
     
-    document.body.style.overflow = 'auto';
-    document.body.style.touchAction = 'pan-y';
-    document.body.style.webkitOverflowScrolling = 'touch';
+    // Ensure body doesn't prevent scrolling
+    document.body.style.overflow = 'visible';
+    document.body.style.height = 'auto';
+    document.body.style.position = 'relative';
     
-    // Add touch event listeners
-    document.addEventListener('touchmove', preventDefault, { passive: false });
+    // Add passive event listeners for better touch scrolling
+    const handleTouchMove = () => {};
+    window.addEventListener('touchmove', handleTouchMove, { passive: true });
     
     return () => {
-      document.removeEventListener('touchmove', preventDefault);
+      window.removeEventListener('touchmove', handleTouchMove);
+      document.documentElement.style.overflow = '';
+      document.documentElement.style.touchAction = '';
+      document.documentElement.style.webkitOverflowScrolling = '';
       document.body.style.overflow = '';
-      document.body.style.touchAction = '';
-      document.body.style.webkitOverflowScrolling = '';
+      document.body.style.height = '';
+      document.body.style.position = '';
     };
   }, [isTouchDevice]);
 
@@ -549,9 +551,10 @@ export default function Home() {
 
       <section 
         ref={heroRef} 
-        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10"
+        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10 min-h-[80vh]"
         itemScope
         itemType="https://schema.org/WebApplication"
+        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="hidden md:block">
           <ShieldLogo />
