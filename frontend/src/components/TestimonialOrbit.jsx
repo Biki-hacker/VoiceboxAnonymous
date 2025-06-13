@@ -10,15 +10,11 @@ const TestimonialOrbit = () => {
   const isDragging = useRef(false);
   const startX = useRef(0);
   const startAngle = useRef(0);
-  const rotationInterval = useRef(null);
-  const lastRotationTime = useRef(Date.now());
 
-  const radius = 180; // Slightly smaller radius for better visibility
-  const center = 220; // Adjusted for better centering
-  const rotationSpeed = 0.05; // Slower rotation speed for drag
-  const autoRotateSpeed = 0.01; // Much slower auto-rotation
+  const radius = 250;
+  const autoRotateSpeed = 0.01;
+  const rotationSpeed = 0.05;
 
-  // Calculate the position of each testimonial
   const getTestimonialPosition = (index, currentAngle) => {
     const total = testimonials.length;
     const angle = (Math.PI * 2 * index) / total + (currentAngle * Math.PI) / 180;
@@ -27,20 +23,15 @@ const TestimonialOrbit = () => {
     const zIndex = Math.round(Math.cos(angle) * 10) + 10;
     const scale = 0.7 + (Math.cos(angle) + 1) * 0.15;
     const opacity = 0.6 + (Math.cos(angle) + 1) * 0.2;
-    
+
     return { x, y, zIndex, scale, opacity, theta: angle * (180 / Math.PI) };
   };
 
-  // Handle mouse/touch events
   const handleStart = useCallback((clientX) => {
     isDragging.current = true;
     startX.current = clientX;
     startAngle.current = angle;
     setIsAutoRotating(false);
-    if (rotationInterval.current) {
-      clearInterval(rotationInterval.current);
-      rotationInterval.current = null;
-    }
   }, [angle]);
 
   const handleMove = useCallback((clientX) => {
@@ -56,15 +47,13 @@ const TestimonialOrbit = () => {
     setIsAutoRotating(true);
   }, []);
 
-  // Update active index based on current angle
   const updateActiveIndex = useCallback((currentAngle) => {
     const total = testimonials.length;
-    const normalizedAngle = ((currentAngle % 360) + 360) % 360; // Ensure positive angle
+    const normalizedAngle = ((currentAngle % 360) + 360) % 360;
     const index = Math.round((normalizedAngle / 360) * total) % total;
     setActiveIndex(index);
   }, []);
 
-  // Auto-rotation effect
   useEffect(() => {
     if (!isAutoRotating) return;
 
@@ -76,7 +65,7 @@ const TestimonialOrbit = () => {
       const deltaTime = now - lastTime;
       lastTime = now;
 
-      setAngle(prevAngle => {
+      setAngle((prevAngle) => {
         const newAngle = prevAngle + autoRotateSpeed * deltaTime;
         updateActiveIndex(newAngle);
         return newAngle;
@@ -89,7 +78,6 @@ const TestimonialOrbit = () => {
     return () => cancelAnimationFrame(animationFrameId);
   }, [isAutoRotating, updateActiveIndex]);
 
-  // Set up event listeners
   useEffect(() => {
     const handleMouseMove = (e) => handleMove(e.clientX);
     const handleTouchMove = (e) => {
@@ -98,51 +86,47 @@ const TestimonialOrbit = () => {
     };
     const handleTouchStart = (e) => handleStart(e.touches[0].clientX);
 
-    window.addEventListener('mousemove', handleMouseMove);
-    window.addEventListener('mouseup', handleEnd);
-    window.addEventListener('touchmove', handleTouchMove, { passive: false });
-    window.addEventListener('touchend', handleEnd);
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleEnd);
+    window.addEventListener("touchmove", handleTouchMove, { passive: false });
+    window.addEventListener("touchend", handleEnd);
 
     return () => {
-      window.removeEventListener('mousemove', handleMouseMove);
-      window.removeEventListener('mouseup', handleEnd);
-      window.removeEventListener('touchmove', handleTouchMove);
-      window.removeEventListener('touchend', handleEnd);
-      if (rotationInterval.current) {
-        clearInterval(rotationInterval.current);
-      }
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleEnd);
     };
   }, [handleMove, handleStart, handleEnd]);
 
-  // Handle logo glow effect when active index changes
-  const [logoGlow, setLogoGlow] = useState(false);
+  // Smooth parallax for whole orbit layer
   useEffect(() => {
-    setLogoGlow(true);
-    const timer = setTimeout(() => setLogoGlow(false), 1000);
-    return () => clearTimeout(timer);
-  }, [activeIndex]);
-
-
+    const parallax = (e) => {
+      const x = (e.clientX / window.innerWidth - 0.5) * 10;
+      const y = (e.clientY / window.innerHeight - 0.5) * 10;
+      if (dragRef.current) {
+        dragRef.current.style.transform = `rotateX(${y}deg) rotateY(${x}deg)`;
+      }
+    };
+    window.addEventListener("mousemove", parallax);
+    return () => window.removeEventListener("mousemove", parallax);
+  }, []);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center">
-      {/* Central Logo with Glow Effect */}
-      <div 
-        className={`absolute z-20 w-24 h-24 bg-gray-900 rounded-full flex items-center justify-center shadow-xl transition-all duration-1000 ${logoGlow ? 'ring-4 ring-cyan-500' : 'ring-2 ring-gray-700'}`}
+    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+      {/* Central Logo */}
+      <div
+        className="absolute z-20 w-24 h-24 bg-gray-900 rounded-full flex items-center justify-center shadow-2xl ring-2 ring-gray-600 transition-all duration-1000"
         style={{
-          transform: 'translate(-50%, -50%)',
-          top: '50%',
-          left: '50%',
+          transform: "translate(-50%, -50%)",
+          top: "50%",
+          left: "50%",
         }}
       >
-        <img 
-          src={logo} 
-          alt="App Logo" 
+        <img
+          src={logo}
+          alt="App Logo"
           className="w-12 h-12 transition-all duration-500"
-          style={{
-            transform: logoGlow ? 'scale(1.1)' : 'scale(1)',
-            filter: logoGlow ? 'drop-shadow(0 0 8px rgba(34, 211, 238, 0.6))' : 'none'
-          }}
         />
       </div>
 
@@ -155,21 +139,35 @@ const TestimonialOrbit = () => {
       >
         {testimonials.map((testimonial, index) => {
           const pos = getTestimonialPosition(index, angle);
-          
           return (
             <div
               key={testimonial.id}
               className="absolute transition-all duration-500 ease-out"
               style={{
-                transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) scale(${pos.scale})`,
+                transform: `
+                  translate(-50%, -50%)
+                  translate(${pos.x}px, ${pos.y}px)
+                  scale(${pos.scale})
+                  rotateY(${(pos.theta - 180) / 8}deg)
+                  rotateX(${(pos.theta - 180) / 16}deg)
+                  translateY(${Math.sin(pos.theta * Math.PI / 180) * 10}px)
+                `,
                 zIndex: pos.zIndex,
                 opacity: pos.opacity,
-                left: '50%',
-                top: '50%',
+                left: "50%",
+                top: "50%",
+                perspective: "1000px",
               }}
             >
-              <div className="bg-gray-900 shadow-lg rounded-xl p-4 w-[220px] text-sm border border-gray-700">
-                <p className="mb-2 italic text-gray-300">"{testimonial.message}"</p>
+              <div
+                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[240px] text-sm transition-transform duration-500 transform hover:scale-105 hover:rotate-[1deg] hover:shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                style={{
+                  boxShadow: activeIndex === index
+                    ? "0 0 30px rgba(255,255,255,0.3)"
+                    : "0 4px 20px rgba(0,0,0,0.2)",
+                }}
+              >
+                <p className="mb-2 italic text-gray-200">"{testimonial.message}"</p>
                 <div className="flex items-center space-x-3 mt-3">
                   <img
                     src={testimonial.avatar}
