@@ -21,15 +21,14 @@ const TestimonialOrbit = () => {
   // Calculate the position of each testimonial
   const getTestimonialPosition = (index, currentAngle) => {
     const total = testimonials.length;
-    const theta = (360 / total) * index + currentAngle;
-    const rad = (theta * Math.PI) / 180;
-    const x = radius * Math.cos(rad); // Center X is 0
-    const y = radius * Math.sin(rad); // Center Y is 0
-    const zIndex = Math.round(Math.cos(rad) * 10) + 10; // For depth effect
-    const scale = 0.7 + (Math.cos(rad) + 1) * 0.15; // Scale based on position
-    const opacity = 0.6 + (Math.cos(rad) + 1) * 0.2; // Opacity based on position
+    const angle = (Math.PI * 2 * index) / total + (currentAngle * Math.PI) / 180;
+    const x = Math.cos(angle) * radius;
+    const y = Math.sin(angle) * radius;
+    const zIndex = Math.round(Math.cos(angle) * 10) + 10;
+    const scale = 0.7 + (Math.cos(angle) + 1) * 0.15;
+    const opacity = 0.6 + (Math.cos(angle) + 1) * 0.2;
     
-    return { x, y, zIndex, scale, opacity, theta };
+    return { x, y, zIndex, scale, opacity, theta: angle * (180 / Math.PI) };
   };
 
   // Handle mouse/touch events
@@ -123,15 +122,7 @@ const TestimonialOrbit = () => {
     return () => clearTimeout(timer);
   }, [activeIndex]);
 
-  // Calculate connection line points
-  const getConnectionLinePoints = (pos) => {
-    const centerX = center - 100; // Adjust for centering
-    const centerY = center - 150; // Adjust for centering
-    const endX = pos.x + 100; // Center of the testimonial
-    const endY = pos.y + 75; // Center of the testimonial
-    
-    return { centerX, centerY, endX, endY };
-  };
+
 
   return (
     <div className="relative w-full h-full flex items-center justify-center">
@@ -164,34 +155,26 @@ const TestimonialOrbit = () => {
       >
         {testimonials.map((testimonial, index) => {
           const pos = getTestimonialPosition(index, angle);
-          const isActive = index === activeIndex;
-          const connection = getConnectionLinePoints(pos);
           
           return (
             <div
               key={testimonial.id}
-              className={`absolute transition-all duration-500 ease-out`}
+              className="absolute transition-all duration-500 ease-out"
               style={{
-                transform: `translate(calc(50% + ${pos.x}px), calc(50% + ${pos.y}px)) translate(-50%, -50%) scale(${pos.scale})`,
+                transform: `translate(-50%, -50%) translate(${pos.x}px, ${pos.y}px) scale(${pos.scale})`,
                 zIndex: pos.zIndex,
                 opacity: pos.opacity,
                 left: '50%',
                 top: '50%',
               }}
             >
-              <div 
-                className={`bg-gray-900 shadow-lg rounded-xl p-4 w-[220px] text-sm transition-all duration-300 border border-gray-700 ${
-                  isActive ? 'ring-2 ring-cyan-500' : 'ring-1 ring-gray-700'
-                }`}
-              >
+              <div className="bg-gray-900 shadow-lg rounded-xl p-4 w-[220px] text-sm border border-gray-700">
                 <p className="mb-2 italic text-gray-300">"{testimonial.message}"</p>
                 <div className="flex items-center space-x-3 mt-3">
                   <img
                     src={testimonial.avatar}
                     alt={testimonial.name}
-                    className={`w-8 h-8 rounded-full transition-all duration-300 ${
-                      isActive ? 'ring-2 ring-cyan-500' : 'ring-1 ring-gray-600'
-                    }`}
+                    className="w-8 h-8 rounded-full ring-1 ring-gray-600"
                   />
                   <div>
                     <p className="text-xs font-semibold text-white">{testimonial.name}</p>
@@ -199,60 +182,10 @@ const TestimonialOrbit = () => {
                   </div>
                 </div>
               </div>
-
-              {/* Connection Line */}
-              {isActive && (
-                <svg
-                  className="absolute top-0 left-0 w-full h-full pointer-events-none z-0"
-                  style={{
-                    transform: 'translate(-50%, -50%)',
-                    top: '50%',
-                    left: '50%',
-                  }}
-                >
-                  <line
-                    x1={connection.centerX}
-                    y1={connection.centerY}
-                    x2={connection.endX}
-                    y2={connection.endY}
-                    stroke="rgb(34, 211, 238)"
-                    strokeWidth="1.5"
-                    strokeDasharray="4 2"
-                    className="transition-all duration-300"
-                  />
-                  {/* Animated pulse effect */}
-                  <line
-                    x1={connection.centerX}
-                    y1={connection.centerY}
-                    x2={connection.endX}
-                    y2={connection.endY}
-                    stroke="url(#pulseGradient)"
-                    strokeWidth="3"
-                    strokeDasharray="4 2"
-                    className="opacity-0 animate-pulse"
-                    style={{
-                      animation: 'pulse 2s infinite',
-                      animationDelay: '0.5s'
-                    }}
-                  />
-                </svg>
-              )}
             </div>
           );
         })}
-
-        {/* SVG Definitions */}
-        <svg width="0" height="0" className="absolute">
-          <defs>
-            <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-        </svg>
       </div>
-
-      {/* Removed dots indicator */}
     </div>
   );
 };
