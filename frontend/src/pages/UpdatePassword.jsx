@@ -18,7 +18,8 @@ export default function UpdatePassword() {
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       
-      if (code) {
+      // If we're on the root path with a code, process it
+      if (window.location.pathname === '/' && code) {
         try {
           setLoading(true);
           // Exchange the code for a session
@@ -29,29 +30,41 @@ export default function UpdatePassword() {
           
           if (error) throw error;
           
-          console.log('Password reset verified');
-          // Clear the code from the URL
-          window.history.replaceState({}, document.title, '/updatepassword');
+          console.log('Password reset verified, redirecting to /updatepassword');
+          // Redirect to /updatepassword after successful verification
+          navigate('/updatepassword', { replace: true });
         } catch (err) {
           console.error('Error verifying password reset:', err);
           navigate('/forgotpassword', {
-            state: { error: 'Invalid or expired password reset link. Please request a new one.' }
+            state: { error: 'Invalid or expired password reset link. Please request a new one.' },
+            replace: true
           });
         } finally {
           setLoading(false);
         }
-      } else {
-        // If no code parameter, redirect to forgot password
-        console.log('Direct access to /updatepassword detected, redirecting to /forgotpassword');
-        navigate('/forgotpassword', { 
-          state: { 
-            error: 'Please request a password reset link first' 
-          } 
+      } 
+      // If we're on /updatepassword without a valid session, redirect to /forgotpassword
+      else if (window.location.pathname === '/updatepassword') {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) {
+            console.log('No active password reset session, redirecting to /forgotpassword');
+            navigate('/forgotpassword', { 
+              state: { 
+                error: 'Please request a password reset link first' 
+              },
+              replace: true
+            });
+          }
         });
       }
     };
     
     handlePasswordReset();
+    
+    // Listen for URL changes
+    const handleLocationChange = () => handlePasswordReset();
+    window.addEventListener('popstate', handleLocationChange);
+    return () => window.removeEventListener('popstate', handleLocationChange);
   }, [navigate]);
 
   // Handle the password reset flow when component mounts

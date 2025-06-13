@@ -30,9 +30,8 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Set the redirect URL to the root URL with the code parameter
-      // This matches the format that Supabase expects for password reset callbacks
-      const redirectTo = window.location.origin;
+      // Set the redirect URL to the root URL (handled by the frontend router)
+      const redirectTo = window.location.origin + '/';
       
       console.log('Sending password reset email to:', email);
       console.log('Redirect URL:', redirectTo);
