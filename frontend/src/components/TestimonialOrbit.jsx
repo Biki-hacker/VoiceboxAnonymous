@@ -11,28 +11,39 @@ const TestimonialOrbit = () => {
   const startX = useRef(0);
   const startAngle = useRef(0);
 
-  const radius = 250;
+  const radius = 210;
   const autoRotateSpeed = 0.01;
   const rotationSpeed = 0.05;
 
   const getTestimonialPosition = (index, currentAngle) => {
     const total = testimonials.length;
-    const angle = (Math.PI * 2 * index) / total + (currentAngle * Math.PI) / 180;
+    const angle =
+      (Math.PI * 2 * index) / total + (currentAngle * Math.PI) / 180;
     const x = Math.cos(angle) * radius;
     const y = Math.sin(angle) * radius;
     const zIndex = Math.round(Math.cos(angle) * 10) + 10;
     const scale = 0.7 + (Math.cos(angle) + 1) * 0.15;
     const opacity = 0.6 + (Math.cos(angle) + 1) * 0.2;
 
-    return { x, y, zIndex, scale, opacity, theta: angle * (180 / Math.PI) };
+    return {
+      x,
+      y,
+      zIndex,
+      scale,
+      opacity,
+      theta: angle * (180 / Math.PI),
+    };
   };
 
-  const handleStart = useCallback((clientX) => {
-    isDragging.current = true;
-    startX.current = clientX;
-    startAngle.current = angle;
-    setIsAutoRotating(false);
-  }, [angle]);
+  const handleStart = useCallback(
+    (clientX) => {
+      isDragging.current = true;
+      startX.current = clientX;
+      startAngle.current = angle;
+      setIsAutoRotating(false);
+    },
+    [angle]
+  );
 
   const handleMove = useCallback((clientX) => {
     if (!isDragging.current) return;
@@ -99,35 +110,36 @@ const TestimonialOrbit = () => {
     };
   }, [handleMove, handleStart, handleEnd]);
 
-  // Smooth parallax for whole orbit layer
+  // 3D parallax tilt (limited to ±10°)
   useEffect(() => {
-    const parallax = (e) => {
-      const x = (e.clientX / window.innerWidth - 0.5) * 10;
-      const y = (e.clientY / window.innerHeight - 0.5) * 10;
+    const maxTilt = 10;
+
+    const handleTilt = (e) => {
+      const { innerWidth, innerHeight } = window;
+      const x = ((e.clientX / innerWidth) - 0.5) * 2 * maxTilt;
+      const y = ((e.clientY / innerHeight) - 0.5) * -2 * maxTilt;
+
       if (dragRef.current) {
-        dragRef.current.style.transform = `rotateX(${y}deg) rotateY(${x}deg)`;
+        dragRef.current.style.transform = `rotateX(${y.toFixed(2)}deg) rotateY(${x.toFixed(2)}deg)`;
       }
     };
-    window.addEventListener("mousemove", parallax);
-    return () => window.removeEventListener("mousemove", parallax);
+
+    window.addEventListener("mousemove", handleTilt);
+    return () => window.removeEventListener("mousemove", handleTilt);
   }, []);
 
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
       {/* Central Logo */}
       <div
-        className="absolute z-20 w-24 h-24 bg-gray-900 rounded-full flex items-center justify-center shadow-2xl ring-2 ring-gray-600 transition-all duration-1000"
+        className="absolute z-20 w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center transition-all duration-1000"
         style={{
           transform: "translate(-50%, -50%)",
           top: "50%",
           left: "50%",
         }}
       >
-        <img
-          src={logo}
-          alt="App Logo"
-          className="w-12 h-12 transition-all duration-500"
-        />
+        <img src={logo} alt="App Logo" className="w-12 h-12" />
       </div>
 
       {/* Orbiting Testimonials */}
@@ -139,6 +151,7 @@ const TestimonialOrbit = () => {
       >
         {testimonials.map((testimonial, index) => {
           const pos = getTestimonialPosition(index, angle);
+
           return (
             <div
               key={testimonial.id}
@@ -162,9 +175,10 @@ const TestimonialOrbit = () => {
               <div
                 className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[240px] text-sm transition-transform duration-500 transform hover:scale-105 hover:rotate-[1deg] hover:shadow-[0_0_30px_rgba(255,255,255,0.1)]"
                 style={{
-                  boxShadow: activeIndex === index
-                    ? "0 0 30px rgba(255,255,255,0.3)"
-                    : "0 4px 20px rgba(0,0,0,0.2)",
+                  boxShadow:
+                    activeIndex === index
+                      ? "0 0 30px rgba(255,255,255,0.15)"
+                      : "0 4px 20px rgba(0,0,0,0.2)",
                 }}
               >
                 <p className="mb-2 italic text-gray-200">"{testimonial.message}"</p>
