@@ -18,10 +18,12 @@ export default function UpdatePassword() {
       const urlParams = new URLSearchParams(window.location.search);
       const code = urlParams.get('code');
       
-      // If we're on the root path with a code, process it
-      if (window.location.pathname === '/' && code) {
+      // If we have a code in the URL, verify it
+      if (code) {
         try {
           setLoading(true);
+          console.log('Verifying password reset code...');
+          
           // Exchange the code for a session
           const { error } = await supabase.auth.verifyOtp({
             type: 'recovery',
@@ -30,9 +32,10 @@ export default function UpdatePassword() {
           
           if (error) throw error;
           
-          console.log('Password reset verified, redirecting to /updatepassword');
-          // Redirect to /updatepassword after successful verification
-          navigate('/updatepassword', { replace: true });
+          console.log('Password reset verified');
+          
+          // Clear the code from the URL but stay on the same page
+          window.history.replaceState({}, document.title, window.location.pathname);
         } catch (err) {
           console.error('Error verifying password reset:', err);
           navigate('/forgotpassword', {
@@ -43,8 +46,8 @@ export default function UpdatePassword() {
           setLoading(false);
         }
       } 
-      // If we're on /updatepassword without a valid session, redirect to /forgotpassword
-      else if (window.location.pathname === '/updatepassword') {
+      // If no code and no session, redirect to forgot password
+      else {
         supabase.auth.getSession().then(({ data: { session } }) => {
           if (!session) {
             console.log('No active password reset session, redirecting to /forgotpassword');
@@ -55,6 +58,14 @@ export default function UpdatePassword() {
               replace: true
             });
           }
+        }).catch(err => {
+          console.error('Error checking session:', err);
+          navigate('/forgotpassword', { 
+            state: { 
+              error: 'An error occurred. Please try again.' 
+            },
+            replace: true
+          });
         });
       }
     };

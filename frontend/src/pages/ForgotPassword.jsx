@@ -30,8 +30,8 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Set the redirect URL to the root URL (handled by the frontend router)
-      const redirectTo = window.location.origin + '/';
+      // Set the redirect URL to the updatepassword page
+      const redirectTo = `${window.location.origin}/updatepassword`;
       
       console.log('Sending password reset email to:', email);
       console.log('Redirect URL:', redirectTo);
