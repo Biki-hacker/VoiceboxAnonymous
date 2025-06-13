@@ -1654,7 +1654,7 @@ const AdminDashboard = () => {
                                                 <svg className="-ml-0.5 mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
                                                 </svg>
-                                                {calculateTrend(post.postType)?.percentage || '0'}%    Manage Emails
+                                                {selectedOrg.employeeEmails?.length > 0 ? calculateTrend(selectedOrg.employeeEmails[0].postType)?.percentage || '0' : '0'}%    Manage Emails
                                             </button>
                                         </div>
                                     </div>
