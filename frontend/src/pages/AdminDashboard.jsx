@@ -19,7 +19,7 @@ import {
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon,
+    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon, ClockIcon, CheckBadgeIcon,
     FaceSmileIcon as EmojiHappyIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
