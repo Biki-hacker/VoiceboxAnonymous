@@ -282,17 +282,57 @@ export default function Home() {
     setContactStatus(""); // Clear status when closing
   }
 
+  // Only enable cursor effects for non-touch devices
+  const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
   useEffect(() => {
+    if (isTouchDevice) {
+      // Reset cursor position and disable glow effect on touch devices
+      setCursorPos({ x: -100, y: -100 });
+      setGlowIntensity(0);
+      return;
+    }
+
     const onMouseMove = (e) => {
-      const x = e.clientX; const y = e.clientY; setCursorPos({ x, y });
-      const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
+      const x = e.clientX;
+      const y = e.clientY;
+      setCursorPos({ x, y });
+      const cx = window.innerWidth / 2;
+      const cy = window.innerHeight / 2;
       const dist = Math.hypot(x - cx, y - cy);
       setGlowIntensity(1 - Math.min(dist / (window.innerWidth * 0.4), 1));
       setHoverOffset({ x: x - cx, y: y - cy });
     };
+
     window.addEventListener("mousemove", onMouseMove);
     return () => window.removeEventListener("mousemove", onMouseMove);
-  }, []);
+  }, [isTouchDevice]);
+
+  // Ensure proper touch scrolling on mobile
+  useEffect(() => {
+    if (!isTouchDevice) return;
+    
+    // Prevent default touch behavior that could interfere with scrolling
+    const preventDefault = (e) => {
+      if (e.touches.length > 1) {
+        e.preventDefault();
+      }
+    };
+    
+    document.body.style.overflow = 'auto';
+    document.body.style.touchAction = 'pan-y';
+    document.body.style.webkitOverflowScrolling = 'touch';
+    
+    // Add touch event listeners
+    document.addEventListener('touchmove', preventDefault, { passive: false });
+    
+    return () => {
+      document.removeEventListener('touchmove', preventDefault);
+      document.body.style.overflow = '';
+      document.body.style.touchAction = '';
+      document.body.style.webkitOverflowScrolling = '';
+    };
+  }, [isTouchDevice]);
 
   // Handle scroll to section when navigating from other pages
   useEffect(() => {
@@ -406,16 +446,18 @@ export default function Home() {
         <meta name="apple-mobile-web-app-title" content="Voicebox" />
         <meta name="theme-color" content="#0B1122" />
       </Helmet>
-      <Sparkles data={sparkleData} hoverOffset={hoverOffset} />
-      <motion.div
-        className="fixed pointer-events-none z-20 mix-blend-screen"
-        style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
-        animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
-        transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
-      >
-        <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
-        <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
-      </motion.div>
+      {!isTouchDevice && <Sparkles data={sparkleData} hoverOffset={hoverOffset} />}
+      {!isTouchDevice && (
+        <motion.div
+          className="fixed pointer-events-none z-20 mix-blend-screen"
+          style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
+          animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
+        >
+          <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
+          <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
+        </motion.div>
+      )}
 
       <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
         <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
