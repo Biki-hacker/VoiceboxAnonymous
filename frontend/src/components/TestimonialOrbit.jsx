@@ -64,15 +64,20 @@ const TestimonialOrbit = () => {
     <div className="relative w-full h-full" style={{ height: '100%' }}>
       {/* Central Logo */}
       <div
-        className="absolute z-20 w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center transition-all duration-1000"
+        className="absolute z-20 w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center transition-all duration-500 hover:scale-110 hover:shadow-[0_0_25px_rgba(34,211,238,0.5)]"
         style={{
           transform: "translate(-50%, -50%)",
           top: "50%",
           left: "50%",
-          position: 'absolute'
+          position: 'absolute',
+          transition: 'all 0.3s ease-in-out',
         }}
       >
-        <img src={logo} alt="App Logo" className="w-12 h-12" />
+        <img 
+          src={logo} 
+          alt="App Logo" 
+          className="w-12 h-12 transition-transform duration-500 hover:rotate-180"
+        />
       </div>
 
       {/* Orbiting Testimonials */}
@@ -107,12 +112,12 @@ const TestimonialOrbit = () => {
               }}
             >
               <div
-                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[280px] text-sm transition-transform duration-300 transform hover:scale-[1.05] hover:rotate-[1.5deg] hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]"
+                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[280px] text-sm transition-all duration-300 transform hover:scale-[1.05] hover:rotate-[1.5deg] hover:shadow-[0_0_25px_rgba(34,211,238,0.4)] hover:border-cyan-300/30"
                 style={{
-                  boxShadow:
-                    activeIndex === index
-                      ? "0 0 20px rgba(255,255,255,0.1)"
-                      : "0 4px 20px rgba(0,0,0,0.2)",
+                  transition: 'all 0.3s ease-in-out',
+                  boxShadow: activeIndex === index
+                    ? '0 0 20px rgba(255,255,255,0.1)'
+                    : '0 4px 20px rgba(0,0,0,0.2)'
                 }}
               >
                 <p className="mb-2 italic text-gray-200">"{testimonial.message}"</p>
