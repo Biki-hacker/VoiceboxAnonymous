@@ -11,7 +11,8 @@ import {
   ChartBarIcon, 
   ShieldCheckIcon,
   RocketLaunchIcon,
-  ChartPieIcon
+  ChartPieIcon,
+  LockClosedIcon
 } from '@heroicons/react/24/outline';
 import TestimonialOrbit from "../components/TestimonialOrbit";
 
@@ -561,12 +562,12 @@ export default function Home() {
         whileInView="visible" 
         viewport={{ once: true, amount: 0.2 }} 
         variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10"
+        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10"
         itemScope
         itemType="https://schema.org/ItemList"
       >
         <h2 className="sr-only" itemProp="name">Key Features</h2>
-        <meta itemProp="numberOfItems" content="4" />
+        <meta itemProp="numberOfItems" content="5" />
         {[
           { 
             icon: <ChatBubbleLeftRightIcon className="w-12 h-12 text-blue-400" />, 
@@ -591,7 +592,7 @@ export default function Home() {
             title: "Advanced Admin Dashboard",
             description: "Gain valuable insights with comprehensive analytics while preserving user anonymity.",
             itemType: "https://schema.org/Service"
-          },
+          }
         ].map((feature, idx) => (
           <motion.div 
             key={idx} 
@@ -611,28 +612,15 @@ export default function Home() {
         ))}
       </motion.section>
 
-      {/* Testimonials Section */}
-      <section className="px-6 md:px-16 lg:px-24 pt-8 pb-0 relative z-20">
-        <div className="max-w-7xl mx-auto">
-          <motion.h2 
-            initial={{ opacity: 0, y: 30 }} 
-            whileInView={{ opacity: 1, y: 0 }} 
-            viewport={{ once: true, amount: 0.2 }} 
-            transition={{ duration: 0.7, delay: 0.1 }} 
-            className="text-3xl md:text-4xl font-bold mb-4 md:mb-8 text-center text-white"
-          >
-            What Our Users Say
-          </motion.h2>
-          <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-16">
-            <TestimonialOrbit />
-          </div>
-        </div>
-      </section>
-
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 relative z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
           {[
+            { 
+              icon: <LockClosedIcon className="w-12 h-12 text-blue-400" />, 
+              title: "End-to-End Encryption", 
+              description: "Your messages and feedback are secured with military-grade encryption" 
+            },
             { 
               icon: <ShieldCheckIcon className="w-12 h-12 text-blue-400" />, 
               title: "Total Anonymity", 
