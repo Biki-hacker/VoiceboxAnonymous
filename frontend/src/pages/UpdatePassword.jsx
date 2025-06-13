@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function UpdatePassword() {
@@ -9,43 +9,24 @@ export default function UpdatePassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
 
   // Handle the password reset flow when component mounts
   useEffect(() => {
-    const handlePasswordReset = async () => {
-      try {
-        // Check if we have a password reset hash in the URL
-        const hash = window.location.hash;
-        if (hash.includes('type=recovery')) {
-          setLoading(true);
-          
-          // Extract the access token from the URL
-          const accessToken = new URLSearchParams(hash.substring(1)).get('access_token');
-          const refreshToken = new URLSearchParams(hash.substring(1)).get('refresh_token');
-          
-          if (accessToken && refreshToken) {
-            // Set the session using the tokens from the URL
-            const { error: sessionError } = await supabase.auth.setSession({
-              access_token: accessToken,
-              refresh_token: refreshToken
-            });
-
-            if (sessionError) throw sessionError;
-
-            // Clear the URL hash to prevent token reuse
-            window.history.replaceState({}, document.title, window.location.pathname);
-          }
-        }
-      } catch (err) {
-        console.error('Error handling password reset:', err);
-        setError('Failed to process password reset link. Please request a new one.');
-      } finally {
+    // Set up the auth state change listener
+    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        // User has clicked the password reset link
         setLoading(false);
+        setMessage('Please enter your new password below.');
+      }
+    });
+
+    // Clean up the listener when component unmounts
+    return () => {
+      if (authListener && authListener.subscription) {
+        authListener.subscription.unsubscribe();
       }
     };
-
-    handlePasswordReset();
   }, []);
 
   const validatePassword = (pass) => {
@@ -69,6 +50,7 @@ export default function UpdatePassword() {
       return;
     }
 
+
     const passwordError = validatePassword(password);
     if (passwordError) {
       setError(passwordError);
@@ -78,24 +60,19 @@ export default function UpdatePassword() {
     setLoading(true);
 
     try {
-      // Get the current session
-      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-      
-      if (sessionError || !session) {
-        throw new Error('No active session. Please request a new password reset link.');
-      }
-
-      // Update the password
-      const { error: updateError } = await supabase.auth.updateUser({
+      // Update the user's password
+      const { data, error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
       if (updateError) throw updateError;
 
-      // Sign out all other sessions
+      // Sign out from all other sessions
       await supabase.auth.signOut({ scope: 'others' });
 
       setMessage('Password updated successfully! Redirecting to sign in...');
+      
+      // Redirect to sign in after a short delay
       setTimeout(() => {
         // Clear the session and redirect to sign in
         supabase.auth.signOut().then(() => {
