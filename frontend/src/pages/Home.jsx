@@ -3,6 +3,7 @@ import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion"
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet';
 import threadsLogo from '../assets/threads-seeklogo.svg';
+import TestimonialOrbit from '../components/TestimonialOrbit';
 import AnimatedText from "../components/AnimatedText";
 import { 
   ChatBubbleLeftRightIcon, 
@@ -609,6 +610,26 @@ export default function Home() {
           </motion.div>
         ))}
       </motion.section>
+
+      {/* Testimonials Section */}
+      <div className="py-16 bg-white relative">
+        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+          <motion.h2 
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+            className="text-3xl md:text-4xl font-bold text-center text-gray-900 mb-12"
+          >
+            What Our Users Say
+          </motion.h2>
+          <div className="relative z-10 bg-white rounded-2xl shadow-xl p-8 min-h-[600px] flex items-center justify-center border border-gray-200">
+            <div className="w-full h-[500px] relative">
+              <TestimonialOrbit />
+            </div>
+          </div>
+        </div>
+      </div>
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
