@@ -613,7 +613,6 @@ export default function Home() {
 
       {/* Testimonials Section */}
       <section className="px-6 md:px-16 lg:px-24 pt-8 pb-0 relative z-20">
-        <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-gray-800 -z-10" />
         <div className="max-w-7xl mx-auto">
           <motion.h2 
             initial={{ opacity: 0, y: 30 }} 

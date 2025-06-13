@@ -16,8 +16,8 @@ const TestimonialOrbit = () => {
     const x = Math.cos(angle) * radius;
     const y = Math.sin(angle) * radius;
     const zIndex = Math.round(Math.cos(angle) * 10) + 10;
-    const scale = 0.7 + (Math.cos(angle) + 1) * 0.15;
-    const opacity = 0.6 + (Math.cos(angle) + 1) * 0.2;
+    const scale = 1; // Fixed scale for all bubbles
+    const opacity = 0.8; // Slightly increased base opacity for better visibility
 
     return {
       x,
