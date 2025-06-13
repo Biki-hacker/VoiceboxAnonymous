@@ -152,7 +152,7 @@ const TestimonialOrbit = () => {
               }}
             >
               <div
-                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[240px] text-sm transition-transform duration-300 transform hover:scale-[1.05] hover:rotate-[1.5deg] hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]"
+                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[280px] text-sm transition-transform duration-300 transform hover:scale-[1.05] hover:rotate-[1.5deg] hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]"
                 style={{
                   boxShadow:
                     activeIndex === index

@@ -612,7 +612,7 @@ export default function Home() {
       </motion.section>
 
       {/* Testimonials Section */}
-      <div className="py-16 bg-gray-900 relative overflow-hidden">
+      <div className="py-12 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
@@ -623,10 +623,8 @@ export default function Home() {
           >
             What Our Users Say
           </motion.h2>
-          <div className="relative z-10 bg-gray-800/50 rounded-2xl shadow-2xl p-6 md:p-8 min-h-[600px] flex items-center justify-center border border-gray-700/50 backdrop-blur-sm">
-            <div className="w-full h-[500px] relative">
-              <TestimonialOrbit />
-            </div>
+          <div className="relative z-10 min-h-[500px] flex items-center justify-center">
+            <TestimonialOrbit />
           </div>
         </div>
       </div>
