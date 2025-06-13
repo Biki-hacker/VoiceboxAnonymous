@@ -11,7 +11,7 @@ const TestimonialOrbit = () => {
   const startX = useRef(0);
   const startAngle = useRef(0);
 
-  const radius = 200;
+  const radius = 210;
   const autoRotateSpeed = 0.01;
   const rotationSpeed = 0.05;
 
