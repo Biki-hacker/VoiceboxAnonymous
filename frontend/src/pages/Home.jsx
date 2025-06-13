@@ -508,12 +508,14 @@ export default function Home() {
 
       <section 
         ref={heroRef} 
-        className="relative w-full flex-1 flex items-center justify-between px-6 md:px-12 lg:px-24 xl:px-32 z-10 py-16 md:py-24 min-h-[calc(100vh-80px)]"
+        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10"
         itemScope
         itemType="https://schema.org/WebApplication"
       >
-        <div className="container mx-auto flex flex-col md:flex-row items-center justify-between w-full">
-          <div className="w-full md:w-1/2 lg:w-2/5 mb-12 md:mb-0">
+        <div className="hidden md:block">
+          <ShieldLogo />
+        </div>
+        <div className="max-w-xl lg:max-w-2xl">
           <motion.h1 
             initial={{ opacity: 0, y: 30 }} 
             animate={controls} 
@@ -551,14 +553,6 @@ export default function Home() {
               </motion.button>
             </Link>
           </motion.div>
-          </div>
-          
-          {/* Shield Logo - Visible on medium screens and up */}
-          <div className="w-full md:w-1/2 lg:w-2/5 flex justify-center md:justify-end">
-            <div className="relative w-full max-w-md">
-              <ShieldLogo />
-            </div>
-          </div>
         </div>
       </section>
 
