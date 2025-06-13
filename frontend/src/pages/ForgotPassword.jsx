@@ -36,12 +36,29 @@ export default function ForgotPassword() {
       console.log('Sending password reset email to:', email);
       console.log('Redirect URL:', redirectTo);
       
-      // Send password reset email with the redirect URL
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: redirectTo,
-      });
-      
-      console.log('Password reset email sent. Response error:', error);
+      try {
+        // Send password reset email with the redirect URL
+        console.log('Calling resetPasswordForEmail...');
+        const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo: redirectTo,
+        });
+        
+        console.log('resetPasswordForEmail response:', { data, error });
+        
+        if (error) {
+          console.error('Error sending password reset email:', {
+            message: error.message,
+            status: error.status,
+            name: error.name
+          });
+          throw error;
+        }
+        
+        console.log('Password reset email sent successfully');
+      } catch (err) {
+        console.error('Error in password reset flow:', err);
+        throw err;
+      }
 
       if (error) {
         console.error('Error sending reset email:', error);

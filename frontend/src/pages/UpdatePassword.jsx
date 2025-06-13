@@ -25,12 +25,22 @@ export default function UpdatePassword() {
           console.log('Verifying password reset code...');
           
           // Exchange the code for a session
-          const { error } = await supabase.auth.verifyOtp({
-            type: 'recovery',
+          console.log('Verifying OTP with code:', code);
+          const { data, error } = await supabase.auth.verifyOtp({
+            email: '', // Let Supabase get email from the token
             token: code,
+            type: 'recovery',
           });
           
-          if (error) throw error;
+          console.log('OTP verification response:', { data, error });
+          if (error) {
+            console.error('OTP Verification Error Details:', {
+              message: error.message,
+              status: error.status,
+              name: error.name
+            });
+            throw error;
+          }
           
           console.log('Password reset verified');
           
