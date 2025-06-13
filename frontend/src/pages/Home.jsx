@@ -4,6 +4,7 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet';
 import threadsLogo from '../assets/threads-seeklogo.svg';
 import AnimatedText from "../components/AnimatedText";
+import TestimonialOrbit from "../components/TestimonialOrbit";
 import { 
   ChatBubbleLeftRightIcon, 
   LightBulbIcon, 
@@ -609,6 +610,13 @@ export default function Home() {
           </motion.div>
         ))}
       </motion.section>
+
+      {/* Testimonial Section */}
+      <section className="px-6 md:px-16 lg:px-24 py-8 z-10">
+        <h2 className="text-3xl md:text-4xl font-bold mb-10 text-center text-white">What Our Users Say</h2>
+        {/* Render TestimonialOrbit bare, no extra wrapper or padding */}
+        <TestimonialOrbit />
+      </section>
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
