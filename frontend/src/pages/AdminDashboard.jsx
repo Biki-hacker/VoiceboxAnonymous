@@ -1614,273 +1614,132 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                 </DashboardCard>
-                                <DashboardCard className="p-0 overflow-hidden">
-    <div className="px-6 pt-6 pb-2 flex justify-between items-center border-b border-gray-100 dark:border-slate-700">
-        <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-slate-100">Post Analytics</h3>
-            <p className="text-sm text-gray-500 dark:text-slate-400 mt-1">Insights and trends for your organization's posts</p>
-        </div>
-        <div className="flex items-center space-x-2">
-            <button 
-                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200 transition-colors"
-                title="Refresh data"
-                onClick={() => selectedOrg?._id && fetchOrganizationStats(selectedOrg._id)}
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-            </button>
-            <div className="h-5 w-px bg-gray-200 dark:bg-slate-600"></div>
-            <div className="flex items-center space-x-1 bg-gray-100 dark:bg-slate-700 p-1 rounded-lg">
-                <button 
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${viewMode === 'chart' ? 'bg-white dark:bg-slate-800 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-white'}`}
-                    onClick={() => setViewMode('chart')}
-                >
-                    Chart
-                </button>
-                <button 
-                    className={`px-3 py-1 text-sm rounded-md transition-colors ${viewMode === 'table' ? 'bg-white dark:bg-slate-800 shadow-sm text-gray-900 dark:text-white' : 'text-gray-500 dark:text-slate-300 hover:text-gray-700 dark:hover:text-white'}`}
-                    onClick={() => setViewMode('table')}
-                >
-                    Table
-                </button>
-            </div>
-        </div>
-    </div>
-    
-    {loading.orgDetails ? (
-        <div className="flex items-center justify-center py-16">
-            <svg className="animate-spin h-8 w-8 text-blue-600 dark:text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
-                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
-            </svg>
-        </div>
-    ) : stats.length === 0 ? (
-        <div className="p-8 text-center">
-            <ChartBarIcon className="h-12 w-12 mx-auto text-gray-300 dark:text-slate-600 mb-3" />
-            <h4 className="text-gray-500 dark:text-slate-400 font-medium">No data available</h4>
-            <p className="text-sm text-gray-400 dark:text-slate-500 mt-1">Create posts to see analytics</p>
-        </div>
-    ) : viewMode === 'chart' ? (
-        <div className="p-6">
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                <div className="lg:col-span-2 bg-gray-50 dark:bg-slate-800/50 p-4 rounded-xl border border-gray-100 dark:border-slate-700">
-                    <h4 className="text-sm font-medium text-gray-500 dark:text-slate-400 mb-4">POSTS BY TYPE</h4>
-                    <div className="h-64">
-                        <Bar 
-                            data={chartData} 
-                            options={{
-                                ...barChartOptions,
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    ...barChartOptions.plugins,
-                                    legend: {
-                                        ...barChartOptions.plugins.legend,
-                                        position: 'bottom',
-                                        labels: {
-                                            padding: 20,
-                                            usePointStyle: true,
-                                            pointStyle: 'circle',
-                                            boxWidth: 8,
-                                        }
-                                    },
-                                    tooltip: {
-                                        backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
-                                        titleColor: theme === 'dark' ? '#e2e8f0' : '#1e293b',
-                                        bodyColor: theme === 'dark' ? '#cbd5e1' : '#475569',
-                                        borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
-                                        borderWidth: 1,
-                                        padding: 12,
-                                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                                        callbacks: {
-                                            label: function(context) {
-                                                return `${context.dataset.label}: ${context.raw} posts`;
-                                            }
-                                        }
-                                    }
-                                },
-                                scales: {
-                                    x: {
-                                        grid: {
-                                            display: false,
-                                            drawBorder: false
-                                        },
-                                        ticks: {
-                                            color: theme === 'dark' ? '#94a3b8' : '#64748b'
-                                        }
-                                    },
-                                    y: {
-                                        grid: {
-                                            color: theme === 'dark' ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)',
-                                            drawBorder: false
-                                        },
-                                        ticks: {
-                                            color: theme === 'dark' ? '#94a3b8' : '#64748b',
-                                            precision: 0
-                                        }
-                                    }
-                                },
-                                elements: {
-                                    bar: {
-                                        borderRadius: 8,
-                                        borderSkipped: 'bottom',
-                                    }
-                                }
-                            }} 
-                        />
-                    </div>
-                </div>
-                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-slate-800 dark:to-slate-800/80 p-6 rounded-xl border border-gray-100 dark:border-slate-700">
-                    <h4 className="text-sm font-medium text-gray-500 dark:text-slate-400 mb-4">DISTRIBUTION</h4>
-                    <div className="h-64 relative">
-                        <Pie 
-                            data={chartData} 
-                            options={{
-                                ...pieChartOptions,
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                plugins: {
-                                    ...pieChartOptions.plugins,
-                                    legend: {
-                                        ...pieChartOptions.plugins.legend,
-                                        position: 'bottom',
-                                        labels: {
-                                            padding: 20,
-                                            usePointStyle: true,
-                                            pointStyle: 'circle',
-                                            boxWidth: 8,
-                                            color: theme === 'dark' ? '#e2e8f0' : '#1e293b',
-                                            font: {
-                                                size: 12
-                                            }
-                                        }
-                                    },
-                                    tooltip: {
-                                        backgroundColor: theme === 'dark' ? '#1e293b' : '#ffffff',
-                                        titleColor: theme === 'dark' ? '#e2e8f0' : '#1e293b',
-                                        bodyColor: theme === 'dark' ? '#cbd5e1' : '#475569',
-                                        borderColor: theme === 'dark' ? '#334155' : '#e2e8f0',
-                                        borderWidth: 1,
-                                        padding: 12,
-                                        boxShadow: '0 4px 20px rgba(0,0,0,0.08)',
-                                        callbacks: {
-                                            label: function(context) {
-                                                const label = context.label || '';
-                                                const value = context.raw || 0;
-                                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                                const percentage = Math.round((value / total) * 100);
-                                                return `${label}: ${value} (${percentage}%)`;
-                                            }
-                                        }
-                                    }
-                                },
-                                cutout: '70%',
-                                radius: '90%',
-                                spacing: 2
-                            }} 
-                        />
-                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                            <div className="text-center">
-                                <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                                    {chartData.datasets[0].data.reduce((a, b) => a + b, 0)}
-                                </div>
-                                <div className="text-xs text-gray-500 dark:text-slate-400">Total Posts</div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {chartData.labels.map((label, index) => {
-                    const count = chartData.datasets[0].data[index];
-                    const total = chartData.datasets[0].data.reduce((a, b) => a + b, 0);
-                    const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-                    const colors = [
-                        'bg-blue-500',
-                        'bg-green-500',
-                        'bg-purple-500',
-                        'bg-yellow-500',
-                        'bg-pink-500'
-                    ];
-                    
-                    return (
-                        <div key={index} className="bg-white dark:bg-slate-800 p-4 rounded-lg border border-gray-100 dark:border-slate-700 hover:shadow-sm transition-shadow">
-                            <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium text-gray-500 dark:text-slate-400 capitalize">{label}</span>
-                                <span className="text-xs px-2 py-1 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300">{percentage}%</span>
-                            </div>
-                            <div className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{count}</div>
-                            <div className="w-full bg-gray-200 dark:bg-slate-700 rounded-full h-2">
-                                <div 
-                                    className={`h-2 rounded-full ${colors[index % colors.length]}`} 
-                                    style={{ width: `${percentage}%` }}
-                                ></div>
-                            </div>
-                        </div>
-                    );
-                })}
-            </div>
-        </div>
-    ) : (
-        <div className="p-6">
-            <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                    <thead className="bg-gray-50 dark:bg-slate-800/50">
-                        <tr>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Post Type</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Count</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Percentage</th>
-                        </tr>
-                    </thead>
-                    <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
-                        {chartData.labels.map((label, index) => {
-                            const count = chartData.datasets[0].data[index];
-                            const total = chartData.datasets[0].data.reduce((a, b) => a + b, 0);
-                            const percentage = total > 0 ? Math.round((count / total) * 100) : 0;
-                            const colors = [
-                                'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
-                                'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
-                                'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300',
-                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
-                                'bg-pink-100 text-pink-800 dark:bg-pink-900/30 dark:text-pink-300'
-                            ];
-                            
-                            return (
-                                <tr key={index} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 transition-colors">
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div className={`flex-shrink-0 h-3 w-3 rounded-full ${colors[index % colors.length].split(' ')[0]}`}></div>
-                                            <div className="ml-3">
-                                                <div className="text-sm font-medium text-gray-900 dark:text-white capitalize">{label}</div>
+                                <DashboardCard className="p-4 sm:p-6">
+                                    <div className="flex justify-between items-center mb-6">
+                                        <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-slate-100 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                                            Post Analytics
+                                        </h3>
+                                        <div className="flex items-center space-x-2 bg-gray-50 dark:bg-slate-700/50 rounded-full px-3 py-1">
+                                            <ChartBarIcon className="h-5 w-5 text-blue-500" />
+                                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Real-time Data</span>
+                                        </div>
+                                    </div>
+                                    
+                                    {loading.orgDetails ? (
+                                        <div className="flex flex-col items-center justify-center py-12">
+                                            <div className="relative">
+                                                <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
+                                                    <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                                                        <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
+                                                    </svg>
+                                                </div>
+                                            </div>
+                                            <p className="mt-4 text-sm text-gray-500 dark:text-slate-400">Loading analytics...</p>
+                                        </div>
+                                    ) : stats.length === 0 ? (
+                                        <NothingToShow message="No post statistics available yet." />
+                                    ) : (
+                                        <div className="space-y-6">
+                                            {/* Stats Summary Cards */}
+                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                                {[
+                                                    { label: 'Total Posts', value: stats.reduce((sum, stat) => sum + stat.count, 0), icon: DocumentTextIcon, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
+                                                    { label: 'Active Posts', value: stats.find(s => s._id === 'active')?.count || 0, icon: CheckCircleIcon, color: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' },
+                                                    { label: 'Pending', value: stats.find(s => s._id === 'pending')?.count || 0, icon: ClockIcon, color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' },
+                                                    { label: 'Resolved', value: stats.find(s => s._id === 'resolved')?.count || 0, icon: CheckBadgeIcon, color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
+                                                ].map((stat, idx) => (
+                                                    <div key={idx} className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
+                                                        <div className="flex items-center justify-between">
+                                                            <div>
+                                                                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">{stat.label}</p>
+                                                                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
+                                                            </div>
+                                                            <div className={`p-3 rounded-lg ${stat.color} bg-opacity-20`}>
+                                                                <stat.icon className="h-6 w-6" />
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                            
+                                            {/* Charts */}
+                                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                                <div className="lg:col-span-2 bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
+                                                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-4">Posts Overview</h4>
+                                                    <div className="h-64">
+                                                        <Bar 
+                                                            data={chartData} 
+                                                            options={{
+                                                                ...barChartOptions,
+                                                                plugins: {
+                                                                    ...barChartOptions.plugins,
+                                                                    legend: {
+                                                                        ...barChartOptions.plugins.legend,
+                                                                        labels: {
+                                                                            ...barChartOptions.plugins.legend.labels,
+                                                                            color: theme === 'dark' ? '#E2E8F0' : '#1E293B',
+                                                                        }
+                                                                    }
+                                                                },
+                                                                scales: {
+                                                                    ...barChartOptions.scales,
+                                                                    x: {
+                                                                        ...barChartOptions.scales.x,
+                                                                        grid: {
+                                                                            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                                                        },
+                                                                        ticks: {
+                                                                            color: theme === 'dark' ? '#94A3B8' : '#64748B',
+                                                                        }
+                                                                    },
+                                                                    y: {
+                                                                        ...barChartOptions.scales.y,
+                                                                        grid: {
+                                                                            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+                                                                        },
+                                                                        ticks: {
+                                                                            color: theme === 'dark' ? '#94A3B8' : '#64748B',
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }} 
+                                                        />
+                                                    </div>
+                                                </div>
+                                                <div className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
+                                                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-4">Status Distribution</h4>
+                                                    <div className="h-64 flex items-center justify-center">
+                                                        <Pie 
+                                                            data={{
+                                                                ...chartData,
+                                                                datasets: chartData.datasets.map(dataset => ({
+                                                                    ...dataset,
+                                                                    borderWidth: 1,
+                                                                    borderColor: theme === 'dark' ? '#1E293B' : '#ffffff',
+                                                                    hoverBorderColor: theme === 'dark' ? '#334155' : '#f1f5f9',
+                                                                }))
+                                                            }} 
+                                                            options={{
+                                                                ...pieChartOptions,
+                                                                plugins: {
+                                                                    ...pieChartOptions.plugins,
+                                                                    legend: {
+                                                                        ...pieChartOptions.plugins.legend,
+                                                                        labels: {
+                                                                            ...pieChartOptions.plugins.legend.labels,
+                                                                            color: theme === 'dark' ? '#E2E8F0' : '#1E293B',
+                                                                        }
+                                                                    }
+                                                                }
+                                                            }} 
+                                                        />
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="text-sm text-gray-900 dark:text-white font-medium">{count}</div>
-                                    </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        <div className="flex items-center">
-                                            <div className="w-24 bg-gray-200 dark:bg-slate-700 rounded-full h-2 mr-3">
-                                                <div 
-                                                    className={`h-2 rounded-full ${colors[index % colors.length].split(' ')[0]}`} 
-                                                    style={{ width: `${percentage}%` }}
-                                                ></div>
-                                            </div>
-                                            <span className="text-sm text-gray-500 dark:text-slate-400">{percentage}%</span>
-                                        </div>
-                                    </td>
-
-                                </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    )}
-</DashboardCard>
+                                    )}
+                                </DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
                                     
