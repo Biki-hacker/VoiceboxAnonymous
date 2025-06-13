@@ -23,8 +23,8 @@ const TestimonialOrbit = () => {
     const total = testimonials.length;
     const theta = (360 / total) * index + currentAngle;
     const rad = (theta * Math.PI) / 180;
-    const x = center + radius * Math.cos(rad) - 80; // Adjusted for better centering
-    const y = center + radius * Math.sin(rad) - 80; // Adjusted for better centering
+    const x = radius * Math.cos(rad); // Center X is 0
+    const y = radius * Math.sin(rad); // Center Y is 0
     const zIndex = Math.round(Math.cos(rad) * 10) + 10; // For depth effect
     const scale = 0.7 + (Math.cos(rad) + 1) * 0.15; // Scale based on position
     const opacity = 0.6 + (Math.cos(rad) + 1) * 0.2; // Opacity based on position
@@ -172,9 +172,11 @@ const TestimonialOrbit = () => {
               key={testimonial.id}
               className={`absolute transition-all duration-500 ease-out`}
               style={{
-                transform: `translate(${pos.x}px, ${pos.y}px) scale(${pos.scale})`,
+                transform: `translate(calc(50% + ${pos.x}px), calc(50% + ${pos.y}px)) translate(-50%, -50%) scale(${pos.scale})`,
                 zIndex: pos.zIndex,
                 opacity: pos.opacity,
+                left: '50%',
+                top: '50%',
               }}
             >
               <div 
@@ -250,23 +252,7 @@ const TestimonialOrbit = () => {
         </svg>
       </div>
 
-      {/* Dots indicator */}
-      <div className="absolute bottom-8 left-0 right-0 flex justify-center space-x-2 z-30">
-        {testimonials.map((_, index) => (
-          <button
-            key={index}
-            onClick={() => {
-              const targetAngle = angle + (index - activeIndex) * (360 / testimonials.length);
-              setAngle(targetAngle);
-              setActiveIndex(index);
-            }}
-            className={`w-2 h-2 rounded-full transition-all duration-300 ${
-              index === activeIndex ? 'bg-cyan-500 w-6' : 'bg-gray-300'
-            }`}
-            aria-label={`Go to testimonial ${index + 1}`}
-          />
-        ))}
-      </div>
+      {/* Removed dots indicator */}
     </div>
   );
 };
