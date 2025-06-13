@@ -2,6 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
+// Helper function to extract URL parameters
+function getHashParams() {
+  const hash = window.location.hash.substring(1);
+  const params = new URLSearchParams(hash);
+  return {
+    access_token: params.get('access_token'),
+    refresh_token: params.get('refresh_token'),
+    type: params.get('type')
+  };
+}
+
 export default function UpdatePassword() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -18,29 +29,48 @@ export default function UpdatePassword() {
 
     const verifyPasswordReset = async () => {
       try {
-        // Get the access token from the URL
-        const accessToken = searchParams.get('access_token');
-        const refreshToken = searchParams.get('refresh_token');
-        const type = searchParams.get('type');
+        // First try to get tokens from hash (for email links)
+        const hashParams = getHashParams();
+        let accessToken = hashParams.access_token;
+        let refreshToken = hashParams.refresh_token;
+        const type = hashParams.type;
+
+        // If no tokens in hash, try search params (for testing)
+        if (!accessToken || !refreshToken) {
+          accessToken = searchParams.get('access_token');
+          refreshToken = searchParams.get('refresh_token');
+        }
+
+        console.log('Reset tokens:', { accessToken: !!accessToken, refreshToken: !!refreshToken, type });
 
         if (!accessToken || !refreshToken || type !== 'recovery') {
-          throw new Error('Invalid password reset link');
+          throw new Error('Invalid password reset link. Missing required parameters.');
         }
 
         // Set the session using the tokens from the URL
-        const { error: authError } = await supabase.auth.setSession({
+        const { data: { session }, error: authError } = await supabase.auth.setSession({
           access_token: accessToken,
           refresh_token: refreshToken
         });
 
-        if (authError) throw authError;
+        if (authError) {
+          console.error('Session error:', authError);
+          throw new Error('Failed to start password reset session. The link may have expired.');
+        }
+
+        if (!session) {
+          throw new Error('No active session. The password reset link may have expired.');
+        }
 
         // Verify the user has a valid recovery session
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         
         if (userError || !user) {
-          throw new Error('Invalid or expired password reset link');
+          console.error('User error:', userError);
+          throw new Error('Invalid or expired password reset link. Please request a new one.');
         }
+
+        console.log('User session:', { user });
 
         // Clear the URL parameters
         window.history.replaceState({}, document.title, window.location.pathname);
@@ -161,21 +191,27 @@ export default function UpdatePassword() {
   // Show error state if not a valid reset session
   if (error) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-900">
+      <div className="flex items-center justify-center min-h-screen bg-gray-900 p-4">
         <div className="w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-xl border border-gray-700 text-center">
-          <div className="mb-6 p-3 bg-red-900/30 border border-red-800 text-red-400 rounded-lg">
-            {error}
+          <div className="mb-6 p-4 bg-red-900/30 border border-red-800 text-red-400 rounded-lg text-left">
+            <h3 className="font-bold mb-2">Password Reset Error</h3>
+            <p className="mb-2">{error}</p>
+            <p className="text-sm text-red-300 mt-2">
+              If this issue persists, please try requesting a new reset link.
+            </p>
           </div>
-          <a 
-            href="/forgot-password" 
-            className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200"
-          >
-            Request New Reset Link
-          </a>
-          <div className="mt-4">
-            <a href="/signin" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-              Back to Sign In
+          <div className="space-y-4">
+            <a 
+              href="/forgotpassword" 
+              className="inline-block w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200"
+            >
+              Request New Reset Link
             </a>
+            <div className="text-center">
+              <a href="/signin" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+                Back to Sign In
+              </a>
+            </div>
           </div>
         </div>
       </div>
@@ -256,21 +292,27 @@ export default function UpdatePassword() {
 
   // Fallback in case of unexpected state
   return (
-    <div className="flex items-center justify-center min-h-screen bg-gray-900">
+    <div className="flex items-center justify-center min-h-screen bg-gray-900 p-4">
       <div className="w-full max-w-md p-8 bg-gray-800 rounded-lg shadow-xl border border-gray-700 text-center">
-        <div className="mb-6 p-3 bg-yellow-900/30 border border-yellow-800 text-yellow-400 rounded-lg">
-          Invalid request. Please use the password reset link from your email.
+        <div className="mb-6 p-4 bg-yellow-900/30 border border-yellow-800 text-yellow-400 rounded-lg text-left">
+          <h3 className="font-bold mb-2">Invalid Request</h3>
+          <p>Please use the password reset link sent to your email.</p>
+          <p className="text-sm text-yellow-300 mt-2">
+            If you don't see the email, please check your spam folder or request a new link.
+          </p>
         </div>
-        <a 
-          href="/forgotpassword" 
-          className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200"
-        >
-          Request New Reset Link
-        </a>
-        <div className="mt-4">
-          <a href="/signin" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
-            Back to Sign In
+        <div className="space-y-4">
+          <a 
+            href="/forgotpassword" 
+            className="inline-block w-full px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200"
+          >
+            Request New Reset Link
           </a>
+          <div className="text-center">
+            <a href="/signin" className="text-blue-400 hover:text-blue-300 text-sm font-medium">
+              Back to Sign In
+            </a>
+          </div>
         </div>
       </div>
     </div>
