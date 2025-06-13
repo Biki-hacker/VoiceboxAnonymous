@@ -11,25 +11,51 @@ export default function UpdatePassword() {
   const navigate = useNavigate();
   const location = useLocation();
   
-  // Check if coming from a password reset link
+  // Handle the password reset flow when component mounts
   useEffect(() => {
-    console.log('URL hash:', window.location.hash);
+    const handlePasswordReset = async () => {
+      // Check if we have a code parameter in the URL (from Supabase password reset)
+      const urlParams = new URLSearchParams(window.location.search);
+      const code = urlParams.get('code');
+      
+      if (code) {
+        try {
+          setLoading(true);
+          // Exchange the code for a session
+          const { error } = await supabase.auth.verifyOtp({
+            type: 'recovery',
+            token: code,
+          });
+          
+          if (error) throw error;
+          
+          console.log('Password reset verified');
+          // Clear the code from the URL
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } catch (err) {
+          console.error('Error verifying password reset:', err);
+          navigate('/forgotpassword', {
+            state: { error: 'Invalid or expired password reset link. Please request a new one.' }
+          });
+        } finally {
+          setLoading(false);
+        }
+      } else {
+        // Check if we have a valid session from a previous verification
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (!session) {
+            console.log('No active password reset session, redirecting to forgot password');
+            navigate('/forgotpassword', { 
+              state: { 
+                error: 'Please request a password reset link first' 
+              } 
+            });
+          }
+        });
+      }
+    };
     
-    // Check for both the hash containing 'access_token' or 'type=recovery'
-    const hasAccessToken = window.location.hash.includes('access_token=');
-    const isFromRecovery = window.location.hash.includes('type=recovery');
-    
-    if (!hasAccessToken && !isFromRecovery) {
-      console.log('No password reset token found, redirecting to forgot password');
-      // If not from a reset link, redirect to forgot password
-      navigate('/forgotpassword', { 
-        state: { 
-          error: 'Please request a password reset link first' 
-        } 
-      });
-    } else {
-      console.log('Password reset token found, allowing access');
-    }
+    handlePasswordReset();
   }, [navigate]);
 
   // Handle the password reset flow when component mounts
