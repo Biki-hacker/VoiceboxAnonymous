@@ -561,8 +561,17 @@ export default function Home() {
         initial="hidden" 
         whileInView="visible" 
         viewport={{ once: true, amount: 0.2 }} 
-        variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} 
-        className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 px-6 md:px-16 lg:px-24 py-16 md:py-24 z-10"
+        variants={{ 
+          hidden: { opacity: 0 }, 
+          visible: { 
+            opacity: 1, 
+            transition: { 
+              staggerChildren: 0.2, 
+              delayChildren: 0.2 
+            } 
+          } 
+        }} 
+        className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-6 md:px-12 lg:px-16 py-16 md:py-24 z-10"
         itemScope
         itemType="https://schema.org/ItemList"
       >
@@ -632,7 +641,22 @@ export default function Home() {
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 relative z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
-        <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+        <motion.div 
+          initial="hidden" 
+          whileInView="visible" 
+          viewport={{ once: true, amount: 0.2 }} 
+          variants={{ 
+            hidden: { opacity: 0 }, 
+            visible: { 
+              opacity: 1, 
+              transition: { 
+                staggerChildren: 0.2, 
+                delayChildren: 0.2 
+              } 
+            } 
+          }} 
+          className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-0 sm:px-4"
+        >
           {[
             { 
               icon: <LockClosedIcon className="w-12 h-12 text-blue-400" />, 
