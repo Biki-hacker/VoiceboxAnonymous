@@ -13,20 +13,20 @@ const TestimonialOrbit = () => {
   const rotationInterval = useRef(null);
   const lastRotationTime = useRef(Date.now());
 
-  const radius = 200;
-  const center = 250;
-  const rotationSpeed = 0.2; // degrees per millisecond for drag
-  const autoRotateSpeed = 0.05; // degrees per millisecond for auto-rotate
+  const radius = 180; // Slightly smaller radius for better visibility
+  const center = 220; // Adjusted for better centering
+  const rotationSpeed = 0.05; // Slower rotation speed for drag
+  const autoRotateSpeed = 0.01; // Much slower auto-rotation
 
   // Calculate the position of each testimonial
   const getTestimonialPosition = (index, currentAngle) => {
     const total = testimonials.length;
     const theta = (360 / total) * index + currentAngle;
     const rad = (theta * Math.PI) / 180;
-    const x = center + radius * Math.cos(rad) - 100;
-    const y = center + radius * Math.sin(rad) - 150;
+    const x = center + radius * Math.cos(rad) - 80; // Adjusted for better centering
+    const y = center + radius * Math.sin(rad) - 80; // Adjusted for better centering
     const zIndex = Math.round(Math.cos(rad) * 10) + 10; // For depth effect
-    const scale = 0.8 + (Math.cos(rad) + 1) * 0.15; // Scale based on position
+    const scale = 0.7 + (Math.cos(rad) + 1) * 0.15; // Scale based on position
     const opacity = 0.6 + (Math.cos(rad) + 1) * 0.2; // Opacity based on position
     
     return { x, y, zIndex, scale, opacity, theta };
@@ -135,12 +135,14 @@ const TestimonialOrbit = () => {
 
   return (
     <div className="relative w-full h-full flex items-center justify-center">
-      {/* Debug container - will be removed later */}
-      <div className="absolute inset-0 border-2 border-dashed border-blue-400 opacity-30 pointer-events-none"></div>
-      
       {/* Central Logo with Glow Effect */}
       <div 
-        className={`absolute z-20 w-24 h-24 bg-white rounded-full flex items-center justify-center shadow-xl transition-all duration-1000 ${logoGlow ? 'ring-4 ring-cyan-400' : 'ring-2 ring-gray-200'}`}
+        className={`absolute z-20 w-24 h-24 bg-gray-900 rounded-full flex items-center justify-center shadow-xl transition-all duration-1000 ${logoGlow ? 'ring-4 ring-cyan-500' : 'ring-2 ring-gray-700'}`}
+        style={{
+          transform: 'translate(-50%, -50%)',
+          top: '50%',
+          left: '50%',
+        }}
       >
         <img 
           src={logo} 
@@ -176,22 +178,22 @@ const TestimonialOrbit = () => {
               }}
             >
               <div 
-                className={`bg-white shadow-lg rounded-xl p-4 w-[220px] text-sm transition-all duration-300 ${
-                  isActive ? 'ring-2 ring-cyan-400' : 'ring-1 ring-gray-200'
+                className={`bg-gray-900 shadow-lg rounded-xl p-4 w-[220px] text-sm transition-all duration-300 border border-gray-700 ${
+                  isActive ? 'ring-2 ring-cyan-500' : 'ring-1 ring-gray-700'
                 }`}
               >
-                <p className="mb-2 italic text-gray-700">"{testimonial.message}"</p>
+                <p className="mb-2 italic text-gray-300">"{testimonial.message}"</p>
                 <div className="flex items-center space-x-3 mt-3">
                   <img
                     src={testimonial.avatar}
                     alt={testimonial.name}
                     className={`w-8 h-8 rounded-full transition-all duration-300 ${
-                      isActive ? 'ring-2 ring-cyan-400' : 'ring-1 ring-gray-300'
+                      isActive ? 'ring-2 ring-cyan-500' : 'ring-1 ring-gray-600'
                     }`}
                   />
                   <div>
-                    <p className="text-xs font-semibold text-gray-900">{testimonial.name}</p>
-                    <p className="text-[10px] text-gray-500">{testimonial.role}</p>
+                    <p className="text-xs font-semibold text-white">{testimonial.name}</p>
+                    <p className="text-[10px] text-gray-400">{testimonial.role}</p>
                   </div>
                 </div>
               </div>
@@ -241,8 +243,8 @@ const TestimonialOrbit = () => {
         <svg width="0" height="0" className="absolute">
           <defs>
             <linearGradient id="pulseGradient" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#22d3ee" stopOpacity="0.8" />
-              <stop offset="100%" stopColor="#22d3ee" stopOpacity="0" />
+              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.8" />
+              <stop offset="100%" stopColor="#06b6d4" stopOpacity="0" />
             </linearGradient>
           </defs>
         </svg>

@@ -612,18 +612,18 @@ export default function Home() {
       </motion.section>
 
       {/* Testimonials Section */}
-      <div className="py-16 bg-white relative">
+      <div className="py-16 bg-gray-900 relative overflow-hidden">
         <div className="max-w-7xl mx-auto px-6 lg:px-8">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-3xl md:text-4xl font-bold text-center text-gray-900 mb-12"
+            className="text-3xl md:text-4xl font-bold text-center text-white mb-12"
           >
             What Our Users Say
           </motion.h2>
-          <div className="relative z-10 bg-white rounded-2xl shadow-xl p-8 min-h-[600px] flex items-center justify-center border border-gray-200">
+          <div className="relative z-10 bg-gray-800/50 rounded-2xl shadow-2xl p-6 md:p-8 min-h-[600px] flex items-center justify-center border border-gray-700/50 backdrop-blur-sm">
             <div className="w-full h-[500px] relative">
               <TestimonialOrbit />
             </div>
