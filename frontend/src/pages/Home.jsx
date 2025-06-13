@@ -612,18 +612,18 @@ export default function Home() {
       </motion.section>
 
       {/* Testimonials Section */}
-      <section className="px-6 md:px-16 lg:px-24 py-16 bg-gradient-to-b from-gray-900 to-gray-800 relative overflow-hidden">
+      <section className="px-6 md:px-16 lg:px-24 pt-16 pb-0 bg-gradient-to-b from-gray-900 to-gray-800 relative overflow-hidden">
         <div className="max-w-7xl mx-auto">
           <motion.h2 
             initial={{ opacity: 0, y: 30 }} 
             whileInView={{ opacity: 1, y: 0 }} 
             viewport={{ once: true, amount: 0.2 }} 
             transition={{ duration: 0.7, delay: 0.1 }} 
-            className="text-3xl md:text-4xl font-bold mb-16 text-center text-white"
+            className="text-3xl md:text-4xl font-bold mb-8 md:mb-12 text-center text-white"
           >
             What Our Users Say
           </motion.h2>
-          <div className="relative h-[600px] md:h-[700px] lg:h-[800px]">
+          <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-16">
             <TestimonialOrbit />
           </div>
         </div>
