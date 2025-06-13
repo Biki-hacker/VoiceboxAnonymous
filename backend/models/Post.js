@@ -1,5 +1,6 @@
 // models/Post.js
 const mongoose = require('mongoose');
+const { encryptContent } = require('../utils/cryptoUtils');
 
 // Sub-schema for reactions including user tracking
 const reactionDetailSchema = new mongoose.Schema({
@@ -123,7 +124,8 @@ const postSchema = new mongoose.Schema(
     orgId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
-      required: true
+      required: true,
+      index: true
     },
     postType: {
       type: String,
@@ -144,18 +146,6 @@ const postSchema = new mongoose.Schema(
     department: {
       type: String
     },
-    isAnonymous: {
-      type: Boolean,
-      default: true
-    },
-    // Updated reactions schema to include user tracking
-    reactions: {
-      like: reactionDetailSchema,
-      love: reactionDetailSchema,
-      laugh: reactionDetailSchema,
-      angry: reactionDetailSchema
-    },
-    comments: [commentSchema],
     author: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -164,15 +154,71 @@ const postSchema = new mongoose.Schema(
     createdByRole: {
       type: String,
       required: true
+    },
+    isAnonymous: {
+      type: Boolean,
+      default: true
+    },
+    comments: [commentSchema],
+    reactions: {
+      like: reactionDetailSchema,
+      love: reactionDetailSchema,
+      laugh: reactionDetailSchema,
+      angry: reactionDetailSchema
+    },
+    isPinned: {
+      type: Boolean,
+      default: false
+    },
+    isEdited: {
+      type: Boolean,
+      default: false
     }
   },
-  { timestamps: true } // Adds createdAt and updatedAt
+  { timestamps: true }
 );
 
-// Middleware to handle removing the post from referenced documents if needed (optional)
-// postSchema.pre('remove', async function(next) {
-//   // Example: Remove post references from users or organizations if any
-//   next();
-// });
+// Add pre-save middleware to encrypt post content
+postSchema.pre('save', encryptContent);
+
+// Add post-find middleware to decrypt content
+postSchema.post('find', async function(docs) {
+  if (Array.isArray(docs)) {
+    for (let doc of docs) {
+      await doc.decryptContent();
+    }
+  } else if (docs) {
+    await docs.decryptContent();
+  }
+  return docs;
+});
+
+postSchema.post('findOne', async function(doc) {
+  if (doc) {
+    await doc.decryptContent();
+  }
+  return doc;
+});
+
+// Add instance method to decrypt content
+postSchema.methods.decryptContent = async function() {
+  const { decrypt } = require('../utils/cryptoUtils');
+  
+  // Decrypt post content
+  if (this.content && typeof this.content === 'object' && this.content.isEncrypted) {
+    this.content = await decrypt(this.content);
+  }
+  
+  // Decrypt comments
+  if (this.comments && Array.isArray(this.comments)) {
+    for (let comment of this.comments) {
+      if (comment.content && typeof comment.content === 'object' && comment.content.isEncrypted) {
+        comment.content = await decrypt(comment.content);
+      }
+    }
+  }
+  
+  return this;
+};
 
 module.exports = mongoose.model('Post', postSchema);

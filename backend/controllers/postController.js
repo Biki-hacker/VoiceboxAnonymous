@@ -3,10 +3,16 @@ const Post = require('../models/Post');
 const Organization = require('../models/Organization');
 const mongoose = require('mongoose');
 const supabase = require('../utils/supabaseClient');
+const { encrypt, decrypt } = require('../utils/cryptoUtils');
 
 exports.createPost = async (req, res) => {
   try {
-    const { orgId, postType, content, mediaUrls, region, department, isAnonymous } = req.body;
+    let { orgId, postType, content, mediaUrls, region, department, isAnonymous } = req.body;
+    
+    // Encrypt the content before saving
+    if (content && typeof content === 'string') {
+      content = await encrypt(content);
+    }
 
     if (!orgId || !postType || !content) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -319,9 +325,15 @@ exports.commentOnPost = async (req, res) => {
     }
 
     // Create new comment
+    const { text } = req.body;
+    let encryptedText = text;
+    if (text && typeof text === 'string') {
+      encryptedText = await encrypt(text);
+    }
+
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      text: req.body.text.trim(),
+      text: encryptedText,
       author: req.user._id, // User's ID as the comment author
       createdByRole: req.user.role || 'user', // Default to 'user' if role not specified
       createdAt: new Date(),
@@ -988,7 +1000,7 @@ exports.editPost = async (req, res) => {
     res.status(200).json(updatedPost);
   } catch (err) {
     console.error('Edit post error:', err);
-    res.status(500).json({ message: 'Error editing post' });
+    res.status(500).json({ message: 'Error updating post' });
   }
 };
 
@@ -1012,10 +1024,15 @@ exports.editComment = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized to edit this comment' });
     }
 
-    comment.text = text;
+    // Encrypt the comment text before saving
+    if (text && typeof text === 'string') {
+      comment.text = await encrypt(text);
+    }
+
     comment.updatedAt = new Date();
     await post.save();
 
+    // Broadcast the update to all connected clients
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
       broadcastMessage({
@@ -1028,7 +1045,14 @@ exports.editComment = async (req, res) => {
       });
     }
 
-    res.status(200).json(post);
+    // Decrypt the comment text for the response
+    const decryptedComment = await decryptContent(comment.toObject());
+    
+    res.status(200).json({ 
+      message: 'Comment updated successfully', 
+      post: post.toObject(), 
+      comment: decryptedComment 
+    });
   } catch (err) {
     console.error('Edit comment error:', err);
     res.status(500).json({ message: 'Error editing comment' });

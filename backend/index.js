@@ -13,6 +13,9 @@ const orgRoutes = require('./routes/orgRoutes');
 const postRoutes = require('./routes/postRoutes');
 const mailRoutes = require('./routes/mailRoutes');
 
+// Import decryption middleware
+const decryptResponseMiddleware = require('./middleware/decryptMiddleware');
+
 // Middlewares
 const errorHandler = require('./middleware/errorHandler');
 const { authMiddleware } = require('./middleware/auth');
@@ -68,6 +71,9 @@ app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 app.use(cookieParser());
 app.use(logger);
+
+// Add decryption middleware for API responses
+app.use(decryptResponseMiddleware);
 
 // --- Rate Limiting (Example) ---
 const rateLimit = require('express-rate-limit');
