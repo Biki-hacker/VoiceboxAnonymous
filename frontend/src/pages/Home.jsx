@@ -612,14 +612,15 @@ export default function Home() {
       </motion.section>
 
       {/* Testimonials Section */}
-      <section className="px-6 md:px-16 lg:px-24 pt-16 pb-0 bg-gradient-to-b from-gray-900 to-gray-800 relative overflow-hidden">
+      <section className="px-6 md:px-16 lg:px-24 pt-8 pb-0 relative z-20">
+        <div className="absolute inset-0 bg-gradient-to-b from-gray-900 to-gray-800 -z-10" />
         <div className="max-w-7xl mx-auto">
           <motion.h2 
             initial={{ opacity: 0, y: 30 }} 
             whileInView={{ opacity: 1, y: 0 }} 
             viewport={{ once: true, amount: 0.2 }} 
             transition={{ duration: 0.7, delay: 0.1 }} 
-            className="text-3xl md:text-4xl font-bold mb-8 md:mb-12 text-center text-white"
+            className="text-3xl md:text-4xl font-bold mb-4 md:mb-8 text-center text-white"
           >
             What Our Users Say
           </motion.h2>
@@ -629,7 +630,7 @@ export default function Home() {
         </div>
       </section>
 
-      <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
+      <section id="about" className="px-6 md:px-16 lg:px-24 py-16 relative z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
         <motion.div initial="hidden" whileInView="visible" viewport={{ once: true, amount: 0.2 }} variants={{ hidden: { opacity:0 }, visible: { opacity:1, transition: { staggerChildren: 0.2, delayChildren: 0.2 } } }} className="grid grid-cols-1 md:grid-cols-3 gap-8">
           {[
