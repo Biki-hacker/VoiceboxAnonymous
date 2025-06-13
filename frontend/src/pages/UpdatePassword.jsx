@@ -13,15 +13,22 @@ export default function UpdatePassword() {
   
   // Check if coming from a password reset link
   useEffect(() => {
-    const isFromResetLink = window.location.hash.includes('type=recovery');
+    console.log('URL hash:', window.location.hash);
     
-    if (!isFromResetLink) {
+    // Check for both the hash containing 'access_token' or 'type=recovery'
+    const hasAccessToken = window.location.hash.includes('access_token=');
+    const isFromRecovery = window.location.hash.includes('type=recovery');
+    
+    if (!hasAccessToken && !isFromRecovery) {
+      console.log('No password reset token found, redirecting to forgot password');
       // If not from a reset link, redirect to forgot password
       navigate('/forgotpassword', { 
         state: { 
           error: 'Please request a password reset link first' 
         } 
       });
+    } else {
+      console.log('Password reset token found, allowing access');
     }
   }, [navigate]);
 
