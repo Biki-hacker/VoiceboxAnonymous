@@ -4,7 +4,6 @@ import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet';
 import threadsLogo from '../assets/threads-seeklogo.svg';
 import AnimatedText from "../components/AnimatedText";
-import TestimonialOrbit from "../components/TestimonialOrbit";
 import { 
   ChatBubbleLeftRightIcon, 
   LightBulbIcon, 
@@ -14,6 +13,7 @@ import {
   RocketLaunchIcon,
   ChartPieIcon
 } from '@heroicons/react/24/outline';
+import TestimonialOrbit from "../components/TestimonialOrbit";
 
 // Structured data for the homepage
 const structuredData = {
@@ -611,11 +611,22 @@ export default function Home() {
         ))}
       </motion.section>
 
-      {/* Testimonial Section */}
-      <section className="px-6 md:px-16 lg:px-24 py-8 z-10">
-        <h2 className="text-3xl md:text-4xl font-bold mb-10 text-center text-white">What Our Users Say</h2>
-        {/* Render TestimonialOrbit bare, no extra wrapper or padding */}
-        <TestimonialOrbit />
+      {/* Testimonials Section */}
+      <section className="px-6 md:px-16 lg:px-24 py-16 bg-gradient-to-b from-gray-900 to-gray-800 relative overflow-hidden">
+        <div className="max-w-7xl mx-auto">
+          <motion.h2 
+            initial={{ opacity: 0, y: 30 }} 
+            whileInView={{ opacity: 1, y: 0 }} 
+            viewport={{ once: true, amount: 0.2 }} 
+            transition={{ duration: 0.7, delay: 0.1 }} 
+            className="text-3xl md:text-4xl font-bold mb-16 text-center text-white"
+          >
+            What Our Users Say
+          </motion.h2>
+          <div className="relative h-[600px] md:h-[700px] lg:h-[800px]">
+            <TestimonialOrbit />
+          </div>
+        </div>
       </section>
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
