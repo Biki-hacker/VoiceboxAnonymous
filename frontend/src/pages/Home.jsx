@@ -3,7 +3,6 @@ import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion"
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet';
 import threadsLogo from '../assets/threads-seeklogo.svg';
-import TestimonialOrbit from '../components/TestimonialOrbit';
 import AnimatedText from "../components/AnimatedText";
 import { 
   ChatBubbleLeftRightIcon, 
@@ -282,29 +281,17 @@ export default function Home() {
     setContactStatus(""); // Clear status when closing
   }
 
-  // Only enable cursor effects for non-touch devices
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0);
-
-  // Handle mouse move effects for non-touch devices
   useEffect(() => {
-    if (isTouchDevice) {
-      setCursorPos({ x: -100, y: -100 });
-      setGlowIntensity(0);
-      return;
-    }
     const onMouseMove = (e) => {
-      const x = e.clientX;
-      const y = e.clientY;
-      setCursorPos({ x, y });
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
+      const x = e.clientX; const y = e.clientY; setCursorPos({ x, y });
+      const cx = window.innerWidth / 2; const cy = window.innerHeight / 2;
       const dist = Math.hypot(x - cx, y - cy);
       setGlowIntensity(1 - Math.min(dist / (window.innerWidth * 0.4), 1));
       setHoverOffset({ x: x - cx, y: y - cy });
     };
     window.addEventListener("mousemove", onMouseMove);
     return () => window.removeEventListener("mousemove", onMouseMove);
-  }, [isTouchDevice]);
+  }, []);
 
   // Handle scroll to section when navigating from other pages
   useEffect(() => {
@@ -404,13 +391,8 @@ export default function Home() {
 
   return (
     <div
-      className="relative min-h-screen text-white flex flex-col overflow-x-hidden overflow-y-auto touch-pan-y"
-      style={{
-        background: "linear-gradient(to bottom, #040b1d, #0a1224)",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-        backgroundRepeat: "no-repeat"
-      }}
+      className="relative overflow-x-hidden min-h-screen text-white flex flex-col"
+      style={{ background: "linear-gradient(to bottom, #040b1d, #0a1224)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
       itemScope
       itemType="https://schema.org/WebApplication"
     >
@@ -423,18 +405,16 @@ export default function Home() {
         <meta name="apple-mobile-web-app-title" content="Voicebox" />
         <meta name="theme-color" content="#0B1122" />
       </Helmet>
-      {!isTouchDevice && <Sparkles data={sparkleData} hoverOffset={hoverOffset} />}
-      {!isTouchDevice && (
-        <motion.div
-          className="fixed pointer-events-none z-20 mix-blend-screen"
-          style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
-          animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
-          transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
-        >
-          <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
-          <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
-        </motion.div>
-      )}
+      <Sparkles data={sparkleData} hoverOffset={hoverOffset} />
+      <motion.div
+        className="fixed pointer-events-none z-20 mix-blend-screen"
+        style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
+        animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
+        transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
+      >
+        <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
+        <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
+      </motion.div>
 
       <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
         <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
@@ -526,10 +506,9 @@ export default function Home() {
 
       <section 
         ref={heroRef} 
-        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10 min-h-[80vh]"
+        className="flex-1 flex flex-col justify-center px-6 md:px-16 lg:px-24 z-10 mt-12 md:mt-16 lg:mt-20 relative pb-10"
         itemScope
         itemType="https://schema.org/WebApplication"
-        style={{ WebkitOverflowScrolling: 'touch' }}
       >
         <div className="hidden md:block">
           <ShieldLogo />
@@ -630,24 +609,6 @@ export default function Home() {
           </motion.div>
         ))}
       </motion.section>
-
-      {/* Testimonials Section */}
-      <div className="py-12 relative" style={{ minHeight: '600px' }}>
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full">
-          <motion.h2 
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            transition={{ duration: 0.6 }}
-            className="text-3xl md:text-4xl font-bold text-center text-white mb-12 z-20 relative"
-          >
-            What Our Users Say
-          </motion.h2>
-          <div className="relative w-full" style={{ height: '500px' }}>
-            <TestimonialOrbit />
-          </div>
-        </div>
-      </div>
 
       <section id="about" className="px-6 md:px-16 lg:px-24 py-16 z-10">
         <motion.h2 initial={{ opacity: 0, y: 30 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, amount: 0.2 }} transition={{ duration: 0.7, delay: 0.1 }} className="text-3xl md:text-4xl font-bold mb-12 text-center text-white">Why Choose Us</motion.h2>
