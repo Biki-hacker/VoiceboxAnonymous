@@ -19,14 +19,8 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Get the current origin and ensure it's a full URL
-      const siteUrl = new URL(window.location.origin);
-      
-      // Create the redirect URL with the hash fragment that Supabase expects
-      const redirectTo = new URL('/updatepassword', siteUrl).toString();
-      
-      console.log('Sending password reset email to:', email);
-      console.log('Redirect URL:', redirectTo);
+      // Set the redirect URL to the update password page
+      const redirectTo = `${window.location.origin}/updatepassword`;
       
       // Send password reset email with the redirect URL
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
