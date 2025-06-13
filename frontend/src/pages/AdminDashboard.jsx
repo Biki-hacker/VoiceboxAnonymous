@@ -3,7 +3,6 @@ import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } fr
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
-import { subDays, isAfter, isBefore, format, parseISO, differenceInDays } from 'date-fns';
 import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import Sidebar from '../components/Sidebar';
@@ -172,81 +171,6 @@ const AdminDashboard = () => {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
     const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' or 'createPost'
-    const [timeRange, setTimeRange] = useState('week'); // 'week', 'month', 'all'
-    // Calculate trends based on post dates
-    const calculateTrend = useCallback((postType) => {
-        if (!posts || posts.length === 0) return { percentage: 0, isPositive: false };
-        
-        const now = new Date();
-        let startDate, endDate, previousStartDate, previousEndDate;
-        
-        // Set date ranges based on selected time range
-        switch(timeRange) {
-            case 'week':
-                endDate = now;
-                startDate = subDays(now, 7);
-                previousEndDate = subDays(now, 7);
-                previousStartDate = subDays(now, 14);
-                break;
-            case 'month':
-                endDate = now;
-                startDate = subDays(now, 30);
-                previousEndDate = subDays(now, 30);
-                previousStartDate = subDays(now, 60);
-                break;
-            default: // all time
-                // If all time, compare first half vs second half of the data
-                const allPosts = [...posts].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
-                if (allPosts.length < 2) return { percentage: 0, isPositive: false };
-                
-                const midPoint = Math.floor(allPosts.length / 2);
-                const firstHalf = allPosts.slice(0, midPoint);
-                const secondHalf = allPosts.slice(midPoint);
-                
-                const firstHalfCount = firstHalf.filter(p => p.postType === postType).length;
-                const secondHalfCount = secondHalf.filter(p => p.postType === postType).length;
-                
-                const percentage = firstHalfCount > 0 
-                    ? Math.round(((secondHalfCount - firstHalfCount) / firstHalfCount) * 100) 
-                    : secondHalfCount > 0 ? 100 : 0;
-                    
-                return {
-                    percentage: Math.abs(percentage),
-                    isPositive: percentage >= 0,
-                    count: secondHalfCount
-                };
-        }
-        
-        // Filter posts for current and previous periods
-        const currentPeriodPosts = posts.filter(post => {
-            const postDate = new Date(post.createdAt);
-            return postDate >= startDate && postDate <= endDate;
-        });
-        
-        const previousPeriodPosts = posts.filter(post => {
-            const postDate = new Date(post.createdAt);
-            return postDate >= previousStartDate && postDate <= previousEndDate;
-        });
-        
-        // Count posts of this type in each period
-        const currentCount = currentPeriodPosts.filter(p => p.postType === postType).length;
-        const previousCount = previousPeriodPosts.filter(p => p.postType === postType).length;
-        
-        // Calculate percentage change
-        let percentage = 0;
-        if (previousCount > 0) {
-            percentage = Math.round(((currentCount - previousCount) / previousCount) * 100);
-        } else if (currentCount > 0) {
-            percentage = 100; // Infinite growth (from 0 to some number)
-        }
-        
-        return {
-            percentage: Math.abs(percentage),
-            isPositive: percentage >= 0,
-            count: currentCount
-        };
-    }, [posts, timeRange]);
-    
     // Track posting state with useRef to prevent unnecessary re-renders
     const isPostingRef = useRef(false);
     const [isPosting, setIsPosting] = useState(false);
@@ -1652,9 +1576,9 @@ const AdminDashboard = () => {
                                                 className="inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
                                             >
                                                 <svg className="-ml-0.5 mr-1.5 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                                                 </svg>
-                                                {selectedOrg.employeeEmails?.length > 0 ? calculateTrend(selectedOrg.employeeEmails[0].postType)?.percentage || '0' : '0'}%    Manage Emails
+                                                Manage Emails
                                             </button>
                                         </div>
                                     </div>
@@ -1908,37 +1832,6 @@ const AdminDashboard = () => {
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Post Type</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Count</th>
                             <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">Percentage</th>
-                            <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                                <div className="flex items-center">
-                                    <span>Trend</span>
-                                    <Listbox value={timeRange} onChange={setTimeRange}>
-                                        <div className="relative ml-2">
-                                            <Listbox.Button className="flex items-center text-xs text-gray-500 hover:text-gray-700 dark:text-slate-400 dark:hover:text-slate-200">
-                                                <span className="capitalize">{timeRange}</span>
-                                                <ChevronDownIcon className="ml-1 h-3 w-3" aria-hidden="true" />
-                                            </Listbox.Button>
-                                            <Listbox.Options className="absolute left-0 z-10 mt-1 w-24 py-1 bg-white dark:bg-slate-800 shadow-lg rounded-md border border-gray-200 dark:border-slate-700">
-                                                {['week', 'month', 'all'].map((option) => (
-                                                    <Listbox.Option
-                                                        key={option}
-                                                        value={option}
-                                                        className={({ active }) =>
-                                                            `${active ? 'bg-blue-50 dark:bg-slate-700' : 'text-gray-900 dark:text-white'}
-                                                            cursor-pointer select-none relative py-1.5 px-3 text-xs`
-                                                        }
-                                                    >
-                                                        {({ selected }) => (
-                                                            <span className={`block truncate capitalize ${selected ? 'font-medium text-blue-600 dark:text-blue-400' : 'font-normal'}`}>
-                                                                {option}
-                                                            </span>
-                                                        )}
-                                                    </Listbox.Option>
-                                                ))}
-                                            </Listbox.Options>
-                                        </div>
-                                    </Listbox>
-                                </div>
-                            </th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
@@ -1978,44 +1871,7 @@ const AdminDashboard = () => {
                                             <span className="text-sm text-gray-500 dark:text-slate-400">{percentage}%</span>
                                         </div>
                                     </td>
-                                    <td className="px-6 py-4 whitespace-nowrap">
-                                        {(() => {
-                                            const trend = calculateTrend(label);
-                                            const isPositive = trend.isPositive;
-                                            const percentage = trend.percentage;
-                                            const count = trend.count || 0;
-                                            
-                                            if (count === 0) {
-                                                return (
-                                                    <div className="text-sm text-gray-500 dark:text-slate-400">
-                                                        No data
-                                                    </div>
-                                                );
-                                            }
-                                            
-                                            return (
-                                                <div className={`text-sm flex items-center ${isPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                                                    <svg 
-                                                        className={`h-4 w-4 mr-1 transform ${!isPositive ? 'rotate-180' : ''}`} 
-                                                        fill="none" 
-                                                        viewBox="0 0 24 24" 
-                                                        stroke="currentColor"
-                                                    >
-                                                        <path 
-                                                            strokeLinecap="round" 
-                                                            strokeLinejoin="round" 
-                                                            strokeWidth={2} 
-                                                            d={isPositive ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} 
-                                                        />
-                                                    </svg>
-                                                    {percentage}%
-                                                    <span className="ml-1 text-xs text-gray-500 dark:text-slate-400">
-                                                        ({count} {count === 1 ? 'post' : 'posts'})
-                                                    </span>
-                                                </div>
-                                            );
-                                        })()}
-                                    </td>
+
                                 </tr>
                             );
                         })}
