@@ -5,15 +5,9 @@ import logo from "../assets/vblogo1.webp";
 const TestimonialOrbit = () => {
   const [angle, setAngle] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
-  const [isAutoRotating, setIsAutoRotating] = useState(true);
-  const dragRef = useRef(null);
-  const isDragging = useRef(false);
-  const startX = useRef(0);
-  const startAngle = useRef(0);
-
+  
   const radius = 210;
   const autoRotateSpeed = 0.01;
-  const rotationSpeed = 0.05;
 
   const getTestimonialPosition = (index, currentAngle) => {
     const total = testimonials.length;
@@ -35,28 +29,7 @@ const TestimonialOrbit = () => {
     };
   };
 
-  const handleStart = useCallback(
-    (clientX) => {
-      isDragging.current = true;
-      startX.current = clientX;
-      startAngle.current = angle;
-      setIsAutoRotating(false);
-    },
-    [angle]
-  );
 
-  const handleMove = useCallback((clientX) => {
-    if (!isDragging.current) return;
-    const deltaX = clientX - startX.current;
-    const newAngle = startAngle.current + deltaX * rotationSpeed;
-    setAngle(newAngle);
-    updateActiveIndex(newAngle);
-  }, []);
-
-  const handleEnd = useCallback(() => {
-    isDragging.current = false;
-    setIsAutoRotating(true);
-  }, []);
 
   const updateActiveIndex = useCallback((currentAngle) => {
     const total = testimonials.length;
@@ -66,8 +39,6 @@ const TestimonialOrbit = () => {
   }, []);
 
   useEffect(() => {
-    if (!isAutoRotating) return;
-
     let animationFrameId;
     let lastTime = Date.now();
 
@@ -87,28 +58,7 @@ const TestimonialOrbit = () => {
 
     animationFrameId = requestAnimationFrame(rotate);
     return () => cancelAnimationFrame(animationFrameId);
-  }, [isAutoRotating, updateActiveIndex]);
-
-  useEffect(() => {
-    const handleMouseMove = (e) => handleMove(e.clientX);
-    const handleTouchMove = (e) => {
-      e.preventDefault();
-      handleMove(e.touches[0].clientX);
-    };
-    const handleTouchStart = (e) => handleStart(e.touches[0].clientX);
-
-    window.addEventListener("mousemove", handleMouseMove);
-    window.addEventListener("mouseup", handleEnd);
-    window.addEventListener("touchmove", handleTouchMove, { passive: false });
-    window.addEventListener("touchend", handleEnd);
-
-    return () => {
-      window.removeEventListener("mousemove", handleMouseMove);
-      window.removeEventListener("mouseup", handleEnd);
-      window.removeEventListener("touchmove", handleTouchMove);
-      window.removeEventListener("touchend", handleEnd);
-    };
-  }, [handleMove, handleStart, handleEnd]);
+  }, [updateActiveIndex]);
 
   return (
     <div className="relative w-full h-full" style={{ height: '100%' }}>
@@ -127,10 +77,7 @@ const TestimonialOrbit = () => {
 
       {/* Orbiting Testimonials */}
       <div
-        className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
-        onMouseDown={(e) => handleStart(e.clientX)}
-        onTouchStart={(e) => handleStart(e.touches[0].clientX)}
-        ref={dragRef}
+        className="absolute inset-0 w-full h-full"
         style={{
           position: 'absolute',
           top: 0,
