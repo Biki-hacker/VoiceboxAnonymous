@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function UpdatePassword() {
@@ -9,6 +9,21 @@ export default function UpdatePassword() {
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+  
+  // Check if coming from a password reset link
+  useEffect(() => {
+    const isFromResetLink = window.location.hash.includes('type=recovery');
+    
+    if (!isFromResetLink) {
+      // If not from a reset link, redirect to forgot password
+      navigate('/forgotpassword', { 
+        state: { 
+          error: 'Please request a password reset link first' 
+        } 
+      });
+    }
+  }, [navigate]);
 
   // Handle the password reset flow when component mounts
   useEffect(() => {

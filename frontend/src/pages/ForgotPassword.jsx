@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function ForgotPassword() {
@@ -6,6 +7,16 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const location = useLocation();
+  
+  // Check for error state from navigation
+  useEffect(() => {
+    if (location.state?.error) {
+      setError(location.state.error);
+      // Clear the state to prevent showing the error again on refresh
+      window.history.replaceState({}, '');
+    }
+  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
