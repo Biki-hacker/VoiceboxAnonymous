@@ -76,11 +76,39 @@ export default function UpdatePassword() {
       setMessage('Password updated successfully! Redirecting to sign in...');
       
       // Redirect to sign in after a short delay
-      setTimeout(() => {
-        // Clear the session and redirect to sign in
-        supabase.auth.signOut().then(() => {
-          navigate('/signin');
-        });
+      setTimeout(async () => {
+        try {
+          // Sign out from Supabase
+          await supabase.auth.signOut();
+          
+          // Clear any auth-related data from localStorage
+          const keysToRemove = [
+            'sb-*', // Supabase auth tokens
+            'supabase.auth.token',
+            'supabase:authToken',
+            'token',
+            'supabaseToken',
+            'email',
+            'role',
+            'organizationId',
+            'organizationName'
+          ];
+          
+          // Remove all matching keys
+          Object.keys(localStorage).forEach(key => {
+            // Remove the key if it matches any of our patterns
+            if (keysToRemove.some(pattern => key === pattern || key.startsWith(pattern.replace('*', '')))) {
+              localStorage.removeItem(key);
+            }
+          });
+          
+          // Redirect to sign in
+          navigate('/signin', { replace: true });
+        } catch (err) {
+          console.error('Error during cleanup:', err);
+          // Still redirect even if cleanup fails
+          navigate('/signin', { replace: true });
+        }
       }, 2000);
     } catch (err) {
       console.error('Error updating password:', err);
