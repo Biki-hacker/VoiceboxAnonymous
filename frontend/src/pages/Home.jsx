@@ -288,12 +288,10 @@ export default function Home() {
   // Handle mouse move effects for non-touch devices
   useEffect(() => {
     if (isTouchDevice) {
-      // Reset cursor position and disable glow effect on touch devices
       setCursorPos({ x: -100, y: -100 });
       setGlowIntensity(0);
       return;
     }
-
     const onMouseMove = (e) => {
       const x = e.clientX;
       const y = e.clientY;
@@ -304,98 +302,8 @@ export default function Home() {
       setGlowIntensity(1 - Math.min(dist / (window.innerWidth * 0.4), 1));
       setHoverOffset({ x: x - cx, y: y - cy });
     };
-
     window.addEventListener("mousemove", onMouseMove);
     return () => window.removeEventListener("mousemove", onMouseMove);
-  }, [isTouchDevice]);
-
-  // Ensure proper touch scrolling on mobile
-  useEffect(() => {
-    if (!isTouchDevice) return;
-    
-    // Enable touch scrolling on the document
-    document.documentElement.style.overflow = 'auto';
-    document.documentElement.style.height = '100%';
-    document.body.style.overflow = 'auto';
-    document.body.style.height = '100%';
-    document.body.style.position = 'relative';
-    
-    // Prevent default touch behavior that could interfere with scrolling
-    const preventDefault = (e) => {
-      // Only prevent default if we're not at the top or bottom of the page
-      const isAtTop = window.scrollY === 0;
-      const isAtBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 1;
-      
-      // If we're at the top and user is trying to scroll up, or at bottom and trying to scroll down
-      if ((isAtTop && e.touches[0].clientY > 0) || (isAtBottom && e.touches[0].clientY < 0)) {
-        e.preventDefault();
-      }
-    };
-    
-    // Add touch event listeners
-    document.addEventListener('touchstart', preventDefault, { passive: false });
-    document.addEventListener('touchmove', preventDefault, { passive: false });
-    
-    // Clean up
-    return () => {
-      document.removeEventListener('touchstart', preventDefault);
-      document.removeEventListener('touchmove', preventDefault);
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.height = '';
-      document.body.style.overflow = '';
-      document.body.style.height = '';
-      document.body.style.position = '';
-    };
-  }, [isTouchDevice]);
-
-  // Ensure proper scrolling on mobile
-  useEffect(() => {
-    if (!isTouchDevice) return;
-    
-    // Get the main container element
-    const mainContainer = document.querySelector('.main-container');
-    if (!mainContainer) return;
-    
-    // Enable touch scrolling on the main container
-    mainContainer.style.overflowY = 'auto';
-    mainContainer.style.webkitOverflowScrolling = 'touch';
-    mainContainer.style.touchAction = 'pan-y';
-    mainContainer.style.webkitOverflowScrolling = 'touch';
-    
-    // Prevent default touch behavior that could interfere with scrolling
-    const preventDefault = (e) => {
-      // Only prevent default if we're not at the top or bottom of the container
-      const isAtTop = mainContainer.scrollTop === 0;
-      const isAtBottom = mainContainer.scrollHeight - mainContainer.scrollTop <= mainContainer.clientHeight + 1;
-      
-      // If we're at the top and user is trying to scroll up, or at bottom and trying to scroll down
-      if ((isAtTop && e.touches[0].clientY > 0) || (isAtBottom && e.touches[0].clientY < 0)) {
-        e.preventDefault();
-      }
-    };
-    
-    // Add touch event listeners
-    mainContainer.addEventListener('touchstart', preventDefault, { passive: false });
-    mainContainer.addEventListener('touchmove', preventDefault, { passive: false });
-    
-    // Clean up
-    return () => {
-      mainContainer.removeEventListener('touchstart', preventDefault);
-      mainContainer.removeEventListener('touchmove', preventDefault);
-      mainContainer.style.overflowY = '';
-      mainContainer.style.webkitOverflowScrolling = '';
-      mainContainer.style.touchAction = '';
-    };
-    
-    return () => {
-      window.removeEventListener('touchmove', handleTouchMove);
-      document.documentElement.style.overflow = '';
-      document.documentElement.style.touchAction = '';
-      document.documentElement.style.webkitOverflowScrolling = '';
-      document.body.style.overflow = '';
-      document.body.style.height = '';
-      document.body.style.position = '';
-    };
   }, [isTouchDevice]);
 
   // Handle scroll to section when navigating from other pages
@@ -496,20 +404,12 @@ export default function Home() {
 
   return (
     <div
-      className="relative overflow-x-hidden min-h-screen text-white flex flex-col touch-pan-y"
+      className="relative min-h-screen text-white flex flex-col overflow-x-hidden overflow-y-auto touch-pan-y"
       style={{
         background: "linear-gradient(to bottom, #040b1d, #0a1224)",
         backgroundSize: "cover",
         backgroundPosition: "center",
-        backgroundRepeat: "no-repeat",
-        WebkitOverflowScrolling: 'touch',
-        touchAction: 'pan-y',
-        overscrollBehavior: 'contain',
-        overflowY: 'auto',
-        height: '100vh',
-        width: '100%',
-        position: 'relative',
-        WebkitTransform: 'translateZ(0)'
+        backgroundRepeat: "no-repeat"
       }}
       itemScope
       itemType="https://schema.org/WebApplication"
