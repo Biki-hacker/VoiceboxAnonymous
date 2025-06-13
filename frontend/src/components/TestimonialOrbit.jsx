@@ -11,7 +11,7 @@ const TestimonialOrbit = () => {
   const startX = useRef(0);
   const startAngle = useRef(0);
 
-  const radius = 210;
+  const radius = 200;
   const autoRotateSpeed = 0.01;
   const rotationSpeed = 0.05;
 
@@ -110,24 +110,6 @@ const TestimonialOrbit = () => {
     };
   }, [handleMove, handleStart, handleEnd]);
 
-  // 3D parallax tilt (limited to ±10°)
-  useEffect(() => {
-    const maxTilt = 10;
-
-    const handleTilt = (e) => {
-      const { innerWidth, innerHeight } = window;
-      const x = ((e.clientX / innerWidth) - 0.5) * 2 * maxTilt;
-      const y = ((e.clientY / innerHeight) - 0.5) * -2 * maxTilt;
-
-      if (dragRef.current) {
-        dragRef.current.style.transform = `rotateX(${y.toFixed(2)}deg) rotateY(${x.toFixed(2)}deg)`;
-      }
-    };
-
-    window.addEventListener("mousemove", handleTilt);
-    return () => window.removeEventListener("mousemove", handleTilt);
-  }, []);
-
   return (
     <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
       {/* Central Logo */}
@@ -161,23 +143,20 @@ const TestimonialOrbit = () => {
                   translate(-50%, -50%)
                   translate(${pos.x}px, ${pos.y}px)
                   scale(${pos.scale})
-                  rotateY(${(pos.theta - 180) / 8}deg)
-                  rotateX(${(pos.theta - 180) / 16}deg)
                   translateY(${Math.sin(pos.theta * Math.PI / 180) * 10}px)
                 `,
                 zIndex: pos.zIndex,
                 opacity: pos.opacity,
                 left: "50%",
                 top: "50%",
-                perspective: "1000px",
               }}
             >
               <div
-                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[240px] text-sm transition-transform duration-500 transform hover:scale-105 hover:rotate-[1deg] hover:shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+                className="relative backdrop-blur-lg bg-white/5 border border-cyan-300/10 rounded-xl p-4 w-[240px] text-sm transition-transform duration-300 transform hover:scale-[1.05] hover:rotate-[1.5deg] hover:shadow-[0_0_20px_rgba(255,255,255,0.05)]"
                 style={{
                   boxShadow:
                     activeIndex === index
-                      ? "0 0 30px rgba(255,255,255,0.15)"
+                      ? "0 0 20px rgba(255,255,255,0.1)"
                       : "0 4px 20px rgba(0,0,0,0.2)",
                 }}
               >
