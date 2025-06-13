@@ -1,89 +1,88 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
 
 export default function UpdatePassword() {
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
-  const [loading, setLoading] = useState(true); // Start with loading true
+  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [isValidReset, setIsValidReset] = useState(false);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
   // Handle the password reset flow when component mounts
   useEffect(() => {
     let mounted = true;
 
-    const checkSession = async () => {
+    const verifyPasswordReset = async () => {
       try {
-        // Check if we have a recovery session
-        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
-        
-        if (sessionError || !session) {
-          if (mounted) {
-            setError('Invalid or expired password reset link. Please request a new one.');
-            setLoading(false);
-          }
-          return;
+        // Get the access token from the URL
+        const accessToken = searchParams.get('access_token');
+        const refreshToken = searchParams.get('refresh_token');
+        const type = searchParams.get('type');
+
+        if (!accessToken || !refreshToken || type !== 'recovery') {
+          throw new Error('Invalid password reset link');
         }
 
-        // Check if this is a password recovery session
+        // Set the session using the tokens from the URL
+        const { error: authError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken
+        });
+
+        if (authError) throw authError;
+
+        // Verify the user has a valid recovery session
         const { data: { user }, error: userError } = await supabase.auth.getUser();
         
         if (userError || !user) {
-          if (mounted) {
-            setError('Invalid or expired password reset link. Please request a new one.');
-            setLoading(false);
-          }
-          return;
+          throw new Error('Invalid or expired password reset link');
         }
 
-        // Check if the user has a recovery session
-        if (user.app_metadata?.provider === 'email' && user.aud === 'authenticated') {
-          if (mounted) {
-            setIsValidReset(true);
-            setMessage('Please enter your new password below.');
-            setLoading(false);
-          }
-        } else {
-          if (mounted) {
-            setError('Invalid or expired password reset link. Please request a new one.');
-            setLoading(false);
-          }
-        }
-      } catch (err) {
-        console.error('Error checking session:', err);
-        if (mounted) {
-          setError('An error occurred while verifying your session. Please try again.');
-          setLoading(false);
-        }
-      }
-    };
+        // Clear the URL parameters
+        window.history.replaceState({}, document.title, window.location.pathname);
 
-    // Set up the auth state change listener
-    const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'PASSWORD_RECOVERY') {
-        // User has clicked the password reset link
         if (mounted) {
           setIsValidReset(true);
           setMessage('Please enter your new password below.');
           setLoading(false);
         }
+      } catch (err) {
+        console.error('Error verifying password reset:', err);
+        if (mounted) {
+          setError('Invalid or expired password reset link. Please request a new one.');
+          setLoading(false);
+        }
       }
-    });
+    };
 
-    // Check the current session
-    checkSession();
+    // Set up the auth state change listener for PASSWORD_RECOVERY event
+    const { data: authListener } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (event === 'PASSWORD_RECOVERY') {
+          if (mounted) {
+            setIsValidReset(true);
+            setMessage('Please enter your new password below.');
+            setLoading(false);
+          }
+        }
+      }
+    );
+
+    // Check if we have a valid password reset token in the URL
+    verifyPasswordReset();
 
     // Clean up the listener when component unmounts
     return () => {
       mounted = false;
-      if (authListener && authListener.subscription) {
+      if (authListener?.subscription) {
         authListener.subscription.unsubscribe();
       }
     };
-  }, []);
+  }, [searchParams]);
 
   const validatePassword = (pass) => {
     if (pass.length < 6) return 'Password must be at least 6 characters long';
@@ -106,7 +105,6 @@ export default function UpdatePassword() {
       return;
     }
 
-
     const passwordError = validatePassword(password);
     if (passwordError) {
       setError(passwordError);
@@ -116,8 +114,14 @@ export default function UpdatePassword() {
     setLoading(true);
 
     try {
+      // First, verify we still have a valid session
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        throw new Error('Your session has expired. Please request a new password reset link.');
+      }
+
       // Update the user's password
-      const { data, error: updateError } = await supabase.auth.updateUser({
+      const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
@@ -126,13 +130,12 @@ export default function UpdatePassword() {
       // Sign out from all other sessions
       await supabase.auth.signOut({ scope: 'others' });
 
-      setMessage('Password updated successfully! Redirecting to sign in...');
+      setMessage('Password updated successfully! You will be redirected to sign in...');
       
-      // Redirect to sign in after a short delay
+      // Wait a moment to show success message, then sign out and redirect
       setTimeout(() => {
-        // Clear the session and redirect to sign in
         supabase.auth.signOut().then(() => {
-          navigate('/signin');
+          navigate('/signin', { replace: true });
         });
       }, 2000);
     } catch (err) {
@@ -259,7 +262,7 @@ export default function UpdatePassword() {
           Invalid request. Please use the password reset link from your email.
         </div>
         <a 
-          href="/forgot-password" 
+          href="/forgotpassword" 
           className="inline-block px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition duration-200"
         >
           Request New Reset Link

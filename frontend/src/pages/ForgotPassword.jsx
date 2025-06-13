@@ -20,7 +20,7 @@ export default function ForgotPassword() {
     setLoading(true);
     try {
       // Set the redirect URL to the update password page
-      const redirectTo = `${window.location.origin}/updatepassword`;
+      const redirectTo = new URL('/updatepassword', window.location.origin).toString();
       
       // Send password reset email with the redirect URL
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
