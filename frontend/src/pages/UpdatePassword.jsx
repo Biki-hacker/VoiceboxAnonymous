@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabaseClient';
+import { FaEye, FaEyeSlash } from 'react-icons/fa';
 
 export default function UpdatePassword() {
   const [password, setPassword] = useState('');
@@ -8,85 +9,9 @@ export default function UpdatePassword() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const navigate = useNavigate();
-  const location = useLocation();
-  
-  // Handle the password reset flow when component mounts
-  useEffect(() => {
-    const handlePasswordReset = async () => {
-      // Check if we have a code parameter in the URL (from Supabase password reset)
-      const urlParams = new URLSearchParams(window.location.search);
-      const code = urlParams.get('code');
-      
-      // If we have a code in the URL, verify it
-      if (code) {
-        try {
-          setLoading(true);
-          console.log('Verifying password reset code...');
-          
-          // Exchange the code for a session
-          console.log('Verifying OTP with code:', code);
-          const { data, error } = await supabase.auth.verifyOtp({
-            email: '', // Let Supabase get email from the token
-            token: code,
-            type: 'recovery',
-          });
-          
-          console.log('OTP verification response:', { data, error });
-          if (error) {
-            console.error('OTP Verification Error Details:', {
-              message: error.message,
-              status: error.status,
-              name: error.name
-            });
-            throw error;
-          }
-          
-          console.log('Password reset verified');
-          
-          // Clear the code from the URL but stay on the same page
-          window.history.replaceState({}, document.title, window.location.pathname);
-        } catch (err) {
-          console.error('Error verifying password reset:', err);
-          navigate('/forgotpassword', {
-            state: { error: 'Invalid or expired password reset link. Please request a new one.' },
-            replace: true
-          });
-        } finally {
-          setLoading(false);
-        }
-      } 
-      // If no code and no session, redirect to forgot password
-      else {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session) {
-            console.log('No active password reset session, redirecting to /forgotpassword');
-            navigate('/forgotpassword', { 
-              state: { 
-                error: 'Please request a password reset link first' 
-              },
-              replace: true
-            });
-          }
-        }).catch(err => {
-          console.error('Error checking session:', err);
-          navigate('/forgotpassword', { 
-            state: { 
-              error: 'An error occurred. Please try again.' 
-            },
-            replace: true
-          });
-        });
-      }
-    };
-    
-    handlePasswordReset();
-    
-    // Listen for URL changes
-    const handleLocationChange = () => handlePasswordReset();
-    window.addEventListener('popstate', handleLocationChange);
-    return () => window.removeEventListener('popstate', handleLocationChange);
-  }, [navigate]);
 
   // Handle the password reset flow when component mounts
   useEffect(() => {
@@ -178,16 +103,25 @@ export default function UpdatePassword() {
             <label htmlFor="password" className="block text-sm font-medium text-gray-300 mb-2">
               New Password
             </label>
-            <input
-              type="password"
-              id="password"
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
-              placeholder="••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              autoFocus
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? 'text' : 'password'}
+                id="password"
+                className="w-full px-4 py-3 pr-10 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+                placeholder="••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoFocus
+              />
+              <button 
+                type="button"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+              </button>
+            </div>
             <p className="mt-1 text-xs text-gray-400">Must be at least 6 characters</p>
           </div>
           
@@ -195,15 +129,24 @@ export default function UpdatePassword() {
             <label htmlFor="confirm" className="block text-sm font-medium text-gray-300 mb-2">
               Confirm New Password
             </label>
-            <input
-              type="password"
-              id="confirm"
-              className="w-full px-4 py-3 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
-              placeholder="••••••"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              required
-            />
+            <div className="relative">
+              <input
+                type={showConfirmPassword ? 'text' : 'password'}
+                id="confirm"
+                className="w-full px-4 py-3 pr-10 bg-gray-700 border border-gray-600 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-white placeholder-gray-400"
+                placeholder="••••••"
+                value={confirm}
+                onChange={(e) => setConfirm(e.target.value)}
+                required
+              />
+              <button 
+                type="button"
+                className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-white"
+                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+              >
+                {showConfirmPassword ? <FaEyeSlash size={16} /> : <FaEye size={16} />}
+              </button>
+            </div>
           </div>
           
           <button

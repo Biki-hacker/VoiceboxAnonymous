@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import React, { useState } from 'react';
 import { supabase } from '../supabaseClient';
 
 export default function ForgotPassword() {
@@ -7,16 +6,6 @@ export default function ForgotPassword() {
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  const location = useLocation();
-  
-  // Check for error state from navigation
-  useEffect(() => {
-    if (location.state?.error) {
-      setError(location.state.error);
-      // Clear the state to prevent showing the error again on refresh
-      window.history.replaceState({}, '');
-    }
-  }, [location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -30,35 +19,13 @@ export default function ForgotPassword() {
 
     setLoading(true);
     try {
-      // Set the redirect URL to the updatepassword page
+      // Set the redirect URL to the update password page
       const redirectTo = `${window.location.origin}/updatepassword`;
       
-      console.log('Sending password reset email to:', email);
-      console.log('Redirect URL:', redirectTo);
-      
-      try {
-        // Send password reset email with the redirect URL
-        console.log('Calling resetPasswordForEmail...');
-        const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo: redirectTo,
-        });
-        
-        console.log('resetPasswordForEmail response:', { data, error });
-        
-        if (error) {
-          console.error('Error sending password reset email:', {
-            message: error.message,
-            status: error.status,
-            name: error.name
-          });
-          throw error;
-        }
-        
-        console.log('Password reset email sent successfully');
-      } catch (err) {
-        console.error('Error in password reset flow:', err);
-        throw err;
-      }
+      // Send password reset email with the redirect URL
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: redirectTo,
+      });
 
       if (error) {
         console.error('Error sending reset email:', error);
