@@ -19,7 +19,7 @@ import {
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon, ClockIcon, CheckBadgeIcon,
+    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon,
     FaceSmileIcon as EmojiHappyIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
@@ -1614,132 +1614,7 @@ const AdminDashboard = () => {
                                         </div>
                                     </div>
                                 </DashboardCard>
-                                <DashboardCard className="p-4 sm:p-6">
-                                    <div className="flex justify-between items-center mb-6">
-                                        <h3 className="text-lg sm:text-xl font-bold text-gray-800 dark:text-slate-100 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-                                            Post Analytics
-                                        </h3>
-                                        <div className="flex items-center space-x-2 bg-gray-50 dark:bg-slate-700/50 rounded-full px-3 py-1">
-                                            <ChartBarIcon className="h-5 w-5 text-blue-500" />
-                                            <span className="text-sm font-medium text-gray-700 dark:text-slate-300">Real-time Data</span>
-                                        </div>
-                                    </div>
-                                    
-                                    {loading.orgDetails ? (
-                                        <div className="flex flex-col items-center justify-center py-12">
-                                            <div className="relative">
-                                                <div className="h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900/30 flex items-center justify-center">
-                                                    <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                        <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
-                                                        <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
-                                                    </svg>
-                                                </div>
-                                            </div>
-                                            <p className="mt-4 text-sm text-gray-500 dark:text-slate-400">Loading analytics...</p>
-                                        </div>
-                                    ) : stats.length === 0 ? (
-                                        <NothingToShow message="No post statistics available yet." />
-                                    ) : (
-                                        <div className="space-y-6">
-                                            {/* Stats Summary Cards */}
-                                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                                                {[
-                                                    { label: 'Total Posts', value: stats.reduce((sum, stat) => sum + stat.count, 0), icon: DocumentTextIcon, color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400' },
-                                                    { label: 'Active Posts', value: stats.find(s => s._id === 'active')?.count || 0, icon: CheckCircleIcon, color: 'bg-green-100 dark:bg-green-900/30 text-green-600 dark:text-green-400' },
-                                                    { label: 'Pending', value: stats.find(s => s._id === 'pending')?.count || 0, icon: ClockIcon, color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400' },
-                                                    { label: 'Resolved', value: stats.find(s => s._id === 'resolved')?.count || 0, icon: CheckBadgeIcon, color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400' },
-                                                ].map((stat, idx) => (
-                                                    <div key={idx} className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow duration-200">
-                                                        <div className="flex items-center justify-between">
-                                                            <div>
-                                                                <p className="text-xs font-medium text-gray-500 dark:text-slate-400 uppercase tracking-wider">{stat.label}</p>
-                                                                <p className="mt-1 text-2xl font-bold text-gray-900 dark:text-white">{stat.value}</p>
-                                                            </div>
-                                                            <div className={`p-3 rounded-lg ${stat.color} bg-opacity-20`}>
-                                                                <stat.icon className="h-6 w-6" />
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))}
-                                            </div>
-                                            
-                                            {/* Charts */}
-                                            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                                                <div className="lg:col-span-2 bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
-                                                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-4">Posts Overview</h4>
-                                                    <div className="h-64">
-                                                        <Bar 
-                                                            data={chartData} 
-                                                            options={{
-                                                                ...barChartOptions,
-                                                                plugins: {
-                                                                    ...barChartOptions.plugins,
-                                                                    legend: {
-                                                                        ...barChartOptions.plugins.legend,
-                                                                        labels: {
-                                                                            ...barChartOptions.plugins.legend.labels,
-                                                                            color: theme === 'dark' ? '#E2E8F0' : '#1E293B',
-                                                                        }
-                                                                    }
-                                                                },
-                                                                scales: {
-                                                                    ...barChartOptions.scales,
-                                                                    x: {
-                                                                        ...barChartOptions.scales.x,
-                                                                        grid: {
-                                                                            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-                                                                        },
-                                                                        ticks: {
-                                                                            color: theme === 'dark' ? '#94A3B8' : '#64748B',
-                                                                        }
-                                                                    },
-                                                                    y: {
-                                                                        ...barChartOptions.scales.y,
-                                                                        grid: {
-                                                                            color: theme === 'dark' ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
-                                                                        },
-                                                                        ticks: {
-                                                                            color: theme === 'dark' ? '#94A3B8' : '#64748B',
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }} 
-                                                        />
-                                                    </div>
-                                                </div>
-                                                <div className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-xl p-4 shadow-sm">
-                                                    <h4 className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-4">Status Distribution</h4>
-                                                    <div className="h-64 flex items-center justify-center">
-                                                        <Pie 
-                                                            data={{
-                                                                ...chartData,
-                                                                datasets: chartData.datasets.map(dataset => ({
-                                                                    ...dataset,
-                                                                    borderWidth: 1,
-                                                                    borderColor: theme === 'dark' ? '#1E293B' : '#ffffff',
-                                                                    hoverBorderColor: theme === 'dark' ? '#334155' : '#f1f5f9',
-                                                                }))
-                                                            }} 
-                                                            options={{
-                                                                ...pieChartOptions,
-                                                                plugins: {
-                                                                    ...pieChartOptions.plugins,
-                                                                    legend: {
-                                                                        ...pieChartOptions.plugins.legend,
-                                                                        labels: {
-                                                                            ...pieChartOptions.plugins.legend.labels,
-                                                                            color: theme === 'dark' ? '#E2E8F0' : '#1E293B',
-                                                                        }
-                                                                    }
-                                                                }
-                                                            }} 
-                                                        />
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </DashboardCard>
+                                <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
                                     
