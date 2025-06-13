@@ -31,7 +31,7 @@ export default function UpdatePassword() {
           
           console.log('Password reset verified');
           // Clear the code from the URL
-          window.history.replaceState({}, document.title, window.location.pathname);
+          window.history.replaceState({}, document.title, '/updatepassword');
         } catch (err) {
           console.error('Error verifying password reset:', err);
           navigate('/forgotpassword', {
@@ -41,16 +41,12 @@ export default function UpdatePassword() {
           setLoading(false);
         }
       } else {
-        // Check if we have a valid session from a previous verification
-        supabase.auth.getSession().then(({ data: { session } }) => {
-          if (!session) {
-            console.log('No active password reset session, redirecting to forgot password');
-            navigate('/forgotpassword', { 
-              state: { 
-                error: 'Please request a password reset link first' 
-              } 
-            });
-          }
+        // If no code parameter, redirect to forgot password
+        console.log('Direct access to /updatepassword detected, redirecting to /forgotpassword');
+        navigate('/forgotpassword', { 
+          state: { 
+            error: 'Please request a password reset link first' 
+          } 
         });
       }
     };
