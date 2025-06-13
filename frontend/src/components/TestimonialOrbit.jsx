@@ -111,7 +111,7 @@ const TestimonialOrbit = () => {
   }, [handleMove, handleStart, handleEnd]);
 
   return (
-    <div className="relative w-full h-full flex items-center justify-center overflow-hidden">
+    <div className="relative w-full h-full" style={{ height: '100%' }}>
       {/* Central Logo */}
       <div
         className="absolute z-20 w-24 h-24 bg-gray-800 rounded-full flex items-center justify-center transition-all duration-1000"
@@ -119,6 +119,7 @@ const TestimonialOrbit = () => {
           transform: "translate(-50%, -50%)",
           top: "50%",
           left: "50%",
+          position: 'absolute'
         }}
       >
         <img src={logo} alt="App Logo" className="w-12 h-12" />
@@ -126,10 +127,17 @@ const TestimonialOrbit = () => {
 
       {/* Orbiting Testimonials */}
       <div
-        className="absolute w-full h-full cursor-grab active:cursor-grabbing"
+        className="absolute inset-0 w-full h-full cursor-grab active:cursor-grabbing"
         onMouseDown={(e) => handleStart(e.clientX)}
         onTouchStart={(e) => handleStart(e.touches[0].clientX)}
         ref={dragRef}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0
+        }}
       >
         {testimonials.map((testimonial, index) => {
           const pos = getTestimonialPosition(index, angle);

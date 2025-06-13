@@ -612,18 +612,18 @@ export default function Home() {
       </motion.section>
 
       {/* Testimonials Section */}
-      <div className="py-12 relative overflow-hidden">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8">
+      <div className="py-12 relative" style={{ minHeight: '600px' }}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 h-full">
           <motion.h2 
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
             transition={{ duration: 0.6 }}
-            className="text-3xl md:text-4xl font-bold text-center text-white mb-12"
+            className="text-3xl md:text-4xl font-bold text-center text-white mb-6 z-20 relative"
           >
             What Our Users Say
           </motion.h2>
-          <div className="relative z-10 min-h-[500px] flex items-center justify-center">
+          <div className="relative w-full" style={{ height: '500px' }}>
             <TestimonialOrbit />
           </div>
         </div>
