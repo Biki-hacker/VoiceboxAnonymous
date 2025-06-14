@@ -1607,7 +1607,7 @@ const EmployeeDashboard = () => {
   };
 
   const cancelDeletePost = () => {
-    setShowDeletePostDialog(false);
+    setShowDeleteDialog(false);
     setPostToDelete(null);
   };
 
