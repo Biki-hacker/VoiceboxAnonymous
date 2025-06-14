@@ -787,6 +787,14 @@ const EmployeeDashboard = () => {
   const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
+  const [searchQuery, setSearchQuery] = useState(''); // For search functionality
+  const [newPost, setNewPost] = useState({
+    content: '',
+    postType: 'feedback',
+    region: '',
+    department: '',
+    mediaUrls: []
+  });
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [loading, setLoading] = useState({ posts: false, create: false });
   const [error, setError] = useState(null);
@@ -1663,51 +1671,83 @@ const EmployeeDashboard = () => {
           >
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
               <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
-              <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
-                <CustomSelect 
-                  label="Type" 
-                  value={selectedPostType} 
-                  onChange={setSelectedPostType} 
-                  options={[
-                    { value: 'all', label: 'All Types' },
-                    { value: 'feedback', label: 'Feedback' },
-                    { value: 'complaint', label: 'Complaint' },
-                    { value: 'suggestion', label: 'Suggestion' },
-                    { value: 'public', label: 'Public' }
-                  ]} 
-                  icon={TagIcon} 
-                />
-                <CustomSelect 
-                  label="Region" 
-                  value={selectedRegion} 
-                  onChange={setSelectedRegion} 
-                  options={[
-                    { value: 'all', label: 'All Regions' },
-                    ...Array.from(new Set(posts.map(post => post.region).filter(Boolean))).map(region => ({
-                      value: region,
-                      label: region
-                    }))
-                  ]} 
-                  icon={MapPinIcon}
-                />
-                <CustomSelect 
-                  label="Department" 
-                  value={selectedDepartment} 
-                  onChange={setSelectedDepartment} 
-                  options={[
-                    { value: 'all', label: 'All Departments' },
-                    ...Array.from(new Set(posts.map(post => post.department).filter(Boolean))).map(department => ({
-                      value: department,
-                      label: department
-                    }))
-                  ]} 
-                  icon={BuildingLibraryIcon}
-                />
+              <div className="flex flex-col gap-4 mb-6">
+                {/* Search Input */}
+                <div className="relative">
+                  <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                    <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  <input
+                    type="text"
+                    className="block w-full pl-10 pr-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm dark:bg-slate-700 dark:text-white"
+                    placeholder="Search posts..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery('')}
+                      className="absolute inset-y-0 right-0 pr-3 flex items-center"
+                    >
+                      <XMarkIcon className="h-5 w-5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200" />
+                    </button>
+                  )}
+                </div>
+                
+                {/* Filter Dropdowns */}
+                <div className="flex flex-col sm:flex-row gap-4">
+                  <div className="w-full sm:w-1/3">
+                    <CustomSelect 
+                      value={selectedPostType} 
+                      onChange={setSelectedPostType}
+                      label="Filter by Type"
+                      options={[
+                        { value: 'all', label: 'All Types' },
+                        { value: 'feedback', label: 'Feedback' },
+                        { value: 'complaint', label: 'Complaint' },
+                        { value: 'suggestion', label: 'Suggestion' }
+                      ]} 
+                      icon={TagIcon}
+                    />
+                  </div>
+                  <div className="w-full sm:w-1/3">
+                    <CustomSelect 
+                      value={selectedRegion} 
+                      onChange={setSelectedRegion}
+                      label="Filter by Region"
+                      options={[
+                        { value: 'all', label: 'All Regions' },
+                        ...new Set(posts.map(post => post.region).filter(Boolean)).map(region => ({
+                          value: region,
+                          label: region
+                        }))]
+                      } 
+                      icon={MapPinIcon}
+                    />
+                  </div>
+                  <div className="w-full sm:w-1/3">
+                    <CustomSelect 
+                      value={selectedDepartment} 
+                      onChange={setSelectedDepartment}
+                      label="Filter by Department"
+                      options={[
+                        { value: 'all', label: 'All Departments' },
+                        ...new Set(posts.map(post => post.department).filter(Boolean)).map(department => ({
+                          value: department,
+                          label: department
+                        }))
+                      ]} 
+                      icon={BuildingLibraryIcon}
+                    />
+                  </div>
+                </div>
               </div>
-            </div>
-            {filteredPosts.length === 0 ? (
-              <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
-            ) : (
+              {filteredPosts.length === 0 ? (
+                <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
+              ) : (
+                // ... (rest of the code remains the same)
               <div className="space-y-4">
                 {posts.length === 0 ? (
                   <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
