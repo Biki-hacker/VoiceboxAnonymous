@@ -13,7 +13,8 @@ import {
 import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
-import { decryptContent, encryptContent, decryptPost } from '../utils/crypto';
+import { decryptContent, encryptContent } from '../utils/crypto';
+import { usePosts, usePostReactions, usePostComments, usePostActions } from '../utils/postUtils';
 import {
     BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
     UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
@@ -147,7 +148,6 @@ const AdminDashboard = () => {
     const [organizations, setOrganizations] = useState([]);
     const [selectedOrg, setSelectedOrg] = useState(null);
     const [stats, setStats] = useState([]);
-    const [posts, setPosts] = useState([]);
     const [selectedType, setSelectedType] = useState('all');
     const [selectedRegion, setSelectedRegion] = useState('all');
     const [selectedDepartment, setSelectedDepartment] = useState('all');
@@ -172,6 +172,55 @@ const AdminDashboard = () => {
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
     const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' or 'createPost'
+    // Initialize post utilities
+    const {
+      posts,
+      loading: postsLoading,
+      error: postsError,
+      addPost,
+      updatePost,
+      deletePost,
+      addComment,
+      updateComment,
+      deleteComment,
+      updateReaction
+    } = usePosts(selectedOrg?._id, true);
+    
+    const { handleReaction, hasReacted } = usePostReactions(
+      userData?._id,
+      updateReaction
+    );
+    
+    const {
+      handleAddComment,
+      handleUpdateComment,
+      handleDeleteComment
+    } = usePostComments(addComment, updateComment, deleteComment);
+    
+    const {
+      handleAddPost,
+      handleUpdatePost,
+      handleDeletePost: deletePostHandler
+    } = usePostActions(addPost, updatePost, deletePost);
+    
+    // Filter posts based on selected filters
+    const filteredPosts = useMemo(() => {
+      if (!selectedOrg?._id || !Array.isArray(posts)) return [];
+      
+      return posts.filter(post => {
+        // Filter by post type
+        if (selectedType !== 'all' && post.postType !== selectedType) return false;
+        
+        // Filter by region if post has region and region is selected
+        if (selectedRegion !== 'all' && post.region !== selectedRegion) return false;
+        
+        // Filter by department if post has department and department is selected
+        if (selectedDepartment !== 'all' && post.department !== selectedDepartment) return false;
+        
+        return true;
+      });
+    }, [posts, selectedType, selectedRegion, selectedDepartment, selectedOrg?._id]);
+    
     // Track posting state with useRef to prevent unnecessary re-renders
     const isPostingRef = useRef(false);
     const [isPosting, setIsPosting] = useState(false);
@@ -196,47 +245,24 @@ const AdminDashboard = () => {
     let maxReconnectAttempts = 5;
     let reconnectTimeout = null;
 
-    // Process and decrypt WebSocket message
+    // Process WebSocket message
     const processWebSocketMessage = useCallback(async (message) => {
         try {
             if (!message || !message.type || !message.payload) return null;
             
-            // Create a deep copy of the message to avoid mutating the original
-            const processedMessage = JSON.parse(JSON.stringify(message));
+            const { type, payload } = message;
+            const currentOrgId = selectedOrgRef.current?._id;
             
-            // Decrypt content based on message type
-            switch (message.type) {
-                case 'POST_CREATED':
-                case 'POST_UPDATED':
-                    if (processedMessage.payload.post?.content) {
-                        processedMessage.payload.post.content = await decryptContent(processedMessage.payload.post.content);
-                    }
-                    // Handle nested comments in post
-                    if (Array.isArray(processedMessage.payload.post?.comments)) {
-                        for (const comment of processedMessage.payload.post.comments) {
-                            if (comment.content) {
-                                comment.content = await decryptContent(comment.content);
-                            }
-                        }
-                    }
-                    break;
-                    
-                case 'COMMENT_CREATED':
-                case 'COMMENT_UPDATED':
-                    if (processedMessage.payload.comment?.content) {
-                        processedMessage.payload.comment.content = await decryptContent(processedMessage.payload.comment.content);
-                    }
-                    break;
-                    
-                // No need to decrypt for DELETE or REACTION_UPDATE events
-                case 'POST_DELETED':
-                case 'COMMENT_DELETED':
-                case 'REACTION_UPDATED':
-                default:
-                    break;
+            // Only process messages for the currently selected organization
+            if (payload.organizationId && payload.organizationId !== currentOrgId) {
+                console.log('AdminDashboard: WebSocket message for different organization, ignoring.');
+                return null;
             }
             
-            return processedMessage;
+            // The post utilities hooks will handle the message internally
+            console.log('AdminDashboard: Processing WebSocket message:', type);
+            
+            return message;
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
             return null;
@@ -265,113 +291,29 @@ const AdminDashboard = () => {
                 try {
                     const message = JSON.parse(event.data);
                     console.log('AdminDashboard: WebSocket message received:', message);
-                    const currentSelectedOrgId = selectedOrgRef.current?._id;
-
-                    if (!currentSelectedOrgId) {
-                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
+                    
+                    // Process the WebSocket message
+                    const processedMessage = await processWebSocketMessage(message);
+                    if (!processedMessage) {
+                        return; // Message was filtered out or failed to process
+                    }
+                    
+                    const { type, payload } = processedMessage;
+                    const currentOrgId = selectedOrgRef.current?._id;
+                    
+                    // The post utilities hooks (usePosts, usePostComments, usePostReactions)
+                    // will handle the WebSocket messages internally to update their state
+                    // We just need to trigger a re-render if needed
+                    
+                    // For post-related messages, the usePosts hook will handle them
+                    if (type.startsWith('POST_') || type.startsWith('COMMENT_') || type.startsWith('REACTION_')) {
+                        console.log('AdminDashboard: Post-related WebSocket message processed:', type);
+                        // The post utilities will handle the state updates
                         return;
                     }
                     
-                    // Process and decrypt the message
-                    const processedMessage = await processWebSocketMessage(message);
-                    if (!processedMessage) {
-                        console.warn('AdminDashboard: Failed to process WebSocket message');
-                        return;
-                    }
-
-                    switch (message.type) {
-                        case 'POST_CREATED':
-                            if (processedMessage.payload.organization === currentSelectedOrgId) {
-                                setPosts(prev => [processedMessage.payload.post, ...prev]);
-                            }
-                            break;
-                        case 'POST_UPDATED':
-                            if (processedMessage.payload.organization === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === processedMessage.payload.post._id 
-                                            ? processedMessage.payload.post 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'POST_DELETED':
-                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => prev.filter(p => p._id !== processedMessage.payload.postId));
-                            }
-                            break;
-                        case 'COMMENT_CREATED':
-                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === processedMessage.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: [...(p.comments || []), processedMessage.payload.comment]
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'COMMENT_UPDATED':
-                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === processedMessage.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: p.comments?.map(c => 
-                                                    c._id === processedMessage.payload.comment._id 
-                                                        ? processedMessage.payload.comment 
-                                                        : c
-                                                ) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'COMMENT_DELETED':
-                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === processedMessage.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: p.comments?.filter(c => c._id !== processedMessage.payload.commentId) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'REACTION_UPDATED':
-                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === processedMessage.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                reactions: processedMessage.payload.reactionsSummary,
-                                                comments: p.comments?.map(c => 
-                                                    c._id === processedMessage.payload.commentId 
-                                                        ? { 
-                                                            ...c,
-                                                            reactions: processedMessage.payload.reactionsSummary
-                                                        } 
-                                                        : c
-                                                ) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        default:
-                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
-                    }
+                    // Handle other types of messages if needed
+                    console.log('AdminDashboard: Unhandled WebSocket message type:', type);
                 } catch (error) {
                     console.error('AdminDashboard: Failed to process WebSocket message:', error);
                 }
@@ -420,21 +362,7 @@ const AdminDashboard = () => {
         if (!selectedOrg || !postId) return;
         
         try {
-            const storedToken = localStorage.getItem('token');
-            if (!storedToken) {
-                throw new Error('No authentication token found');
-            }
-            
-            const response = await api.delete(`/posts/${postId}`, {
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${storedToken}`
-                },
-                data: { organizationId: selectedOrg._id }
-            });
-            
-            // Remove the deleted post from the UI
-            setPosts(prev => prev.filter(p => p._id !== postId));
+            await deletePostHandler(postId);
             
             // Show success message
             setPostSuccess('Post deleted successfully');
@@ -442,29 +370,16 @@ const AdminDashboard = () => {
             
             // Refresh stats
             if (selectedOrg?._id) {
-                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-                setStats(statsRes.data);
+                await refreshOrgStats(selectedOrg._id);
             }
             
-            return response;
+            return true;
         } catch (error) {
             console.error('Error deleting post:', error);
-            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
-            setPostError(errorMessage);
+            setPostError(error.response?.data?.message || 'Failed to delete post');
+            setTimeout(() => setPostError(''), 5000);
             throw error;
-        } finally {
-            setIsDeletingPost(false);
         }
-    };
-
-    const confirmDeletePost = (post) => {
-        setPostToDelete(post);
-        setShowDeletePostDialog(true);
-    };
-
-    const handleCancelDeletePost = () => {
-        setShowDeletePostDialog(false);
-        setPostToDelete(null);
     };
     
     const handleConfirmDeletePost = async () => {
@@ -473,6 +388,10 @@ const AdminDashboard = () => {
         try {
             setIsDeletingPost(true);
             await handleDeletePost(postToDelete._id);
+            
+            // Close the delete confirmation dialog
+            setShowDeletePostDialog(false);
+            setPostToDelete(null);
         } catch (error) {
             console.error('Error in delete confirmation:', error);
             setPostError('Failed to delete post. Please try again.');
@@ -481,37 +400,6 @@ const AdminDashboard = () => {
             setIsDeletingPost(false);
         }
     };
-
-    // Effect to decrypt posts when they are loaded or updated
-    useEffect(() => {
-        const decryptPosts = async () => {
-            const updatedPosts = [];
-            let hasUpdates = false;
-            
-            for (const post of posts) {
-                if (post && typeof post.content === 'object' && post.content.encrypted) {
-                    try {
-                        const decryptedPost = await decryptPost(post);
-                        updatedPosts.push(decryptedPost);
-                        hasUpdates = true;
-                    } catch (error) {
-                        console.error('Error decrypting post:', error);
-                        updatedPosts.push(post);
-                    }
-                } else {
-                    updatedPosts.push(post);
-                }
-            }
-            
-            if (hasUpdates) {
-                setPosts(updatedPosts);
-            }
-        };
-        
-        if (posts.length > 0) {
-            decryptPosts();
-        }
-    }, [posts.length]);
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -556,9 +444,8 @@ const AdminDashboard = () => {
         if (!org || !org._id) {
             console.log('[selectOrganization] Clearing organization selection');
             setSelectedOrg(null);
-            setPosts([]);
             setStats([]);
-            setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
+            setLoading(prev => ({ ...prev, orgDetails: false, stats: false }));
             return;
         }
 
@@ -570,50 +457,28 @@ const AdminDashboard = () => {
         
         // Update selected org and reset related state
         setSelectedOrg(org);
-        setLoading(prev => ({ 
-            ...prev, 
-            orgDetails: true, 
-            posts: true, 
-            stats: true 
+        setLoading(prev => ({
+            ...prev,
+            orgDetails: true,
+            stats: true
         }));
         setError(prev => ({ ...prev, page: null }));
-        setPosts([]);
         setStats([]);
 
         try {
-            // Fetch posts and stats in parallel
-            const [statsRes, postsRes] = await Promise.all([
-                // Fetch stats with error handling
-                api.get(`/posts/stats/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching stats for org ${org._id}:`, err);
-                    return { data: null };
-                }),
-                // Fetch posts with error handling
-                api.get(`/posts/org/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
-                    return { data: [] };
-                })
-            ]);
+            // Fetch stats with error handling
+            const statsRes = await api.get(`/posts/stats/${org._id}`, {
+                validateStatus: status => status < 500 // Don't throw for 4xx errors
+            }).catch(err => {
+                console.warn(`[selectOrganization] Error fetching stats for org ${org._id}:`, err);
+                return { data: null };
+            });
 
             // Process stats response
             if (statsRes?.data) {
                 setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
             } else {
                 setStats([]);
-            }
-
-            // Process posts response
-            if (Array.isArray(postsRes?.data)) {
-                const sortedPosts = [...postsRes.data].sort((a, b) => 
-                    new Date(b.createdAt) - new Date(a.createdAt)
-                );
-                setPosts(sortedPosts);
-            } else {
-                setPosts([]);
             }
         } catch (err) {
             console.error(`[selectOrganization] Error fetching data for ${org?.name || 'organization'}:`, {
@@ -820,7 +685,7 @@ const AdminDashboard = () => {
 
         let reconnectAttempts = 0;
         const maxReconnectAttempts = 5;
-        let reconnectTimeout;
+        let reconnectTimeout = null;
         let isMounted = true;
         
         // Create a wrapper for refreshOrgStats that checks isMounted
@@ -988,13 +853,45 @@ const AdminDashboard = () => {
 
 
     // --- Memoized Data for Filters and Charts ---
-    const filteredPosts = useMemo(() => posts.filter(post => (selectedType === 'all' || post.postType === selectedType) && (selectedRegion === 'all' || post.region === selectedRegion) && (selectedDepartment === 'all' || post.department === selectedDepartment)), [posts, selectedType, selectedRegion, selectedDepartment]);
     const uniqueRegions = useMemo(() => [...new Set(posts.map(p => p.region).filter(Boolean))], [posts]);
     const uniqueDepartments = useMemo(() => [...new Set(posts.map(p => p.department).filter(Boolean))], [posts]);
     const typeOptions = [ { value: 'all', label: 'All Types' }, { value: 'feedback', label: 'Feedback' }, { value: 'complaint', label: 'Complaint' }, { value: 'suggestion', label: 'Suggestion' }, { value: 'public', label: 'Public' } ];
     const regionOptions = useMemo(() => [ { value: 'all', label: 'All Regions' }, ...uniqueRegions.map(r => ({ value: r, label: r })) ], [uniqueRegions]);
     const departmentOptions = useMemo(() => [ { value: 'all', label: 'All Departments' }, ...uniqueDepartments.map(d => ({ value: d, label: d })) ], [uniqueDepartments]);
-    const chartData = useMemo(() => ({ labels: stats.map(s => s._id.charAt(0).toUpperCase() + s._id.slice(1)), datasets: [{ label: 'Post Count', data: stats.map(s => s.count), backgroundColor: theme === 'dark' ? ['#374151','#4B5563','#52525B','#3F3F46','#44403C','#5B21B6'] : ['#BFDBFE','#FECACA','#A5F3FC','#FED7AA','#DDD6FE','#E9D5FF'], borderColor: theme === 'dark' ? '#4B5563' : '#E5E7EB', borderWidth: 1, hoverBackgroundColor: theme === 'dark' ? ['#4B5563','#52525B','#71717A','#52525B','#57534E','#6D28D9'] : ['#93C5FD','#FCA5A5','#67E8F9','#FDBA74','#C4B5FD','#D8B4FE'], }], }), [stats, theme]);
+    
+    // Calculate chart data based on filtered posts
+    const chartData = useMemo(() => {
+        if (!selectedOrg?._id) return { labels: [], datasets: [] };
+        
+        // Group posts by type for the chart
+        const postCountByType = filteredPosts.reduce((acc, post) => {
+            const type = post.postType || 'unknown';
+            acc[type] = (acc[type] || 0) + 1;
+            return acc;
+        }, {});
+        
+        const labels = Object.keys(postCountByType).map(type => 
+            type.charAt(0).toUpperCase() + type.slice(1)
+        );
+        
+        const data = Object.values(postCountByType);
+        
+        return {
+            labels,
+            datasets: [{
+                label: 'Post Count',
+                data,
+                backgroundColor: theme === 'dark' 
+                    ? ['#374151', '#4B5563', '#52525B', '#3F3F46', '#44403C', '#5B21B6'] 
+                    : ['#BFDBFE', '#FECACA', '#A5F3FC', '#FED7AA', '#DDD6FE', '#E9D5FF'],
+                borderColor: theme === 'dark' ? '#4B5563' : '#E5E7EB',
+                borderWidth: 1,
+                hoverBackgroundColor: theme === 'dark'
+                    ? ['#4B5563', '#52525B', '#71717A', '#52525B', '#57534E', '#6D28D9']
+                    : ['#93C5FD', '#FCA5A5', '#67E8F9', '#FDBA74', '#C4B5FD', '#D8B4FE']
+            }]
+        };
+    }, [filteredPosts, theme, selectedOrg?._id]);
     const commonChartOptions = useMemo(() => ({
         responsive: true,
         maintainAspectRatio: false,
@@ -1130,13 +1027,6 @@ const AdminDashboard = () => {
         } finally {
             setIsUpdatingAdminEmails(false);
         }
-    };
-    const handleConfirmEditParams = () => {
-        if (!selectedOrg) return; const fields = verificationParamsInput.split(',').map(f => f.trim()).filter(Boolean); setLoading(prev => ({ ...prev, modal: true })); setError(prev => ({ ...prev, modal: null }));
-        api.patch(`/organizations/${selectedOrg._id}`, { verificationFields: fields })
-            .then(() => { const updatedOrg = { ...selectedOrg, verificationFields: fields }; setSelectedOrg(updatedOrg); setOrganizations(orgs => orgs.map(o => o._id === updatedOrg._id ? updatedOrg : o)); setIsEditParamsModalOpen(false); })
-            .catch(err => { console.error('Error updating parameters:', err); setError(prev => ({ ...prev, modal: err.response?.data?.message || 'Failed to update parameters.' })); })
-            .finally(() => { setLoading(prev => ({ ...prev, modal: false })); });
     };
     const handleOpenEditEmailsModal = (e) => {
         e?.target?.blur();
@@ -1899,6 +1789,7 @@ const AdminDashboard = () => {
                                                                     type={type}
                                                                     postId={post._id}
                                                                     count={count || 0}
+                                                                    onReaction={handleReaction}
                                                                 />
                                                             ))}
                                                         </div>
@@ -1907,9 +1798,16 @@ const AdminDashboard = () => {
                                                     {/* Comments Section */}
                                                     <div className="mt-3">
                                                         <CommentSection 
+                                                            key={post._id} 
                                                             postId={post._id} 
                                                             comments={post.comments || []} 
-                                                            selectedOrg={selectedOrg}
+                                                            selectedOrg={selectedOrg} 
+                                                            onCommentAdded={handleCommentAdded}
+                                                            onAddComment={addComment}
+                                                            onUpdateComment={updateComment}
+                                                            onDeleteComment={deleteComment}
+                                                            onReaction={handleReaction}
+                                                            currentUserId={userData?._id}
                                                         />
                                                     </div>
                                                 </motion.div>
@@ -2190,90 +2088,49 @@ const AdminDashboard = () => {
 };
 
 // --- Reaction Button Component ---
-const ReactionButton = ({ type, count, postId, commentId = null }) => {
+const ReactionButton = ({ 
+  type, 
+  count, 
+  postId, 
+  commentId = null, 
+  onReaction: handleReactionProp 
+}) => {
   const [isReacted, setIsReacted] = useState(false);
   const [currentCount, setCurrentCount] = useState(count || 0);
   const [isLoading, setIsLoading] = useState(false);
-  const orgId = localStorage.getItem('orgId');
+  
+  // Use the provided reaction handler or a no-op
+  const handleReaction = handleReactionProp || (() => {});
+  
+  // Determine if this is a comment reaction
+  const entityType = commentId ? 'comment' : 'post';
+  const entityId = commentId || postId;
 
-  // Helper function to build the API endpoint
-  const buildEndpoint = (basePath, includeOrgId = true) => {
-    if (includeOrgId && orgId) {
-      return commentId 
-        ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
-        : `${basePath}/org/${orgId}/${postId}/reactions`;
-    }
-    return commentId 
-      ? `${basePath}/${postId}/comments/${commentId}/reactions`
-      : `${basePath}/${postId}/reactions`;
-  };
-
-  // Fetch reaction status on mount and when postId/commentId/type changes
+  // Update local state when count prop changes
   useEffect(() => {
-    const fetchReactionStatus = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) return;
-      
-      try {
-        // Try with orgId first if available
-        const endpoint = buildEndpoint('/posts', true);
-        const response = await api.get(endpoint, {
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          }
-        });
-
-        // Update local state with server data
-        if (response.data?.success && response.data?.data) {
-          const reactionData = response.data.data[type];
-          if (reactionData) {
-            setIsReacted(reactionData.hasReacted);
-            setCurrentCount(reactionData.count);
-          }
-        }
-      } catch (error) {
-        // If we have an orgId and got a 404, try without orgId
-        if (orgId && error.response?.status === 404) {
-          try {
-            const fallbackEndpoint = buildEndpoint('/posts', false);
-            const fallbackResponse = await api.get(fallbackEndpoint, {
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              }
-            });
-
-            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
-              const reactionData = fallbackResponse.data.data[type];
-              if (reactionData) {
-                setIsReacted(reactionData.hasReacted);
-                setCurrentCount(reactionData.count);
-              }
-            }
-          } catch (fallbackError) {
-            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
-          }
-        } else {
-          console.error('Error fetching reaction status:', error);
-        }
-      }
+    setCurrentCount(count || 0);
+  }, [count]);
+  
+  // Check if the current user has reacted with this type
+  // This would ideally come from the parent component or context
+  useEffect(() => {
+    // This is a simplified version - in a real app, you'd check against the current user's ID
+    // that would be stored in the reactions object for this type
+    const checkReactionStatus = () => {
+      // This is a placeholder - implement based on your actual data structure
+      // For example, if you have access to the current user's ID:
+      // const hasReacted = postOrComment.reactions?.[type]?.users?.includes(currentUserId) || false;
+      // setIsReacted(hasReacted);
     };
+    
+    checkReactionStatus();
+  }, [type, postId, commentId]);
 
-    fetchReactionStatus();
-  }, [postId, commentId, type, orgId]);
-
-  const handleReaction = async () => {
+  const handleReactionClick = async () => {
     if (isLoading) return;
     
     const wasReacted = isReacted;
     const newIsReacted = !wasReacted;
-    const storedToken = localStorage.getItem('token');
-    
-    if (!storedToken) {
-      console.error('No authentication token found');
-      return;
-    }
     
     // Optimistic UI updates
     setIsLoading(true);
@@ -2281,54 +2138,25 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
     setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
     
     try {
-      // First try with orgId if available
-      const endpoint = buildEndpoint('/posts', true);
+      // Use the provided reaction handler
+      await handleReaction(entityType, entityId, postId, type);
       
-      const response = await api.post(
-        endpoint, 
-        { type },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
-      
-      // Update with server response
-      if (response.data?.success && response.data?.reaction) {
-        setIsReacted(response.data.reaction.hasReacted);
-        setCurrentCount(response.data.reaction.count);
-        return;
-      }
+      // If we get here, the reaction was successful
+      // The parent component should handle updating the reaction state
     } catch (error) {
-      // If we have an orgId and got a 404, try without orgId
-      if (orgId && error.response?.status === 404) {
-        try {
-          const fallbackEndpoint = buildEndpoint('/posts', false);
-          const fallbackResponse = await api.post(
-            fallbackEndpoint,
-            { type },
-            { 
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              } 
-            }
-          );
-
-          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
-            setIsReacted(fallbackResponse.data.reaction.hasReacted);
-            setCurrentCount(fallbackResponse.data.reaction.count);
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('Error updating reaction via fallback endpoint:', fallbackError);
-          throw fallbackError;
-        }
+      console.error('Error updating reaction:', error);
+      
+      // Revert optimistic updates on error
+      setIsReacted(wasReacted);
+      setCurrentCount(prev => wasReacted ? prev + 1 : Math.max(0, prev - 1));
+      
+      // Show error to user
+      if (error.response?.status === 401) {
+        console.error('Authentication failed. Please log in again.');
+      } else if (error.response?.data?.message) {
+        console.error(error.response.data.message);
       } else {
-        console.error('Error updating reaction:', error);
-        throw error;
+        console.error('Failed to update reaction. Please try again.');
       }
     } finally {
       setIsLoading(false);
@@ -2348,14 +2176,14 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 
   return (
     <button
-      onClick={handleReaction}
-      className={`flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${
-        isReacted 
-          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 text-blue-300' 
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-      }`}
-      title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
+      onClick={handleReactionClick}
       disabled={isLoading}
+      className={`flex items-center gap-1 px-2 py-1 rounded-full text-sm ${
+        isReacted 
+          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
+      } transition-colors`}
+      title={`${isReacted ? 'Remove' : 'Add'} ${type} reaction`}
     >
       {isLoading ? (
         <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -2371,7 +2199,17 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
 };
 
 // --- Comment Section Component ---
-const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, onCommentAdded }) => {
+const CommentSection = ({
+  postId,
+  comments: initialComments = [],
+  selectedOrg,
+  onCommentAdded,
+  onAddComment: handleAddCommentProp,
+  onUpdateComment: handleUpdateCommentProp,
+  onDeleteComment: handleDeleteCommentProp,
+  onReaction: handleReactionProp,
+  currentUserId
+}) => {
   const [newComment, setNewComment] = useState('');
   const [localComments, setLocalComments] = useState(initialComments || []);
   const [error, setError] = useState(null);
@@ -2380,6 +2218,37 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [commentToDelete, setCommentToDelete] = useState(null);
   const [deletingComment, setDeletingComment] = useState(false);
+  
+  // Use the provided handlers or default to local state updates
+  const addComment = handleAddCommentProp || (async (postId, commentData) => {
+    const newComment = {
+      _id: `temp-${Date.now()}`,
+      text: commentData.text,
+      author: { _id: currentUserId, role: 'admin' },
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      createdByRole: 'admin',
+      isNew: true
+    };
+    setLocalComments(prev => [...prev, newComment]);
+    return newComment;
+  });
+  
+  const updateComment = handleUpdateCommentProp || (async (postId, commentId, updateData) => {
+    setLocalComments(prev => 
+      prev.map(comment => 
+        comment._id === commentId 
+          ? { ...comment, text: updateData.text, updatedAt: new Date().toISOString() }
+          : comment
+      )
+    );
+  });
+  
+  const deleteComment = handleDeleteCommentProp || (async (postId, commentId) => {
+    setLocalComments(prev => prev.filter(comment => comment._id !== commentId));
+  });
+  
+  const handleReaction = handleReactionProp || (() => {});
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
@@ -2454,7 +2323,7 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
 
   const handleCommentSubmit = async () => {
     const commentText = newComment.trim();
-    if (!commentText || isSubmitting) return;
+    if (!commentText || isSubmitting || !postId) return;
     
     setIsSubmitting(true);
     setError(null);
@@ -2463,10 +2332,12 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
     setNewComment('');
 
     try {
-      // Get the stored token
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found. Please sign in again.');
+      // Use the addComment function from props or local implementation
+      const newCommentObj = await addComment(postId, { text: commentText });
+      
+      // If we have an onCommentAdded callback, call it with the new comment
+      if (onCommentAdded) {
+        onCommentAdded([...localComments, newCommentObj]);
       }
       
       // Get the current user's email and role
@@ -2561,36 +2432,26 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
 
   // Handle comment deletion
   const handleDeleteComment = async (commentId) => {
-    if (!selectedOrg?._id || !postId || !commentId) {
+    if (!postId || !commentId) {
       throw new Error('Missing required parameters for comment deletion');
     }
     
-    const storedToken = localStorage.getItem('token');
-    if (!storedToken) {
-      throw new Error('No authentication token found');
-    }
-
-    // Delete the comment using the correct endpoint format
-    const response = await api.delete(`/posts/${postId}/comments/${commentId}`, {
-      headers: {
-        'Authorization': `Bearer ${storedToken}`,
-        'Content-Type': 'application/json'
-      },
-      data: {
-        organizationId: selectedOrg._id
-      }
-    });
-
-    // Show success message if this was an admin deletion
-    if (response.data?.deletedByAdmin) {
-      setError('Comment deleted by admin.');
+    try {
+      // Use the deleteComment function from post utilities
+      await deleteComment(postId, commentId);
+      
+      // Update local comments state
+      setLocalComments(prev => prev.filter(comment => comment._id !== commentId));
+      
+      // Show success message
+      setError('Comment deleted successfully.');
       setTimeout(() => setError(''), 3000);
+      
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting comment:', error);
+      throw error;
     }
-
-    // Refresh comments after successful deletion
-    await fetchPostWithComments();
-    
-    return response;
   };
 
   // Handle delete button click - shows confirmation dialog

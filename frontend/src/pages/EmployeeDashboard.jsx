@@ -1,16 +1,19 @@
 // src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { encryptContent } from '../utils/crypto';
-import { decryptContent } from '../utils/crypto';
+import { encryptContent, decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
-import { Fragment } from 'react';
 import { api } from '../utils/axios';  // Consolidated axios instance
 import { uploadMedia } from '../utils/uploadMedia';
-import { hasReacted, toggleReaction } from '../utils/reactions';
+import { 
+  usePosts, 
+  usePostReactions, 
+  usePostComments, 
+  usePostActions 
+} from '../utils/postUtils';
 import {
   UserCircleIcon,
   SunIcon,
@@ -452,13 +455,13 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       
       console.log('Posting comment to post:', postId, 'in org:', orgId);
       
-      // Encrypt the comment text before sending to the backend
-      const encryptedComment = encryptContent(commentText);
+      // Encrypt the comment content before sending to the backend
+      const encryptedContent = encryptContent(commentText);
       
       const response = await api.post(
         `/posts/${postId}/comments`, 
         { 
-          text: encryptedComment  // Send the encrypted comment text
+          content: encryptedContent  // Send the encrypted content
         },
         {
           headers: {
@@ -679,7 +682,25 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
               )}
             </div>
             
-            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
+            <p className="text-gray-800 dark:text-slate-200 mb-3 whitespace-pre-wrap break-words">
+              {comment.content 
+                ? (() => {
+                    try {
+                      // If content is already a string, use it as is
+                      if (typeof comment.content === 'string') return comment.content;
+                      // If content is an encrypted object, decrypt it
+                      if (comment.content.iv && comment.content.content) {
+                        return decryptContent(comment.content);
+                      }
+                      // Fallback for other content types
+                      return JSON.stringify(comment.content);
+                    } catch (error) {
+                      console.error('Error processing comment content:', error);
+                      return 'Error loading comment content';
+                    }
+                  })()
+                : 'No content'}
+            </p>
             
             {/* Use the same ReactionButton component as posts */}
             <div className="flex gap-2">
@@ -741,67 +762,148 @@ import MediaViewer from '../components/MediaViewer';
 
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
-  const { logout } = useAuth();
-  const [theme, toggleTheme] = useTheme();
-  const [employeeEmail, setEmployeeEmail] = useState("");
-  const [organizationId, setOrganizationId] = useState("");
-  const [organizationName, setOrganizationName] = useState("");
-  const [isEmailVerified, setIsEmailVerified] = useState(true); // Track if email is verified in organization
-  const [viewMode, setViewMode] = useState('dashboard');
-  const [posts, setPosts] = useState([]);
-  const [selectedPost, setSelectedPost] = useState(null);
-  const [viewingMedia, setViewingMedia] = useState({ isOpen: false, url: null, type: null });
-  const [loading, setLoading] = useState({ posts: false, create: false });
-  const [error, setError] = useState(null);
-  const [newPost, setNewPost] = useState({
-    postType: 'feedback',
-    content: '',
-    mediaUrls: [], // Will store objects with file, preview, url, isUploading, progress
-    region: '',
-    department: ''
+  const [userData, setUserData] = useState(null);
+  const [organization, setOrganization] = useState(null);
+  const [organizationId, setOrganizationId] = useState(() => {
+    // Try to get organization ID from localStorage first
+    const savedOrgId = localStorage.getItem('orgId');
+    return savedOrgId || null;
   });
-  
-  // Clean up object URLs when component unmounts or mediaUrls changes
-  useEffect(() => {
-    const mediaUrls = newPost.mediaUrls;
-    return () => {
-      mediaUrls.forEach(media => {
-        if (media?.preview) {
-          URL.revokeObjectURL(media.preview);
-        }
-      });
-    };
-  }, [newPost.mediaUrls]);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
-  const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
-  const [postToDelete, setPostToDelete] = useState(null);
-  const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
-  
-  // Post filters
-  const [selectedPostType, setSelectedPostType] = useState('all');
-  const [selectedRegion, setSelectedRegion] = useState('all');
-  const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [theme, toggleTheme] = useTheme();
+  const [viewMode, setViewMode] = useState('feed'); // 'feed' or 'createPost'
+  const [postContent, setPostContent] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [postError, setPostError] = useState('');
+  const [postSuccess, setPostSuccess] = useState('');
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [postToDelete, setPostToDelete] = useState(null);
+  const [viewingMedia, setViewingMedia] = useState({
+    isOpen: false,
+    url: '',
+    type: 'image' // 'image' or 'video'
+  });
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+  const [activeTab, setActiveTab] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const ws = useRef(null); // WebSocket reference
-  const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
+  const [sortBy, setSortBy] = useState('newest');
+  const [showFilters, setShowFilters] = useState(false);
+  const [filters, setFilters] = useState({
+    type: 'all',
+    dateRange: 'all',
+    hasMedia: false
+  });
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [commentContents, setCommentContents] = useState({});
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [showCommentInput, setShowCommentInput] = useState({});
+  const [showReplies, setShowReplies] = useState({});
+  const [editingComment, setEditingComment] = useState(null);
+  const [editingCommentContent, setEditingCommentContent] = useState('');
+  const [showDeleteCommentDialog, setShowDeleteCommentDialog] = useState(false);
+  const [commentToDelete, setCommentToDelete] = useState(null);
+  const [showReactionPicker, setShowReactionPicker] = useState({
+    postId: null,
+    commentId: null,
+    position: { x: 0, y: 0 }
+  });
+  const [showFullPost, setShowFullPost] = useState({});
+  const [showFullContent, setShowFullContent] = useState({});
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [page, setPage] = useState(1);
+  const postsPerPage = 10;
+  const postsContainerRef = useRef(null);
+  const [isScrolling, setIsScrolling] = useState(false);
+  const scrollTimeout = useRef(null);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+  const [lastScrollTop, setLastScrollTop] = useState(0);
+  const [isScrollingUp, setIsScrollingUp] = useState(false);
+  const [showNewPostsNotification, setShowNewPostsNotification] = useState(false);
+  const [newPostsCount, setNewPostsCount] = useState(0);
+  const [lastUpdated, setLastUpdated] = useState(new Date());
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [showRefreshButton, setShowRefreshButton] = useState(false);
+  
+  // Use the post utilities
+  const {
+    posts,
+    loading: postsLoading,
+    error: postsError,
+    addPost,
+    updatePost,
+    deletePost,
+    addComment,
+    updateComment,
+    deleteComment,
+    updateReaction
+  } = usePosts(organizationId, false);
+  
+  const { handleReaction, hasReacted } = usePostReactions(
+    currentUser?._id,
+    updateReaction
+  );
+  
+  const {
+    handleAddComment,
+    handleUpdateComment,
+    handleDeleteComment
+  } = usePostComments(addComment, updateComment, deleteComment);
+  
+  const {
+    handleAddPost,
+    handleUpdatePost,
+    handleDeletePost
+  } = usePostActions(addPost, updatePost, deletePost);
+  
+  // Handle post creation
+  const submitPost = async () => {
+    if (!postContent.trim() && !selectedFile) {
+      setPostError('Please enter some content or select a file');
+      return;
+    }
 
-  // --- Fetch Organization Details ---
-  const fetchOrganizationDetails = async (orgId) => {
     try {
-      const response = await api.get(`/organizations/${orgId}`);
-      if (response.data && response.data.name) {
-        setOrganizationName(response.data.name);
-        localStorage.setItem('organizationName', response.data.name);
+      const postData = {
+        content: postContent,
+        type: 'post',
+        isAnonymous: false,
+        orgId: organizationId
+      };
+      
+      // Add file if selected
+      if (selectedFile) {
+        const mediaUrl = await uploadMedia(selectedFile);
+        postData.mediaUrls = [mediaUrl];
       }
+      
+      // Use the post utility to add the post
+      await handleAddPost(postData);
+      
+      // Reset form
+      setPostContent('');
+      setSelectedFile(null);
+      setPreviewUrl(null);
+      
+      // Show success message
+      setPostSuccess('Post created successfully!');
+      
+      // Switch back to feed view
+      setViewMode('feed');
+      
+      // Reset any error
+      setPostError('');
     } catch (error) {
-      console.error('Error fetching organization details:', error);
-      // Always show this message on any error
-      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+      console.error('Error creating post:', error);
+      setPostError(error.response?.data?.message || 'Failed to create post');
     }
   };
+
+
 
   // --- Check if email is in organization's verified emails ---
   const verifyEmailInOrganization = async (email, orgId) => {
@@ -811,87 +913,32 @@ const EmployeeDashboard = () => {
       });
       
       if (response.data?.success && response.data?.data?.isVerified) {
-        setIsEmailVerified(true);
         return true;
       } else {
-        setIsEmailVerified(false);
-        setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
         return false;
       }
     } catch (error) {
       console.error('Error verifying email with organization:', error);
-      setIsEmailVerified(false);
-      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
       return false;
     }
   };
 
-  // --- Authentication Effect ---
-  useEffect(() => {
-    const verifyAuth = async () => {
-      try {
-        const storedEmail = localStorage.getItem('email');
-        const storedRole = localStorage.getItem('role');
-        const storedToken = localStorage.getItem('token');
-        const storedOrgId = localStorage.getItem('orgId')?.trim(); // Trim any whitespace from orgId
-
-        if (!storedEmail || !storedRole || !storedToken || !storedOrgId || storedRole !== 'employee') {
-          navigate('/signin', { state: { message: 'Employee access required. Please sign in.' } });
-          return;
-        }
-        
-        // First verify the email is still in the organization's verified list
-        const isEmailValid = await verifyEmailInOrganization(storedEmail, storedOrgId);
-        if (!isEmailValid) {
-          // Don't proceed further if email is not in organization
-          return;
-        }
-
-        // Verify token and check verification status
-        const response = await api.get('/auth/verify-status', {
-          params: { email: storedEmail },
-          headers: { Authorization: `Bearer ${storedToken}` }
-        });
-
-        console.log('Verification status response:', response.data); // Debug log
-
-        if (response.data.success) {
-          // Check the verified status from the nested data object
-          const isVerified = response.data.data?.verified;
-          console.log('Is user verified?', isVerified); // Debug log
-          
-          if (!isVerified) {
-            // If not verified, redirect to verification page
-            navigate('/employee/verify', { 
-              state: { 
-                message: 'Please complete your verification first.',
-                email: storedEmail,
-                orgId: storedOrgId
-              } 
-            });
-            return;
-          }
-          
-          setEmployeeEmail(storedEmail);
-          setOrganizationId(storedOrgId);
-          // Fetch organization details and posts in parallel
-          await Promise.all([
-            fetchOrganizationDetails(storedOrgId),
-            fetchPosts()
-          ]);
-        } else {
-          localStorage.clear();
-          navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
-        }
-      } catch (error) {
-        console.error('Auth verification failed:', error);
-        localStorage.clear();
-        navigate('/signin', { state: { message: 'Authentication failed. Please sign in again.' } });
+  // --- Helper function to safely decrypt content ---
+  const safeDecrypt = async (content) => {
+    try {
+      if (!content) return content;
+      // If content is already decrypted (string), return as is
+      if (typeof content === 'string') return content;
+      // If content is an encrypted object, decrypt it
+      if (content.iv && content.content) {
+        return await decryptContent(content);
       }
-    };
-
-    verifyAuth();
-  }, [navigate]);
+      return content;
+    } catch (err) {
+      console.error('Error decrypting content:', err);
+      return content;
+    }
+  };
 
   // --- Helper function to process and decrypt WebSocket messages ---
   const processWebSocketMessage = useCallback(async (message) => {
@@ -910,13 +957,13 @@ const EmployeeDashboard = () => {
         case 'POST_UPDATED':
           // Decrypt post content
           if (processedMessage.payload.post?.content) {
-            processedMessage.payload.post.content = await decryptContent(processedMessage.payload.post.content);
+            processedMessage.payload.post.content = await safeDecrypt(processedMessage.payload.post.content);
           }
           // Decrypt comments in post if they exist
           if (Array.isArray(processedMessage.payload.post?.comments)) {
             for (const comment of processedMessage.payload.post.comments) {
               if (comment.content) {
-                comment.content = await decryptContent(comment.content);
+                comment.content = await safeDecrypt(comment.content);
               }
             }
           }
@@ -925,7 +972,7 @@ const EmployeeDashboard = () => {
         case 'COMMENT_CREATED':
         case 'COMMENT_UPDATED':
           if (processedMessage.payload.comment?.content) {
-            processedMessage.payload.comment.content = await decryptContent(processedMessage.payload.comment.content);
+            processedMessage.payload.comment.content = await safeDecrypt(processedMessage.payload.comment.content);
           }
           break;
           
@@ -1212,7 +1259,7 @@ const EmployeeDashboard = () => {
             ws.current.close();
         }
     };
-  }, [organizationId, setPosts]); // Dependencies for the WebSocket effect
+  }, [organizationId]); // Dependencies for the WebSocket effect
 
 
   // --- Fetch Posts ---
@@ -1254,8 +1301,32 @@ const EmployeeDashboard = () => {
         console.warn('Unexpected response format, using empty array');
       }
 
+      // Process and decrypt post and comment content
+      const processPost = async (post) => {
+        const processedPost = { ...post };
+        
+        // Decrypt post content if needed
+        if (processedPost.content) {
+          processedPost.content = await safeDecrypt(processedPost.content);
+        }
+        
+        // Decrypt comments if they exist
+        if (Array.isArray(processedPost.comments)) {
+          for (const comment of processedPost.comments) {
+            if (comment.content) {
+              comment.content = await safeDecrypt(comment.content);
+            }
+          }
+        }
+        
+        return processedPost;
+      };
+      
+      // Process all posts and their comments
+      const processedPosts = await Promise.all(postsData.map(processPost));
+      
       // Sort posts by creation date (newest first)
-      const sortedPosts = [...postsData].sort(
+      const sortedPosts = processedPosts.sort(
         (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
       );
       
@@ -1489,23 +1560,25 @@ const EmployeeDashboard = () => {
     if (!post) return;
     
     setPostToDelete(post);
-    setShowDeletePostDialog(true);
+    setShowDeleteDialog(true);
   };
 
   const confirmDeletePost = async () => {
     if (!postToDelete) return;
     
     try {
-      setIsDeletingPost(true);
-      await api.delete(`/posts/${postToDelete._id}`);
-      setPosts(prev => prev.filter(post => post._id !== postToDelete._id));
-      setShowDeletePostDialog(false);
+      // Use the post utility to delete the post
+      await handleDeletePost(postToDelete._id);
+      
+      // Show success message
+      setPostSuccess('Post deleted successfully!');
+      
+      // Close the delete dialog
+      setShowDeleteDialog(false);
       setPostToDelete(null);
     } catch (err) {
       console.error('Error deleting post:', err);
-      setError(err.response?.data?.message || 'Failed to delete post. Please try again.');
-    } finally {
-      setIsDeletingPost(false);
+      setPostError(err.response?.data?.message || 'Failed to delete post. Please try again.');
     }
   };
 
@@ -1634,8 +1707,24 @@ const EmployeeDashboard = () => {
       }
       
       // Filter by search query
-      if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
+      if (searchQuery) {
+        try {
+          let contentToSearch = post.content;
+          
+          // If content is an encrypted object, try to decrypt it for searching
+          if (contentToSearch && typeof contentToSearch === 'object' && contentToSearch.iv && contentToSearch.content) {
+            contentToSearch = decryptContent(contentToSearch);
+          }
+          
+          // Convert to string for case-insensitive search
+          const searchableContent = String(contentToSearch || '').toLowerCase();
+          if (!searchableContent.includes(searchQuery.toLowerCase())) {
+            return false;
+          }
+        } catch (error) {
+          console.error('Error processing content for search:', error);
+          return false; // Skip posts with unprocessable content in search
+        }
       }
       
       return true;
@@ -1778,7 +1867,23 @@ const EmployeeDashboard = () => {
                       )}
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                      {post.content}
+                      {(() => {
+                        try {
+                          // If content is already a string, use it as is
+                          if (typeof post.content === 'string') return post.content;
+                          
+                          // If content is an encrypted object, decrypt it
+                          if (post.content && post.content.iv && post.content.content) {
+                            return decryptContent(post.content);
+                          }
+                          
+                          // Fallback for other content types
+                          return post.content ? JSON.stringify(post.content) : 'No content';
+                        } catch (error) {
+                          console.error('Error processing post content:', error);
+                          return 'Error loading content';
+                        }
+                      })()}
                     </p>
                     
                     {/* Media Display */}
