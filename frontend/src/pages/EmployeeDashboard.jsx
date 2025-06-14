@@ -828,6 +828,7 @@ const EmployeeDashboard = () => {
   const [lastUpdated, setLastUpdated] = useState(new Date());
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
+  const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
   
   // Use the post utilities
   const {
