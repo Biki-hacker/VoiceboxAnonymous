@@ -1,9 +1,101 @@
 // src/pages/EmployeeDashboard.jsx
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { encryptContent, decryptContent } from '../utils/crypto';
+
+// Component to handle async decryption of content with loading and error states
+const DecryptedContent = ({ 
+  content, 
+  children, 
+  loadingComponent = <span className="text-gray-400">Loading...</span>,
+  errorComponent = (error) => (
+    <span className="text-red-500">Error loading content: {error}</span>
+  )
+}) => {
+  const [state, setState] = useState({
+    decrypted: null,
+    isLoading: true,
+    error: null
+  });
+
+  useEffect(() => {
+    let isMounted = true;
+    
+    const decrypt = async () => {
+      if (!isMounted) return;
+      
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
+      
+      try {
+        // If content is already a string, no need to decrypt
+        if (typeof content === 'string') {
+          if (isMounted) {
+            setState({
+              decrypted: content,
+              isLoading: false,
+              error: null
+            });
+          }
+          return;
+        }
+        
+        // If content is an encrypted object, decrypt it
+        if (content?.iv && content?.content) {
+          const result = await decryptContent(content);
+          if (isMounted) {
+            setState({
+              decrypted: result,
+              isLoading: false,
+              error: null
+            });
+          }
+          return;
+        }
+        
+        // Fallback for other content types
+        if (isMounted) {
+          setState({
+            decrypted: content || '',
+            isLoading: false,
+            error: null
+          });
+        }
+      } catch (err) {
+        console.error('Failed to decrypt content:', err);
+        if (isMounted) {
+          setState({
+            decrypted: null,
+            isLoading: false,
+            error: err.message || 'Failed to load content'
+          });
+        }
+      }
+    };
+
+    decrypt();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [content]);
+
+  // Handle loading state
+  if (state.isLoading) {
+    return loadingComponent;
+  }
+  
+  // Handle error state
+  if (state.error) {
+    return typeof errorComponent === 'function' 
+      ? errorComponent(state.error) 
+      : errorComponent;
+  }
+  
+  // Render decrypted content
+  return children(state.decrypted || '');
+};
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { api } from '../utils/axios';  // Consolidated axios instance
@@ -760,34 +852,37 @@ import MediaViewer from '../components/MediaViewer';
 
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
-  const { currentUser } = useAuth();
+  const { currentUser, logout } = useAuth();
   const navigate = useNavigate();
-  const [organization, setOrganization] = useState(null);
-  const [organizationId, setOrganizationId] = useState(() => {
-    // Try to get organization ID from localStorage first
-    const savedOrgId = localStorage.getItem('orgId');
-    return savedOrgId || null;
-  });
-  const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
-  const [viewMode, setViewMode] = useState('feed'); // 'feed' or 'createPost'
-  const [postContent, setPostContent] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [postError, setPostError] = useState('');
-  const [postSuccess, setPostSuccess] = useState('');
+  const location = useLocation();
+  // UI State
+  const [viewMode, setViewMode] = useState('feed'); // 'feed' or 'createPost' or 'dashboard'
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [postToDelete, setPostToDelete] = useState(null);
   const [viewingMedia, setViewingMedia] = useState({
     isOpen: false,
     url: '',
     type: 'image' // 'image' or 'video'
   });
-  const [isDeletingPost, setIsDeletingPost] = useState(false); // Track post deletion loading state
+  
+  // Organization State
+  const [organization, setOrganization] = useState(null);
+  const [organizationId, setOrganizationId] = useState('');
+  const [organizationName, setOrganizationName] = useState('');
   const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
-  const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
-  const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
-  const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
-  const [searchQuery, setSearchQuery] = useState(''); // For search functionality
+  const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
+  
+  // Theme
+  const { theme, toggleTheme } = useTheme();
+  
+  // Post Creation State
+  const [postContent, setPostContent] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [postError, setPostError] = useState('');
+  const [postSuccess, setPostSuccess] = useState('');
+  const [postToDelete, setPostToDelete] = useState(null);
+  const [isDeletingPost, setIsDeletingPost] = useState(false); // Track post deletion loading state
   const [newPost, setNewPost] = useState({
     content: '',
     postType: 'feedback',
@@ -795,10 +890,85 @@ const EmployeeDashboard = () => {
     department: '',
     mediaUrls: []
   });
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  
+  // Filtering State
+  const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
+  const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
+  const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
+  const [searchQuery, setSearchQuery] = useState(''); // For search functionality
   const [loading, setLoading] = useState({ posts: false, create: false });
   const [error, setError] = useState(null);
   const ws = useRef(null);
+  const reconnectAttempts = useRef(0);
+  const maxReconnectAttempts = 5;
+  const reconnectTimeout = useRef(null);
+
+  // WebSocket connection management
+  const connectWebSocket = useCallback(() => {
+    if (!organizationId) return;
+    
+    // Close existing connection if any
+    if (ws.current) {
+      ws.current.close();
+      ws.current = null;
+    }
+
+    try {
+      const wsUrl = process.env.REACT_APP_WS_URL || `ws://${window.location.host}`;
+      ws.current = new WebSocket(`${wsUrl}?organizationId=${organizationId}`);
+      
+      ws.current.onopen = () => {
+        console.log('WebSocket Connected');
+        reconnectAttempts.current = 0; // Reset reconnect attempts on successful connection
+      };
+      
+      ws.current.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data);
+          // Handle different message types (POST_CREATED, POST_UPDATED, etc.)
+          // Update posts state based on message type
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
+        }
+      };
+      
+      ws.current.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+      
+      ws.current.onclose = () => {
+        console.log('WebSocket Disconnected');
+        // Attempt to reconnect with exponential backoff
+        if (reconnectAttempts.current < maxReconnectAttempts) {
+          const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+          reconnectTimeout.current = setTimeout(() => {
+            reconnectAttempts.current++;
+            connectWebSocket();
+          }, timeout);
+        }
+      };
+    } catch (error) {
+      console.error('Failed to initialize WebSocket:', error);
+    }
+  }, [organizationId]);
+  
+  // Initialize WebSocket connection when organizationId is available
+  useEffect(() => {
+    if (organizationId) {
+      connectWebSocket();
+    }
+    
+    // Cleanup function
+    return () => {
+      if (ws.current) {
+        ws.current.close();
+        ws.current = null;
+      }
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
+      }
+    };
+  }, [organizationId, connectWebSocket]);
   
   // Handle post deletion is implemented below in the file
   
@@ -1804,25 +1974,27 @@ const EmployeeDashboard = () => {
                         </button>
                       )}
                     </div>
-                    <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                      {(() => {
-                        try {
-                          // If content is already a string, use it as is
-                          if (typeof post.content === 'string') return post.content;
-                          
-                          // If content is an encrypted object, decrypt it
-                          if (post.content && post.content.iv && post.content.content) {
-                            return decryptContent(post.content);
-                          }
-                          
-                          // Fallback for other content types
-                          return post.content ? JSON.stringify(post.content) : 'No content';
-                        } catch (error) {
-                          console.error('Error processing post content:', error);
-                          return 'Error loading content';
+                    <div className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
+                      <DecryptedContent 
+                        content={post.content}
+                        loadingComponent={
+                          <div className="flex items-center text-gray-500 text-sm">
+                            <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            Loading content...
+                          </div>
                         }
-                      })()}
-                    </p>
+                        errorComponent={(error) => (
+                          <div className="text-red-500 text-sm">
+                            Error loading content: {error}
+                          </div>
+                        )}
+                      >
+                        {(decrypted) => decrypted || 'No content'}
+                      </DecryptedContent>
+                    </div>
                     
                     {/* Media Display */}
                     {post.mediaUrls && post.mediaUrls.length > 0 && (
