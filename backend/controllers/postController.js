@@ -320,18 +320,13 @@ exports.commentOnPost = async (req, res) => {
     }
 
     // Validate comment text
-    if (!req.body || typeof req.body.text !== 'string' || req.body.text.trim() === '') {
-      console.error('Invalid comment text:', req.body.text);
+    if (!req.body.text || req.body.text.trim() === '') {
       return res.status(400).json({ 
         success: false,
-        message: 'Valid comment text is required',
-        code: 'INVALID_COMMENT_TEXT',
-        received: req.body.text
+        message: 'Comment text is required',
+        code: 'COMMENT_TEXT_REQUIRED'
       });
     }
-    
-    // Ensure text is a string and trim it
-    const commentText = String(req.body.text).trim();
 
     // Ensure user is authenticated
     if (!req.user || !req.user._id) {
@@ -346,7 +341,7 @@ exports.commentOnPost = async (req, res) => {
     // Create new comment - text will be encrypted by the pre-save hook
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      text: commentText, // This will be encrypted by the pre-save hook
+      text: req.body.text, // This will be encrypted by the pre-save hook
       author: req.user._id,
       createdByRole: req.user.role || 'employee',
       createdAt: new Date(),

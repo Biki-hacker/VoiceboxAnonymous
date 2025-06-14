@@ -3,7 +3,8 @@ import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react'
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { encryptContent, decryptContent, decryptPost } from '../utils/crypto';
+import { encryptContent } from '../utils/crypto';
+import { decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { Fragment } from 'react';
@@ -1614,37 +1615,6 @@ const EmployeeDashboard = () => {
     name: localStorage.getItem('email') || "Anonymous Employee"
   };
 
-  // Effect to decrypt posts when they are loaded or updated
-  useEffect(() => {
-    const decryptPosts = async () => {
-      const updatedPosts = [];
-      let hasUpdates = false;
-      
-      for (const post of posts) {
-        if (post && typeof post.content === 'object' && 'iv' in post.content) {
-          try {
-            const decryptedPost = await decryptPost(post);
-            updatedPosts.push(decryptedPost);
-            hasUpdates = true;
-          } catch (error) {
-            console.error('Error decrypting post:', error);
-            updatedPosts.push(post);
-          }
-        } else {
-          updatedPosts.push(post);
-        }
-      }
-      
-      if (hasUpdates) {
-        setPosts(updatedPosts);
-      }
-    };
-    
-    if (posts.length > 0) {
-      decryptPosts();
-    }
-  }, [posts.length]);
-
   // Filter posts based on selected filters
   const filteredPosts = useMemo(() => {
     return posts.filter(post => {
@@ -1807,13 +1777,9 @@ const EmployeeDashboard = () => {
                         </button>
                       )}
                     </div>
-                    <div className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                      {post.content && typeof post.content === 'object' && 'iv' in post.content ? (
-                        <div className="animate-pulse text-gray-500 italic">Decrypting content...</div>
-                      ) : (
-                        post.content
-                      )}
-                    </div>
+                    <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
+                      {post.content}
+                    </p>
                     
                     {/* Media Display */}
                     {post.mediaUrls && post.mediaUrls.length > 0 && (

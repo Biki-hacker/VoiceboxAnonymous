@@ -489,17 +489,14 @@ const AdminDashboard = () => {
             let hasUpdates = false;
             
             for (const post of posts) {
-                if (post && typeof post.content === 'object' && 'iv' in post.content) {
+                if (post && typeof post.content === 'object' && post.content.encrypted) {
                     try {
                         const decryptedPost = await decryptPost(post);
                         updatedPosts.push(decryptedPost);
                         hasUpdates = true;
                     } catch (error) {
                         console.error('Error decrypting post:', error);
-                        updatedPosts.push({
-                            ...post,
-                            content: 'Error: Could not decrypt content'
-                        });
+                        updatedPosts.push(post);
                     }
                 } else {
                     updatedPosts.push(post);
@@ -1788,11 +1785,9 @@ const AdminDashboard = () => {
                                                         </button>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                                                        {post.content === 'Error: Could not decrypt content' ? (
-                                                            <span className="text-red-500">{post.content}</span>
-                                                        ) : (
-                                                            typeof post.content === 'string' ? post.content : 'Loading content...'
-                                                        )}
+                                                        {typeof post.content === 'object' && post.content.encrypted ? 
+                                                            'Decrypting content...' : 
+                                                            (typeof post.content === 'string' ? post.content : JSON.stringify(post.content))}
                                                     </p>
                                                     
                                                     {/* Media Display */}
