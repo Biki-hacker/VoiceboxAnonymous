@@ -200,10 +200,59 @@ const ReactionButton = ({ type, count, postId, commentId = null }) => {
       : `${basePath}/${postId}/reactions`;
   };
 
-  // Initialize with passed-in count
+  // Fetch reaction status on mount and when postId/commentId/type changes
   useEffect(() => {
-    setCurrentCount(count);
-  }, [count]);
+    const fetchReactionStatus = async () => {
+      const storedToken = localStorage.getItem('token');
+      if (!storedToken) return;
+      
+      try {
+        // Try with orgId first if available
+        const endpoint = buildEndpoint('/posts', true);
+        const response = await api.get(endpoint, {
+          headers: { 
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${storedToken}` 
+          }
+        });
+
+        if (response.data?.success && response.data?.data) {
+          const reactionData = response.data.data[type];
+          if (reactionData) {
+            setIsReacted(reactionData.hasReacted);
+            setCurrentCount(reactionData.count);
+          }
+        }
+      } catch (error) {
+        // If we have an orgId and got a 404, try without orgId
+        if (orgId && error.response?.status === 404) {
+          try {
+            const fallbackEndpoint = buildEndpoint('/posts', false);
+            const fallbackResponse = await api.get(fallbackEndpoint, {
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              }
+            });
+
+            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
+              const reactionData = fallbackResponse.data.data[type];
+              if (reactionData) {
+                setIsReacted(reactionData.hasReacted);
+                setCurrentCount(reactionData.count);
+              }
+            }
+          } catch (fallbackError) {
+            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
+          }
+        } else {
+          console.error('Error fetching reaction status:', error);
+        }
+      }
+    };
+
+    fetchReactionStatus();
+  }, [postId, commentId, type, orgId]);
 
   const handleReaction = async () => {
     if (isLoading) return;
