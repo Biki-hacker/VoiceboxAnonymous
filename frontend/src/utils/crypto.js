@@ -6,6 +6,44 @@ const ENCRYPTION_KEY = process.env.REACT_APP_ENCRYPTION_KEY || 'default-encrypti
 const SALT = process.env.REACT_APP_ENCRYPTION_SALT || 'default-salt-value';
 
 /**
+ * Encrypts content before sending to the backend
+ * @param {string} content - The content to encrypt
+ * @returns {Object} - The encrypted data with IV and content
+ */
+export const encryptContent = (content) => {
+  try {
+    // If content is not a string, return it as is (don't encrypt non-string data)
+    if (typeof content !== 'string') return content;
+    
+    // Generate a random IV (Initialization Vector)
+    const iv = CryptoJS.lib.WordArray.random(16);
+    const key = CryptoJS.enc.Utf8.parse(ENCRYPTION_KEY);
+    
+    // Encrypt the content
+    const encrypted = CryptoJS.AES.encrypt(
+      CryptoJS.enc.Utf8.parse(content),
+      key,
+      {
+        iv: iv,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7
+      }
+    );
+    
+    // Return the IV and encrypted content
+    return {
+      iv: iv.toString(CryptoJS.enc.Hex),
+      content: encrypted.toString(),
+      isEncrypted: true
+    };
+  } catch (error) {
+    console.error('Encryption error:', error);
+    // Return the original content if encryption fails
+    return content;
+  }
+};
+
+/**
  * Decrypts content that was encrypted on the backend
  * @param {Object|string} data - The encrypted data or a string to decrypt
  * @returns {Promise<string|Object>} - The decrypted content
@@ -118,6 +156,7 @@ export const decryptComment = async (comment) => {
 
 // Export a default object with all the functions
 export default {
+  encryptContent,
   decryptContent,
   decryptPost,
   decryptPosts,

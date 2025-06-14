@@ -3,38 +3,48 @@ const Post = require('../models/Post');
 const Organization = require('../models/Organization');
 const mongoose = require('mongoose');
 const supabase = require('../utils/supabaseClient');
-const { encrypt, decrypt } = require('../utils/cryptoUtils');
 
 exports.createPost = async (req, res) => {
   try {
     let { orgId, postType, content, mediaUrls, region, department, isAnonymous } = req.body;
-    
-    // Encrypt the content before saving
-    if (content && typeof content === 'string') {
-      content = await encrypt(content);
-    }
 
     if (!orgId || !postType || !content) {
-      return res.status(400).json({ message: "Missing required fields" });
+      return res.status(400).json({ 
+        success: false,
+        message: "Missing required fields",
+        code: 'MISSING_REQUIRED_FIELDS'
+      });
     }
 
     const newPost = new Post({
       orgId,
       postType,
-      content,
-      mediaUrls,
-      region,
-      department,
-      isAnonymous,
-      author: req.user._id, // Save the user's ID as the author
-      createdByRole: req.user.role, // Save the user's role
+      content, // Content will be encrypted by the pre-save hook
+      mediaUrls: Array.isArray(mediaUrls) ? mediaUrls : [],
+      region: region || null,
+      department: department || null,
+      isAnonymous: !!isAnonymous,
+      author: req.user._id,
+      createdByRole: req.user.role || 'employee',
       reactions: {
         like: { count: 0, users: [] },
         love: { count: 0, users: [] },
         laugh: { count: 0, users: [] },
         angry: { count: 0, users: [] }
       },
-      comments: [] // Initialize comments as an empty array
+      comments: []
+    });
+    
+    console.log('Creating new post with data:', {
+      orgId,
+      postType,
+      content: typeof content === 'object' ? '[ENCRYPTED]' : content,
+      mediaUrls: mediaUrls ? `[${mediaUrls.length} items]` : 'none',
+      region,
+      department,
+      isAnonymous,
+      author: req.user._id,
+      createdByRole: req.user.role
     });
 
     await newPost.save();
@@ -146,7 +156,7 @@ exports.getReactionStatus = async (req, res) => {
 
     let query = Post.findById(postId);
     
-    // Only select necessary fields to improve performance
+    // Get the post with only the necessary fields for reactions
     if (commentId) {
       query = query.select({
         'comments._id': 1,
@@ -156,7 +166,8 @@ exports.getReactionStatus = async (req, res) => {
       query = query.select('reactions');
     }
 
-    const post = await query.lean();
+    // Use exec() to get a proper document instance
+    const post = await query.exec();
     
     if (!post) {
       return res.status(404).json({ 
@@ -165,6 +176,9 @@ exports.getReactionStatus = async (req, res) => {
       });
     }
 
+    // Convert to plain object after any potential decryption
+    const postObj = post.toObject ? post.toObject() : post;
+    
     let reactions;
     
     if (commentId) {
@@ -177,12 +191,12 @@ exports.getReactionStatus = async (req, res) => {
       }
       reactions = comment.reactions;
     } else {
-      reactions = post.reactions;
+      reactions = postObj.reactions || {};
     }
 
-    // Format the response
+    // Format the reactions to include hasReacted status for the current user
     const formattedReactions = formatReactions(reactions, userId);
-    
+
     res.status(200).json({
       success: true,
       data: formattedReactions
@@ -324,18 +338,12 @@ exports.commentOnPost = async (req, res) => {
       });
     }
 
-    // Create new comment
-    const { text } = req.body;
-    let encryptedText = text;
-    if (text && typeof text === 'string') {
-      encryptedText = await encrypt(text);
-    }
-
+    // Create new comment - text will be encrypted by the pre-save hook
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      text: encryptedText,
-      author: req.user._id, // User's ID as the comment author
-      createdByRole: req.user.role || 'user', // Default to 'user' if role not specified
+      text: req.body.text, // This will be encrypted by the pre-save hook
+      author: req.user._id,
+      createdByRole: req.user.role || 'employee',
       createdAt: new Date(),
       updatedAt: new Date(),
       reactions: {
@@ -345,6 +353,11 @@ exports.commentOnPost = async (req, res) => {
         angry: { count: 0, users: [] }
       }
     };
+    
+    console.log('Adding new comment:', JSON.stringify({
+      ...newComment,
+      text: typeof req.body.text === 'object' ? '[ENCRYPTED]' : req.body.text
+    }, null, 2));
     
     // Ensure all existing comments have the required createdByRole field
     if (post.comments && Array.isArray(post.comments)) {
@@ -423,7 +436,7 @@ exports.commentOnPost = async (req, res) => {
             _id: req.user._id,
             name: req.user.name || 'Unknown User',
             email: req.user.email || 'unknown@example.com',
-            role: req.user.role || 'user'
+            role: req.user.role || 'employee'
           }
         },
         post: {

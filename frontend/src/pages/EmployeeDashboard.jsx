@@ -1,8 +1,10 @@
 // src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useRef, useMemo } from 'react';
+import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { encryptContent } from '../utils/crypto';
+import { decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { Fragment } from 'react';
@@ -182,143 +184,52 @@ const ThemeToggle = ({ theme, toggleTheme }) => (
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const [isReacted, setIsReacted] = useState(false);
-  const [currentCount, setCurrentCount] = useState(count);
+  const [currentCount, setCurrentCount] = useState(count || 0);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
   const orgId = localStorage.getItem('orgId');
 
-  // Helper function to build the API endpoint
-  const buildEndpoint = (basePath, includeOrgId = true) => {
-    if (includeOrgId && orgId) {
-      return commentId 
-        ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
-        : `${basePath}/org/${orgId}/${postId}/reactions`;
-    }
-    return commentId 
-      ? `${basePath}/${postId}/comments/${commentId}/reactions`
-      : `${basePath}/${postId}/reactions`;
-  };
-
-  // Fetch reaction status on mount and when postId/commentId/type changes
+  // Update local state when count prop changes
   useEffect(() => {
-    const fetchReactionStatus = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) return;
-      
-      try {
-        // Try with orgId first if available
-        const endpoint = buildEndpoint('/posts', true);
-        const response = await api.get(endpoint, {
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          }
-        });
-
-        if (response.data?.success && response.data?.data) {
-          const reactionData = response.data.data[type];
-          if (reactionData) {
-            setIsReacted(reactionData.hasReacted);
-            setCurrentCount(reactionData.count);
-          }
-        }
-      } catch (error) {
-        // If we have an orgId and got a 404, try without orgId
-        if (orgId && error.response?.status === 404) {
-          try {
-            const fallbackEndpoint = buildEndpoint('/posts', false);
-            const fallbackResponse = await api.get(fallbackEndpoint, {
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              }
-            });
-
-            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
-              const reactionData = fallbackResponse.data.data[type];
-              if (reactionData) {
-                setIsReacted(reactionData.hasReacted);
-                setCurrentCount(reactionData.count);
-              }
-            }
-          } catch (fallbackError) {
-            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
-          }
-        } else {
-          console.error('Error fetching reaction status:', error);
-        }
-      }
-    };
-
-    fetchReactionStatus();
-  }, [postId, commentId, type, orgId]);
+    setCurrentCount(count || 0);
+  }, [count]);
 
   const handleReaction = async () => {
     if (isLoading) return;
     
-    const wasReacted = isReacted;
-    const newIsReacted = !wasReacted;
-    const storedToken = localStorage.getItem('token');
-    
-    if (!storedToken) {
-      console.error('No authentication token found');
-      return;
-    }
-    
-    // Optimistic UI updates
     setIsLoading(true);
-    setIsReacted(newIsReacted);
-    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
+    setError(null);
     
     try {
-      // First try with orgId if available
-      const endpoint = buildEndpoint('/posts', true);
+      const storedToken = localStorage.getItem('token');
       
-      const response = await api.post(
-        endpoint, 
-        { type },
-        { 
-          headers: { 
+      if (!storedToken) {
+        throw new Error('Authentication required');
+      }
+
+      const endpoint = commentId 
+        ? `/posts/org/${orgId}/posts/${postId}/comments/${commentId}/reactions`
+        : `/posts/org/${orgId}/posts/${postId}/reactions`;
+
+      await api.post(
+        endpoint,
+        { type, action: isReacted ? 'remove' : 'add' },
+        {
+          headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
+            'Authorization': `Bearer ${storedToken}`
+          }
         }
       );
-      
-      // Update with server response
-      if (response.data?.success && response.data?.reaction) {
-        setIsReacted(response.data.reaction.hasReacted);
-        setCurrentCount(response.data.reaction.count);
-        return;
-      }
-    } catch (error) {
-      // If we have an orgId and got a 404, try without orgId
-      if (orgId && error.response?.status === 404) {
-        try {
-          const fallbackEndpoint = buildEndpoint('/posts', false);
-          const fallbackResponse = await api.post(
-            fallbackEndpoint,
-            { type },
-            { 
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              } 
-            }
-          );
 
-          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
-            setIsReacted(fallbackResponse.data.reaction.hasReacted);
-            setCurrentCount(fallbackResponse.data.reaction.count);
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('Error updating reaction via fallback endpoint:', fallbackError);
-          throw fallbackError;
-        }
-      } else {
-        console.error('Error updating reaction:', error);
-        throw error;
-      }
+      // Optimistic update
+      setIsReacted(!isReacted);
+      setCurrentCount(prev => isReacted ? Math.max(0, prev - 1) : prev + 1);
+    } catch (err) {
+      console.error('Error updating reaction:', err);
+      setError('Failed to update reaction');
+      // Revert optimistic update on error
+      setCurrentCount(count || 0);
     } finally {
       setIsLoading(false);
     }
@@ -449,10 +360,14 @@ const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded
       }
       
       console.log('Posting comment to post:', postId, 'in org:', orgId);
+      
+      // Encrypt the comment text before sending to the backend
+      const encryptedComment = encryptContent(commentText);
+      
       const response = await api.post(
         `/posts/${postId}/comments`, 
         { 
-          text: commentText  // Only send the text, let backend handle the rest
+          text: encryptedComment  // Send the encrypted comment text
         },
         {
           headers: {
@@ -887,14 +802,63 @@ const EmployeeDashboard = () => {
     verifyAuth();
   }, [navigate]);
 
+  // --- Helper function to process and decrypt WebSocket messages ---
+  const processWebSocketMessage = useCallback(async (message) => {
+    try {
+      const data = JSON.parse(message.data);
+      
+      // Skip if not for current organization
+      if (data.organization !== organizationId) return null;
+
+      // Create a deep copy of the message to avoid mutating the original
+      const processedMessage = JSON.parse(JSON.stringify(data));
+      
+      // Handle different message types
+      switch (processedMessage.type) {
+        case 'POST_CREATED':
+        case 'POST_UPDATED':
+          // Decrypt post content
+          if (processedMessage.payload.post?.content) {
+            processedMessage.payload.post.content = await decryptContent(processedMessage.payload.post.content);
+          }
+          // Decrypt comments in post if they exist
+          if (Array.isArray(processedMessage.payload.post?.comments)) {
+            for (const comment of processedMessage.payload.post.comments) {
+              if (comment.content) {
+                comment.content = await decryptContent(comment.content);
+              }
+            }
+          }
+          break;
+          
+        case 'COMMENT_CREATED':
+        case 'COMMENT_UPDATED':
+          if (processedMessage.payload.comment?.content) {
+            processedMessage.payload.comment.content = await decryptContent(processedMessage.payload.comment.content);
+          }
+          break;
+          
+        // No need to decrypt for DELETE or REACTION_UPDATE events
+        case 'POST_DELETED':
+        case 'COMMENT_DELETED':
+        case 'REACTION_UPDATED':
+        default:
+          break;
+      }
+      
+      return processedMessage;
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+      return null;
+    }
+  }, [organizationId]);
+
   // --- WebSocket Effect for Real-time Updates ---
   useEffect(() => {
-    if (!organizationId) {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        console.log('EmployeeDashboard: No organizationId, closing WebSocket.');
-        ws.current.close();
-      }
-      return; // Don't connect if no organizationId
+    if (!organizationId) return;
+    if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+      console.log('EmployeeDashboard: No organizationId, closing WebSocket.');
+      ws.current.close();
     }
 
     if (ws.current && ws.current.readyState !== WebSocket.CLOSED && ws.current.readyState !== WebSocket.CLOSING) {
@@ -924,40 +888,15 @@ const EmployeeDashboard = () => {
             console.error('WebSocket error:', error);
         };
 
-        ws.current.onmessage = (event) => {
+        ws.current.onmessage = async (message) => {
             try {
-                const message = JSON.parse(event.data);
-                console.log('WebSocket message received:', message);
-
-                // Skip if message is invalid
-                if (!message || !message.type || !message.payload) {
-                    console.warn('Invalid WebSocket message format:', message);
-                    return;
-                }
+                // Process and decrypt the message
+                const processedMessage = await processWebSocketMessage(message);
+                if (!processedMessage) return;
 
                 // Skip if this message is not for the current organization
-                if (message.payload.organizationId && 
-                    message.payload.organizationId !== organizationId) {
-                    console.log(`Ignoring message for different organization: ${message.payload.organizationId}`);
-                    return;
-                }
-
-                // Validate message structure
-                if (!message || typeof message !== 'object') {
-                    console.warn('EmployeeDashboard: Invalid message format:', message);
-                    return;
-                }
-
-
-                // Check if message has a valid payload
-                if (!message.payload || typeof message.payload !== 'object') {
-                    console.warn('EmployeeDashboard: Message missing payload:', message);
-                    return;
-                }
-
-
-                // Skip if message is not for current organization
-                const orgId = message.payload.organizationId || message.payload.organization;
+                const orgId = processedMessage.payload.organizationId || 
+                              processedMessage.payload.organization;
                 if (!orgId || orgId !== organizationId) {
                     console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
                     return;
@@ -965,46 +904,47 @@ const EmployeeDashboard = () => {
 
 
                 // Process message based on type
-                switch (message.type) {
+                switch (processedMessage.type) {
                     case 'POST_CREATED':
-                        if (!message.payload._id || !message.payload.createdAt) {
-                            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
+                        if (!processedMessage.payload._id || !processedMessage.payload.createdAt) {
+                            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', processedMessage.payload);
                             return;
                         }
-                        setPosts(prevPosts => 
-                            [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        );
+                        setPosts(prevPosts => [processedMessage.payload, ...prevPosts]);
                         break;
 
                     case 'POST_UPDATED':
-                        if (!message.payload._id) {
-                            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
+                        if (!processedMessage.payload._id) {
+                            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', processedMessage.payload);
                             return;
                         }
                         setPosts(prevPosts =>
-                            prevPosts.map(p => (p._id === message.payload._id ? {...p, ...message.payload} : p))
-                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                            prevPosts.map(post =>
+                                post._id === processedMessage.payload._id ? processedMessage.payload : post
+                            )
                         );
                         break;
 
                     case 'POST_DELETED':
-                        if (!message.payload.postId) {
-                            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', message.payload);
+                        if (!processedMessage.payload.postId) {
+                            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', processedMessage.payload);
                             return;
                         }
-                        setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
+                        setPosts(prevPosts =>
+                            prevPosts.filter(post => post._id !== processedMessage.payload.postId)
+                        );
                         break;
                     case 'COMMENT_CREATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
+                        if (!processedMessage.payload.postId || !processedMessage.payload.comment?._id) {
+                            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', processedMessage.payload);
                             return;
                         }
                         setPosts(prevPosts => {
                             return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
+                                if (post._id === processedMessage.payload.postId) {
                                     // Check if comment already exists to prevent duplicates
                                     const commentExists = post.comments?.some(
-                                        c => c._id === message.payload.comment._id
+                                        c => c._id === processedMessage.payload.comment._id
                                     );
                                     
                                     if (commentExists) {
@@ -1015,7 +955,7 @@ const EmployeeDashboard = () => {
                                     return {
                                         ...post,
                                         comments: [
-                                            message.payload.comment,
+                                            processedMessage.payload.comment,
                                             ...(post.comments || [])
                                         ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
                                         commentCount: (post.commentCount || 0) + 1
@@ -1027,23 +967,23 @@ const EmployeeDashboard = () => {
                         break;
 
                     case 'COMMENT_UPDATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
+                        if (!processedMessage.payload.postId || !processedMessage.payload.comment?._id) {
+                            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', processedMessage.payload);
                             return;
                         }
                         setPosts(prevPosts => {
                             return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
+                                if (post._id === processedMessage.payload.postId) {
+                                    const existingComment = post.comments?.find(c => c._id === processedMessage.payload.comment._id);
                                     if (!existingComment) {
-                                        console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
+                                        console.warn('EmployeeDashboard: Comment not found for update:', processedMessage.payload.comment._id);
                                         return post;
                                     }
                                     return {
                                         ...post,
                                         comments: (post.comments || [])
-                                            .map(c => c._id === message.payload.comment._id 
-                                                ? { ...c, ...message.payload.comment }
+                                            .map(c => c._id === processedMessage.payload.comment._id 
+                                                ? { ...c, ...processedMessage.payload.comment }
                                                 : c
                                             )
                                             .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
@@ -1055,16 +995,16 @@ const EmployeeDashboard = () => {
                         break;
 
                     case 'COMMENT_DELETED':
-                        if (!message.payload.postId || !message.payload.commentId) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', message.payload);
+                        if (!processedMessage.payload.postId || !processedMessage.payload.commentId) {
+                            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', processedMessage.payload);
                             return;
                         }
                         setPosts(prevPosts => {
                             return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
+                                if (post._id === processedMessage.payload.postId) {
                                     return {
                                         ...post,
-                                        comments: (post.comments || []).filter(c => c._id !== message.payload.commentId),
+                                        comments: (post.comments || []).filter(c => c._id !== processedMessage.payload.commentId),
                                         commentCount: Math.max(0, (post.commentCount || 0) - 1)
                                     };
                                 }
@@ -1074,15 +1014,15 @@ const EmployeeDashboard = () => {
                         break;
 
                     case 'REACTION_UPDATED':
-                        if (!message.payload.entityType || !message.payload.entityId) {
-                            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
+                        if (!processedMessage.payload.entityType || !processedMessage.payload.entityId) {
+                            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', processedMessage.payload);
                             return;
                         }
                         
                         // Use reactions if available, otherwise fall back to reactionsSummary
-                        const reactionsData = message.payload.reactions || message.payload.reactionsSummary;
+                        const reactionsData = processedMessage.payload.reactions || processedMessage.payload.reactionsSummary;
                         if (!reactionsData) {
-                            console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
+                            console.warn('EmployeeDashboard: Missing reactions data in payload:', processedMessage.payload);
                             return;
                         }
                         
@@ -1110,16 +1050,16 @@ const EmployeeDashboard = () => {
                         });
                         
                         console.log('Processing REACTION_UPDATED:', {
-                            entityType: message.payload.entityType,
-                            entityId: message.payload.entityId,
-                            postId: message.payload.postId,
+                            entityType: processedMessage.payload.entityType,
+                            entityId: processedMessage.payload.entityId,
+                            postId: processedMessage.payload.postId,
                             reactions: processedReactions
                         });
                         
                         setPosts(prevPosts => {
                             return prevPosts.map(post => {
                                 // Handle post reactions
-                                if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
+                                if (processedMessage.payload.entityType === 'post' && post._id === processedMessage.payload.entityId) {
                                     console.log(`Updating reactions for post ${post._id}`);
                                     return { 
                                         ...post, 
@@ -1127,14 +1067,14 @@ const EmployeeDashboard = () => {
                                             ...post.reactions, // Keep existing reactions
                                             ...processedReactions // Update with new reaction data
                                         },
-                                        updatedAt: message.payload.updatedAt || new Date().toISOString()
+                                        updatedAt: processedMessage.payload.updatedAt || new Date().toISOString()
                                     };
                                 } 
                                 // Handle comment reactions
-                                else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
-                                    console.log(`Checking comments in post ${post._id} for comment ${message.payload.entityId}`);
+                                else if (processedMessage.payload.entityType === 'comment' && post._id === processedMessage.payload.postId) {
+                                    console.log(`Checking comments in post ${post._id} for comment ${processedMessage.payload.entityId}`);
                                     const updatedComments = (post.comments || []).map(comment => {
-                                        if (comment._id === message.payload.entityId) {
+                                        if (comment._id === processedMessage.payload.entityId) {
                                             console.log(`Updating reactions for comment ${comment._id}`);
                                             return { 
                                                 ...comment,
@@ -1142,7 +1082,7 @@ const EmployeeDashboard = () => {
                                                     ...comment.reactions, // Keep existing reactions
                                                     ...processedReactions // Update with new reaction data
                                                 },
-                                                updatedAt: message.payload.updatedAt || new Date().toISOString()
+                                                updatedAt: processedMessage.payload.updatedAt || new Date().toISOString()
                                             };
                                         }
                                         return comment;
@@ -1386,9 +1326,12 @@ const EmployeeDashboard = () => {
       // Ensure organizationId is trimmed before making the API call
       const trimmedOrgId = organizationId.trim();
       
-      // Create the post with the uploaded media URLs
+      // Encrypt the post content before sending to the backend
+      const encryptedContent = encryptContent(postData.content.trim());
+      
+      // Create the post with the encrypted content and uploaded media URLs
       const response = await api.post('/posts', {
-        content: postData.content.trim(),
+        content: encryptedContent,
         postType: postData.postType,
         mediaUrls,
         region: postData.region || '',

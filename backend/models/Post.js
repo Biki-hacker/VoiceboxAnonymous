@@ -37,8 +37,19 @@ const commentSchema = new mongoose.Schema({
     default: () => new mongoose.Types.ObjectId()
   },
   text: {
-    type: String,
+    type: mongoose.Schema.Types.Mixed,
     required: true,
+    validate: {
+      validator: function(v) {
+        // Allow string or object with encrypted structure
+        return typeof v === 'string' || 
+               (v && typeof v === 'object' && 
+                v.iv && 
+                v.content && 
+                v.isEncrypted);
+      },
+      message: 'Text must be a string or valid encrypted object'
+    },
     trim: true
   },
   createdAt: {
@@ -72,6 +83,29 @@ const commentSchema = new mongoose.Schema({
 
 // Add pre-save middleware to initialize reactions
 commentSchema.pre('save', initializeReactions);
+
+// Pre-save hook to ensure text is properly handled
+commentSchema.pre('save', async function(next) {
+  try {
+    const { encrypt } = require('../utils/cryptoUtils');
+    
+    // If text is a string and not empty, encrypt it
+    if (this.text && typeof this.text === 'string' && this.text.trim()) {
+      this.text = await encrypt(this.text);
+    } 
+    // If text is already an object but not in the expected encrypted format
+    else if (this.text && typeof this.text === 'object' && !this.text.isEncrypted) {
+      // If it's a stringifiable object, convert to string and encrypt
+      const textStr = JSON.stringify(this.text);
+      this.text = await encrypt(textStr);
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error processing comment text:', error);
+    next(error);
+  }
+});
 
 // Add a method to safely add a reaction to a comment
 commentSchema.methods.addReaction = async function(userId, reactionType) {
@@ -133,8 +167,19 @@ const postSchema = new mongoose.Schema(
       required: true
     },
     content: {
-      type: String,
-      required: true
+      type: mongoose.Schema.Types.Mixed,
+      required: true,
+      validate: {
+        validator: function(v) {
+          // Allow string or object with encrypted structure
+          return typeof v === 'string' || 
+                 (v && typeof v === 'object' && 
+                  v.iv && 
+                  v.content && 
+                  v.isEncrypted);
+        },
+        message: 'Content must be a string or valid encrypted object'
+      }
     },
     mediaUrls: {
       type: [String],
@@ -178,25 +223,119 @@ const postSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Add pre-save middleware to encrypt post content
-postSchema.pre('save', encryptContent);
-
-// Add post-find middleware to decrypt content
-postSchema.post('find', async function(docs) {
-  if (Array.isArray(docs)) {
-    for (let doc of docs) {
-      await doc.decryptContent();
-    }
-  } else if (docs) {
-    await docs.decryptContent();
+// Add pre-save middleware to initialize reactions
+postSchema.pre('save', function(next) {
+  if (this.isNew || !this.reactions) {
+    this.reactions = {
+      like: { count: 0, users: [] },
+      love: { count: 0, users: [] },
+      laugh: { count: 0, users: [] },
+      angry: { count: 0, users: [] }
+    };
   }
+  next();
+});
+
+// Pre-save hook for post to encrypt content
+postSchema.pre('save', async function(next) {
+  try {
+    const { encrypt } = require('../utils/cryptoUtils');
+    
+    // If content is a string and not empty, encrypt it
+    if (this.content && typeof this.content === 'string' && this.content.trim()) {
+      this.content = await encrypt(this.content);
+    } 
+    // If content is already an object but not in the expected encrypted format
+    else if (this.content && typeof this.content === 'object' && !this.content.isEncrypted) {
+      // If it's a stringifiable object, convert to string and encrypt
+      const contentStr = JSON.stringify(this.content);
+      this.content = await encrypt(contentStr);
+    }
+    
+    next();
+  } catch (error) {
+    console.error('Error processing post content:', error);
+    next(error);
+  }
+});
+
+// Add document middleware for encryption/decryption
+postSchema.post('find', async function(docs) {
+  if (!docs) return docs;
+  
+  const { decrypt } = require('../utils/cryptoUtils');
+  
+  const processDoc = async (doc) => {
+    // Decrypt post content
+    if (doc?.content && typeof doc.content === 'object' && doc.content.isEncrypted) {
+      doc.content = await decrypt(doc.content);
+    }
+    
+    // Decrypt comments
+    if (doc?.comments && Array.isArray(doc.comments)) {
+      await Promise.all(doc.comments.map(async (comment) => {
+        if (comment?.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+          comment.text = await decrypt(comment.text);
+        }
+        return comment;
+      }));
+    }
+    
+    return doc;
+  };
+  
+  if (Array.isArray(docs)) {
+    await Promise.all(docs.map(processDoc));
+  } else {
+    await processDoc(docs);
+  }
+  
   return docs;
 });
 
 postSchema.post('findOne', async function(doc) {
-  if (doc) {
-    await doc.decryptContent();
+  if (!doc) return doc;
+  
+  const { decrypt } = require('../utils/cryptoUtils');
+  
+  // Decrypt post content
+  if (doc.content && typeof doc.content === 'object' && doc.content.isEncrypted) {
+    doc.content = await decrypt(doc.content);
   }
+  
+  // Decrypt comments
+  if (doc.comments && Array.isArray(doc.comments)) {
+    await Promise.all(doc.comments.map(async (comment) => {
+      if (comment?.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+        comment.text = await decrypt(comment.text);
+      }
+      return comment;
+    }));
+  }
+  
+  return doc;
+});
+
+postSchema.post('findOneAndUpdate', async function(doc) {
+  if (!doc) return doc;
+  
+  const { decrypt } = require('../utils/cryptoUtils');
+  
+  // Decrypt post content
+  if (doc.content && typeof doc.content === 'object' && doc.content.isEncrypted) {
+    doc.content = await decrypt(doc.content);
+  }
+  
+  // Decrypt comments
+  if (doc.comments && Array.isArray(doc.comments)) {
+    await Promise.all(doc.comments.map(async (comment) => {
+      if (comment?.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+        comment.text = await decrypt(comment.text);
+      }
+      return comment;
+    }));
+  }
+  
   return doc;
 });
 
@@ -212,9 +351,24 @@ postSchema.methods.decryptContent = async function() {
   // Decrypt comments
   if (this.comments && Array.isArray(this.comments)) {
     for (let comment of this.comments) {
-      if (comment.content && typeof comment.content === 'object' && comment.content.isEncrypted) {
-        comment.content = await decrypt(comment.content);
+      try {
+        if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+          comment.text = await decrypt(comment.text);
+        }
+      } catch (error) {
+        console.error('Error decrypting comment text:', error);
+        // Keep the encrypted content if decryption fails
       }
+    }
+  }
+  
+  // Also handle direct text decryption if this is a comment document
+  if (this.text && typeof this.text === 'object' && this.text.isEncrypted) {
+    try {
+      this.text = await decrypt(this.text);
+    } catch (error) {
+      console.error('Error decrypting text:', error);
+      // Keep the encrypted content if decryption fails
     }
   }
   

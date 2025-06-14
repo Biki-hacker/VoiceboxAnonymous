@@ -13,6 +13,7 @@ import {
 import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
+import { decryptContent, encryptContent, decryptPost } from '../utils/crypto';
 import {
     BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
     UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
@@ -195,6 +196,53 @@ const AdminDashboard = () => {
     let maxReconnectAttempts = 5;
     let reconnectTimeout = null;
 
+    // Process and decrypt WebSocket message
+    const processWebSocketMessage = useCallback(async (message) => {
+        try {
+            if (!message || !message.type || !message.payload) return null;
+            
+            // Create a deep copy of the message to avoid mutating the original
+            const processedMessage = JSON.parse(JSON.stringify(message));
+            
+            // Decrypt content based on message type
+            switch (message.type) {
+                case 'POST_CREATED':
+                case 'POST_UPDATED':
+                    if (processedMessage.payload.post?.content) {
+                        processedMessage.payload.post.content = await decryptContent(processedMessage.payload.post.content);
+                    }
+                    // Handle nested comments in post
+                    if (Array.isArray(processedMessage.payload.post?.comments)) {
+                        for (const comment of processedMessage.payload.post.comments) {
+                            if (comment.content) {
+                                comment.content = await decryptContent(comment.content);
+                            }
+                        }
+                    }
+                    break;
+                    
+                case 'COMMENT_CREATED':
+                case 'COMMENT_UPDATED':
+                    if (processedMessage.payload.comment?.content) {
+                        processedMessage.payload.comment.content = await decryptContent(processedMessage.payload.comment.content);
+                    }
+                    break;
+                    
+                // No need to decrypt for DELETE or REACTION_UPDATE events
+                case 'POST_DELETED':
+                case 'COMMENT_DELETED':
+                case 'REACTION_UPDATED':
+                default:
+                    break;
+            }
+            
+            return processedMessage;
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+            return null;
+        }
+    }, []);
+
     // Initialize WebSocket connection
     useEffect(() => {
         const initializeWebSocket = () => {
@@ -223,37 +271,44 @@ const AdminDashboard = () => {
                         console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
                         return;
                     }
+                    
+                    // Process and decrypt the message
+                    const processedMessage = await processWebSocketMessage(message);
+                    if (!processedMessage) {
+                        console.warn('AdminDashboard: Failed to process WebSocket message');
+                        return;
+                    }
 
                     switch (message.type) {
                         case 'POST_CREATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                setPosts(prev => [message.payload.post, ...prev]);
+                            if (processedMessage.payload.organization === currentSelectedOrgId) {
+                                setPosts(prev => [processedMessage.payload.post, ...prev]);
                             }
                             break;
                         case 'POST_UPDATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
+                            if (processedMessage.payload.organization === currentSelectedOrgId) {
                                 setPosts(prev => 
                                     prev.map(p => 
-                                        p._id === message.payload.post._id 
-                                            ? message.payload.post 
+                                        p._id === processedMessage.payload.post._id 
+                                            ? processedMessage.payload.post 
                                             : p
                                     )
                                 );
                             }
                             break;
                         case 'POST_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => prev.filter(p => p._id !== message.payload.postId));
+                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
+                                setPosts(prev => prev.filter(p => p._id !== processedMessage.payload.postId));
                             }
                             break;
                         case 'COMMENT_CREATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
+                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
                                 setPosts(prev => 
                                     prev.map(p => 
-                                        p._id === message.payload.postId 
+                                        p._id === processedMessage.payload.postId 
                                             ? { 
                                                 ...p,
-                                                comments: [...(p.comments || []), message.payload.comment]
+                                                comments: [...(p.comments || []), processedMessage.payload.comment]
                                             } 
                                             : p
                                     )
@@ -261,15 +316,15 @@ const AdminDashboard = () => {
                             }
                             break;
                         case 'COMMENT_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
+                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
                                 setPosts(prev => 
                                     prev.map(p => 
-                                        p._id === message.payload.postId 
+                                        p._id === processedMessage.payload.postId 
                                             ? { 
                                                 ...p,
                                                 comments: p.comments?.map(c => 
-                                                    c._id === message.payload.comment._id 
-                                                        ? message.payload.comment 
+                                                    c._id === processedMessage.payload.comment._id 
+                                                        ? processedMessage.payload.comment 
                                                         : c
                                                 ) || []
                                             } 
@@ -279,13 +334,13 @@ const AdminDashboard = () => {
                             }
                             break;
                         case 'COMMENT_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
+                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
                                 setPosts(prev => 
                                     prev.map(p => 
-                                        p._id === message.payload.postId 
+                                        p._id === processedMessage.payload.postId 
                                             ? { 
                                                 ...p,
-                                                comments: p.comments?.filter(c => c._id !== message.payload.commentId) || []
+                                                comments: p.comments?.filter(c => c._id !== processedMessage.payload.commentId) || []
                                             } 
                                             : p
                                     )
@@ -293,18 +348,18 @@ const AdminDashboard = () => {
                             }
                             break;
                         case 'REACTION_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
+                            if (processedMessage.payload.organizationId === currentSelectedOrgId) {
                                 setPosts(prev => 
                                     prev.map(p => 
-                                        p._id === message.payload.postId 
+                                        p._id === processedMessage.payload.postId 
                                             ? { 
                                                 ...p,
-                                                reactions: message.payload.reactionsSummary,
+                                                reactions: processedMessage.payload.reactionsSummary,
                                                 comments: p.comments?.map(c => 
-                                                    c._id === message.payload.commentId 
+                                                    c._id === processedMessage.payload.commentId 
                                                         ? { 
                                                             ...c,
-                                                            reactions: message.payload.reactionsSummary
+                                                            reactions: processedMessage.payload.reactionsSummary
                                                         } 
                                                         : c
                                                 ) || []
@@ -381,10 +436,6 @@ const AdminDashboard = () => {
             // Remove the deleted post from the UI
             setPosts(prev => prev.filter(p => p._id !== postId));
             
-            // Close the delete dialog
-            setShowDeletePostDialog(false);
-            setPostToDelete(null);
-            
             // Show success message
             setPostSuccess('Post deleted successfully');
             setTimeout(() => setPostSuccess(''), 3000);
@@ -430,6 +481,37 @@ const AdminDashboard = () => {
             setIsDeletingPost(false);
         }
     };
+
+    // Effect to decrypt posts when they are loaded or updated
+    useEffect(() => {
+        const decryptPosts = async () => {
+            const updatedPosts = [];
+            let hasUpdates = false;
+            
+            for (const post of posts) {
+                if (post && typeof post.content === 'object' && post.content.encrypted) {
+                    try {
+                        const decryptedPost = await decryptPost(post);
+                        updatedPosts.push(decryptedPost);
+                        hasUpdates = true;
+                    } catch (error) {
+                        console.error('Error decrypting post:', error);
+                        updatedPosts.push(post);
+                    }
+                } else {
+                    updatedPosts.push(post);
+                }
+            }
+            
+            if (hasUpdates) {
+                setPosts(updatedPosts);
+            }
+        };
+        
+        if (posts.length > 0) {
+            decryptPosts();
+        }
+    }, [posts.length]);
 
     // --- Authentication Effect ---
     useEffect(() => {
@@ -1441,8 +1523,11 @@ const AdminDashboard = () => {
                                                 }
                                             }
 
+                                            // Encrypt the post content before sending to the backend
+                                            const encryptedContent = encryptContent(postData.content);
+                                            
                                             const postPayload = {
-                                                content: postData.content,
+                                                content: encryptedContent,
                                                 postType: postData.postType,
                                                 orgId: selectedOrg._id,
                                                 isAnonymous: false,
@@ -1700,7 +1785,9 @@ const AdminDashboard = () => {
                                                         </button>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                                                        {post.content}
+                                                        {typeof post.content === 'object' && post.content.encrypted ? 
+                                                            'Decrypting content...' : 
+                                                            (typeof post.content === 'string' ? post.content : JSON.stringify(post.content))}
                                                     </p>
                                                     
                                                     {/* Media Display */}
@@ -2392,10 +2479,13 @@ const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, o
       
       console.log('Posting comment to post:', postId, 'as user:', userEmail, 'with role:', userRole);
       
+      // Encrypt the comment text before sending to the backend
+      const encryptedComment = encryptContent(commentText);
+      
       // The backend will handle setting author and createdByRole from the authenticated user's session
       const response = await api.post(
         `/posts/${postId}/comments`,
-        { text: commentText },
+        { text: encryptedComment },
         {
           headers: {
             'Content-Type': 'application/json',
