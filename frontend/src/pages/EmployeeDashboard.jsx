@@ -1,8 +1,8 @@
 // src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useRef, useMemo, useCallback, Fragment } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { encryptContent, decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
@@ -16,8 +16,6 @@ import {
 } from '../utils/postUtils';
 import {
   UserCircleIcon,
-  SunIcon,
-  MoonIcon,
   ArrowLeftOnRectangleIcon,
   PencilSquareIcon,
   EyeIcon,
@@ -762,9 +760,8 @@ import MediaViewer from '../components/MediaViewer';
 
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
-  const { currentUser, logout } = useAuth();
+  const { currentUser } = useAuth();
   const navigate = useNavigate();
-  const [userData, setUserData] = useState(null);
   const [organization, setOrganization] = useState(null);
   const [organizationId, setOrganizationId] = useState(() => {
     // Try to get organization ID from localStorage first
@@ -772,7 +769,6 @@ const EmployeeDashboard = () => {
     return savedOrgId || null;
   });
   const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
-  const [theme, toggleTheme] = useTheme();
   const [viewMode, setViewMode] = useState('feed'); // 'feed' or 'createPost'
   const [postContent, setPostContent] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
@@ -786,50 +782,8 @@ const EmployeeDashboard = () => {
     url: '',
     type: 'image' // 'image' or 'video'
   });
-  const [showMobileMenu, setShowMobileMenu] = useState(false);
-  const [activeTab, setActiveTab] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [sortBy, setSortBy] = useState('newest');
-  const [showFilters, setShowFilters] = useState(false);
-  const [filters, setFilters] = useState({
-    type: 'all',
-    dateRange: 'all',
-    hasMedia: false
-  });
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [commentContents, setCommentContents] = useState({});
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [showCommentInput, setShowCommentInput] = useState({});
-  const [showReplies, setShowReplies] = useState({});
-  const [editingComment, setEditingComment] = useState(null);
-  const [editingCommentContent, setEditingCommentContent] = useState('');
-  const [showDeleteCommentDialog, setShowDeleteCommentDialog] = useState(false);
-  const [commentToDelete, setCommentToDelete] = useState(null);
-  const [showReactionPicker, setShowReactionPicker] = useState({
-    postId: null,
-    commentId: null,
-    position: { x: 0, y: 0 }
-  });
-  const [showFullPost, setShowFullPost] = useState({});
-  const [showFullContent, setShowFullContent] = useState({});
-  const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(1);
-  const postsPerPage = 10;
-  const postsContainerRef = useRef(null);
-  const [isScrolling, setIsScrolling] = useState(false);
-  const scrollTimeout = useRef(null);
-  const [isInitialLoad, setIsInitialLoad] = useState(true);
-  const [showScrollToTop, setShowScrollToTop] = useState(false);
-  const [lastScrollTop, setLastScrollTop] = useState(0);
-  const [isScrollingUp, setIsScrollingUp] = useState(false);
-  const [showNewPostsNotification, setShowNewPostsNotification] = useState(false);
-  const [newPostsCount, setNewPostsCount] = useState(0);
-  const [lastUpdated, setLastUpdated] = useState(new Date());
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const [showRefreshButton, setShowRefreshButton] = useState(false);
-  const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
   const [isDeletingPost, setIsDeletingPost] = useState(false); // Track post deletion loading state
+  const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
   const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
