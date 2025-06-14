@@ -3,148 +3,21 @@ import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } fr
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { encryptContent, decryptContent } from '../utils/crypto';
-import { SunIcon, MoonIcon, UserCircleIcon } from '@heroicons/react/24/outline';
-
-// --- Theme Hook ---
-const useTheme = () => {
-  const [theme, setThemeState] = useState(() => {
-    if (typeof window === 'undefined') return 'light';
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) return savedTheme;
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
-  });
-
-  useEffect(() => {
-    if (typeof document !== 'undefined') {
-      const root = document.documentElement;
-      if (theme === 'dark') {
-        root.classList.add('dark');
-      } else {
-        root.classList.remove('dark');
-      }
-      localStorage.setItem('theme', theme);
-    }
-  }, [theme]);
-
-  const setTheme = (newTheme) => {
-    if (newTheme === 'light' || newTheme === 'dark') {
-      setThemeState(newTheme);
-    }
-  };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  // Support both object and array destructuring
-  const result = [theme, toggleTheme, setTheme];
-  result.theme = theme;
-  result.toggleTheme = toggleTheme;
-  result.setTheme = setTheme;
-  
-  return result;
-};
-
-// Component to handle async decryption of content with loading and error states
-const DecryptedContent = ({ 
-  content, 
-  children, 
-  loadingComponent = <span className="text-gray-400">Loading...</span>,
-  errorComponent = (error) => (
-    <span className="text-red-500">Error loading content: {error}</span>
-  )
-}) => {
-  const [state, setState] = useState({
-    decrypted: null,
-    isLoading: true,
-    error: null
-  });
-
-  useEffect(() => {
-    let isMounted = true;
-    
-    const decrypt = async () => {
-      if (!isMounted) return;
-      
-      setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      try {
-        // If content is already a string, no need to decrypt
-        if (typeof content === 'string') {
-          if (isMounted) {
-            setState({
-              decrypted: content,
-              isLoading: false,
-              error: null
-            });
-          }
-          return;
-        }
-        
-        // If content is an encrypted object, decrypt it
-        if (content?.iv && content?.content) {
-          const result = await decryptContent(content);
-          if (isMounted) {
-            setState({
-              decrypted: result,
-              isLoading: false,
-              error: null
-            });
-          }
-          return;
-        }
-        
-        // If we get here, the content is in an unexpected format
-        throw new Error('Unsupported content format');
-        
-      } catch (error) {
-        if (isMounted) {
-          console.error('Error decrypting content:', error);
-          setState({
-            decrypted: null,
-            isLoading: false,
-            error: error.message || 'Failed to decrypt content'
-          });
-        }
-      }
-    };
-    
-    // Only attempt to decrypt if we have content
-    if (content !== undefined) {
-      decrypt();
-    } else {
-      setState({
-        decrypted: '',
-        isLoading: false,
-        error: null
-      });
-    }
-    
-    return () => {
-      isMounted = false;
-    };
-  }, [content]);
-  
-  if (state.isLoading) return loadingComponent;
-  if (state.error) return errorComponent(state.error);
-  
-  return children(state.decrypted || '');
-};
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { api } from '../utils/axios';  // Consolidated axios instance
 import { uploadMedia } from '../utils/uploadMedia';
+import { encryptContent } from '../utils/crypto';
+import useTheme from '../hooks/useTheme';
+import ThemeToggle from '../components/ThemeToggle';
+import DecryptedContent from '../components/DecryptedContent';
 import { 
   usePosts, 
   usePostReactions, 
   usePostComments, 
   usePostActions 
 } from '../utils/postUtils';
-import {
+import { 
   UserCircleIcon,
   ArrowLeftOnRectangleIcon,
   PencilSquareIcon,
@@ -175,6 +48,9 @@ import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
+
+// Using the DecryptedContent component from ../components/DecryptedContent
+// All imports are now consolidated at the top
 
 // --- Organization Access Modal Component ---
 const OrgAccessModal = ({ isOpen, onClose }) => {
@@ -259,30 +135,7 @@ const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = 
   );
 };
 
-// --- Theme Toggle Button ---
-const ThemeToggle = () => {
-  const [theme, toggleTheme] = useTheme();
-  
-  return (
-    <button
-      onClick={toggleTheme}
-      className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200"
-      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-    >
-      <AnimatePresence initial={false} mode="wait">
-        <motion.div
-          key={theme === 'dark' ? 'moon' : 'sun'}
-          initial={{ y: -20, opacity: 0, rotate: -90 }}
-          animate={{ y: 0, opacity: 1, rotate: 0 }}
-          exit={{ y: 20, opacity: 0, rotate: 90 }}
-          transition={{ duration: 0.2 }}
-        >
-          {theme === 'dark' ? <SunIcon className="h-6 w-6 text-yellow-400" /> : <MoonIcon className="h-6 w-6 text-blue-500" />}
-        </motion.div>
-      </AnimatePresence>
-    </button>
-  );
-};
+// Using the ThemeToggle component from ../components/ThemeToggle
 
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {

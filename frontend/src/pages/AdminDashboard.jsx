@@ -7,6 +7,7 @@ import { api } from '../utils/axios'; // Consolidated axios instance with auth i
 import { supabase } from '../supabaseClient';
 import Sidebar from '../components/Sidebar';
 import { Bar, Pie } from 'react-chartjs-2';
+import useTheme from '../hooks/useTheme';
 import {
     Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
 } from 'chart.js';
@@ -15,6 +16,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Listbox, Transition, Dialog } from '@headlessui/react';
 import { decryptContent, encryptContent } from '../utils/crypto';
 import { usePosts, usePostReactions, usePostComments, usePostActions } from '../utils/postUtils';
+import useTheme from '../hooks/useTheme'; // Import shared useTheme hook
 import {
     BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
     UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
@@ -30,28 +32,32 @@ import DeletionConfirmation from '../components/DeletionConfirmation';
 // Register Chart.js components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// --- Theme Hook ---
-const useTheme = () => {
-    const [theme, setThemeState] = useState(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) return savedTheme;
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            return 'dark';
+// --- Theme Wrapper Hook ---
+const useThemeWrapper = () => {
+    const { theme, toggleTheme } = useTheme();
+    // Wrap the toggleTheme to maintain compatibility with existing code
+    const setTheme = (newTheme) => {
+        if ((newTheme === 'light' || newTheme === 'dark') && newTheme !== theme) {
+            toggleTheme();
         }
-        return 'light'; // Default light
-    });
-
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (theme === 'dark') { root.classList.add('dark'); }
-        else { root.classList.remove('dark'); }
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const setTheme = (newTheme) => { if (newTheme === 'light' || newTheme === 'dark') setThemeState(newTheme); };
-    const toggleTheme = () => { setTheme(theme === 'light' ? 'dark' : 'light'); };
-    return [theme, toggleTheme, setTheme]; // Expose setTheme for direct setting if needed
+    };
+    return [theme, toggleTheme, setTheme];
 };
+
+// Simple theme toggle button component for the header
+const HeaderThemeToggle = ({ theme, toggleTheme }) => (
+    <button 
+        onClick={toggleTheme}
+        className="p-2 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-800 transition-all duration-200"
+        aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+        {theme === 'dark' ? (
+            <SunIcon className="h-5 w-5 text-yellow-400" />
+        ) : (
+            <MoonIcon className="h-5 w-5 text-blue-500" />
+        )}
+    </button>
+);
 
 
 // --- Reusable Modal Component ---
@@ -124,9 +130,6 @@ const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = 
       </Listbox>
     );
   };
-const ThemeToggle = ({ theme, toggleTheme }) => (
-    <button onClick={toggleTheme} className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}> <AnimatePresence initial={false} mode="wait"> <motion.div key={theme === 'dark' ? 'moon' : 'sun'} initial={{ y: -20, opacity: 0, rotate: -90 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: 20, opacity: 0, rotate: 90 }} transition={{ duration: 0.2 }}> {theme === 'dark' ? ( <SunIcon className="h-6 w-6 text-yellow-400" /> ) : ( <MoonIcon className="h-6 w-6 text-blue-500" /> )} </motion.div> </AnimatePresence> </button>
-);
 
 // --- Main Dashboard Component ---
 const AdminDashboard = () => {
@@ -168,8 +171,18 @@ const AdminDashboard = () => {
     const [verificationParamsInput, setVerificationParamsInput] = useState("");
     const [deleteOrgNameConfirm, setDeleteOrgNameConfirm] = useState("");
     const [deletePasswordConfirm, setDeletePasswordConfirm] = useState("");
-    const [theme, toggleTheme, setTheme] = useTheme();
+    const [theme, toggleTheme, setTheme] = useThemeWrapper();
     const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+    
+    // Apply theme class to the root element
+    useEffect(() => {
+        const root = window.document.documentElement;
+        if (theme === 'dark') {
+            root.classList.add('dark');
+        } else {
+            root.classList.remove('dark');
+        }
+    }, [theme]);
     const [initialOrgSelectedFlag, setInitialOrgSelectedFlag] = useState(false);
     const [viewMode, setViewMode] = useState('dashboard'); // 'dashboard' or 'createPost'
     // Initialize post utilities
@@ -1350,6 +1363,7 @@ const AdminDashboard = () => {
                 onLogout={handleLogout}
                 viewMode={viewMode}
                 isAdmin={true}
+                key={theme} // Force re-render when theme changes
             />
 
             <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
@@ -1372,6 +1386,7 @@ const AdminDashboard = () => {
                         )}
                     </div>
                     <div className="flex items-center space-x-3">
+                        <HeaderThemeToggle theme={theme} toggleTheme={toggleTheme} />
                         <UserCircleIcon className="h-7 w-7 text-gray-400 dark:text-slate-500"/>
                         <span className="text-sm font-medium text-gray-700 dark:text-slate-300 hidden sm:block">{userData?.email}</span>
                     </div>
