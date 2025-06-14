@@ -829,7 +829,9 @@ const EmployeeDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
-  const [selectedPostType, setSelectedPostType] = useState('feedback'); // Default post type
+  const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
+  const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
+  const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
   
   // Use the post utilities
   const {
