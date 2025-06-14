@@ -3,7 +3,6 @@ import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } fr
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
-import { decryptPost } from '../utils/crypto';
 import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import Sidebar from '../components/Sidebar';
