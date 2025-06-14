@@ -4,7 +4,6 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { encryptContent, decryptContent } from '../utils/crypto';
-import { useTheme } from '../context/ThemeContext'; // Assuming you have a ThemeContext
 
 // Component to handle async decryption of content with loading and error states
 const DecryptedContent = ({ 
