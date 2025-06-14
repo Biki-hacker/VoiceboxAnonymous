@@ -7,13 +7,9 @@ import {
   TagIcon, 
   MapPinIcon, 
   BuildingLibraryIcon, 
-  TrashIcon 
-} from '@heroicons/react/24/outline';
-import { 
-  TagIcon, 
-  MapPinIcon, 
-  BuildingLibraryIcon, 
-  TrashIcon 
+  TrashIcon,
+  ChevronUpDownIcon,
+  HomeIcon
 } from '@heroicons/react/24/outline';
 import { encryptContent, decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
