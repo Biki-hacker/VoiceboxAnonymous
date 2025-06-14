@@ -4,6 +4,50 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { encryptContent, decryptContent } from '../utils/crypto';
+import { SunIcon, MoonIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+
+// --- Theme Hook ---
+const useTheme = () => {
+  const [theme, setThemeState] = useState(() => {
+    if (typeof window === 'undefined') return 'light';
+    const savedTheme = localStorage.getItem('theme');
+    if (savedTheme) return savedTheme;
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      return 'dark';
+    }
+    return 'light';
+  });
+
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      const root = document.documentElement;
+      if (theme === 'dark') {
+        root.classList.add('dark');
+      } else {
+        root.classList.remove('dark');
+      }
+      localStorage.setItem('theme', theme);
+    }
+  }, [theme]);
+
+  const setTheme = (newTheme) => {
+    if (newTheme === 'light' || newTheme === 'dark') {
+      setThemeState(newTheme);
+    }
+  };
+
+  const toggleTheme = () => {
+    setTheme(theme === 'light' ? 'dark' : 'light');
+  };
+
+  // Support both object and array destructuring
+  const result = [theme, toggleTheme, setTheme];
+  result.theme = theme;
+  result.toggleTheme = toggleTheme;
+  result.setTheme = setTheme;
+  
+  return result;
+};
 
 // Component to handle async decryption of content with loading and error states
 const DecryptedContent = ({ 
@@ -54,46 +98,40 @@ const DecryptedContent = ({
           return;
         }
         
-        // Fallback for other content types
+        // If we get here, the content is in an unexpected format
+        throw new Error('Unsupported content format');
+        
+      } catch (error) {
         if (isMounted) {
-          setState({
-            decrypted: content || '',
-            isLoading: false,
-            error: null
-          });
-        }
-      } catch (err) {
-        console.error('Failed to decrypt content:', err);
-        if (isMounted) {
+          console.error('Error decrypting content:', error);
           setState({
             decrypted: null,
             isLoading: false,
-            error: err.message || 'Failed to load content'
+            error: error.message || 'Failed to decrypt content'
           });
         }
       }
     };
-
-    decrypt();
+    
+    // Only attempt to decrypt if we have content
+    if (content !== undefined) {
+      decrypt();
+    } else {
+      setState({
+        decrypted: '',
+        isLoading: false,
+        error: null
+      });
+    }
     
     return () => {
       isMounted = false;
     };
   }, [content]);
-
-  // Handle loading state
-  if (state.isLoading) {
-    return loadingComponent;
-  }
   
-  // Handle error state
-  if (state.error) {
-    return typeof errorComponent === 'function' 
-      ? errorComponent(state.error) 
-      : errorComponent;
-  }
+  if (state.isLoading) return loadingComponent;
+  if (state.error) return errorComponent(state.error);
   
-  // Render decrypted content
   return children(state.decrypted || '');
 };
 import { Helmet } from 'react-helmet';
@@ -172,39 +210,7 @@ const OrgAccessModal = ({ isOpen, onClose }) => {
   );
 };
 
-// --- Theme Hook ---
-const useTheme = () => {
-  const [theme, setThemeState] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) return savedTheme;
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
-  });
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const setTheme = (newTheme) => {
-    if (newTheme === 'light' || newTheme === 'dark') {
-      setThemeState(newTheme);
-    }
-  };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  return [theme, toggleTheme];
-};
 
 // --- Custom Select Component ---
 const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => {
@@ -254,25 +260,29 @@ const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = 
 };
 
 // --- Theme Toggle Button ---
-const ThemeToggle = ({ theme, toggleTheme }) => (
-  <button
-    onClick={toggleTheme}
-    className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200"
-    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-  >
-    <AnimatePresence initial={false} mode="wait">
-      <motion.div
-        key={theme === 'dark' ? 'moon' : 'sun'}
-        initial={{ y: -20, opacity: 0, rotate: -90 }}
-        animate={{ y: 0, opacity: 1, rotate: 0 }}
-        exit={{ y: 20, opacity: 0, rotate: 90 }}
-        transition={{ duration: 0.2 }}
-      >
-        {theme === 'dark' ? <SunIcon className="h-6 w-6 text-yellow-400" /> : <MoonIcon className="h-6 w-6 text-blue-500" />}
-      </motion.div>
-    </AnimatePresence>
-  </button>
-);
+const ThemeToggle = () => {
+  const [theme, toggleTheme] = useTheme();
+  
+  return (
+    <button
+      onClick={toggleTheme}
+      className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200"
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      <AnimatePresence initial={false} mode="wait">
+        <motion.div
+          key={theme === 'dark' ? 'moon' : 'sun'}
+          initial={{ y: -20, opacity: 0, rotate: -90 }}
+          animate={{ y: 0, opacity: 1, rotate: 0 }}
+          exit={{ y: 20, opacity: 0, rotate: 90 }}
+          transition={{ duration: 0.2 }}
+        >
+          {theme === 'dark' ? <SunIcon className="h-6 w-6 text-yellow-400" /> : <MoonIcon className="h-6 w-6 text-blue-500" />}
+        </motion.div>
+      </AnimatePresence>
+    </button>
+  );
+};
 
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {
@@ -883,12 +893,13 @@ const EmployeeDashboard = () => {
   const [postSuccess, setPostSuccess] = useState('');
   const [postToDelete, setPostToDelete] = useState(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false); // Track post deletion loading state
+  const [isSubmitting, setIsSubmitting] = useState(false); // Track form submission state
   const [newPost, setNewPost] = useState({
     content: '',
     postType: 'feedback',
     region: '',
     department: '',
-    mediaUrls: []
+    mediaUrls: [] // Store media URLs for the new post
   });
   
   // Filtering State
