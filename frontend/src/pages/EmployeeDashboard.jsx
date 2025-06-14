@@ -2,8 +2,9 @@
 import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { encryptContent, decryptContent } from '../utils/crypto';
+import { useTheme } from '../context/ThemeContext'; // Assuming you have a ThemeContext
 
 // Component to handle async decryption of content with loading and error states
 const DecryptedContent = ({ 
@@ -909,7 +910,9 @@ const EmployeeDashboard = () => {
     
     // Close existing connection if any
     if (ws.current) {
-      ws.current.close();
+      if (ws.current.readyState === WebSocket.OPEN) {
+        ws.current.close();
+      }
       ws.current = null;
     }
 
@@ -925,8 +928,39 @@ const EmployeeDashboard = () => {
       ws.current.onmessage = (event) => {
         try {
           const message = JSON.parse(event.data);
-          // Handle different message types (POST_CREATED, POST_UPDATED, etc.)
-          // Update posts state based on message type
+          console.log('WebSocket message received:', message);
+          
+          // Handle different message types
+          switch (message.type) {
+            case 'POST_CREATED':
+              // Add the new post to the posts list
+              addPost(message.payload);
+              break;
+              
+            case 'POST_UPDATED':
+              // Update the existing post
+              updatePost(message.payload._id, message.payload);
+              break;
+              
+            case 'POST_DELETED':
+              // Remove the deleted post
+              deletePost(message.payload.postId);
+              break;
+              
+            case 'COMMENT_CREATED':
+            case 'COMMENT_UPDATED':
+              // Update the post with the new/updated comment
+              // You'll need to implement this based on your data structure
+              break;
+              
+            case 'REACTION_UPDATED':
+              // Update the post/comment reactions
+              // You'll need to implement this based on your data structure
+              break;
+              
+            default:
+              console.warn('Unknown WebSocket message type:', message.type);
+          }
         } catch (error) {
           console.error('Error processing WebSocket message:', error);
         }
@@ -934,24 +968,94 @@ const EmployeeDashboard = () => {
       
       ws.current.onerror = (error) => {
         console.error('WebSocket error:', error);
+        // Try to reconnect on error
+        ws.current?.close();
       };
       
-      ws.current.onclose = () => {
-        console.log('WebSocket Disconnected');
+      ws.current.onclose = (event) => {
+        console.log('WebSocket Disconnected', event.code, event.reason);
+        // Don't attempt to reconnect if the component is unmounting
+        if (reconnectAttempts.current >= maxReconnectAttempts) return;
+        
         // Attempt to reconnect with exponential backoff
-        if (reconnectAttempts.current < maxReconnectAttempts) {
-          const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
-          reconnectTimeout.current = setTimeout(() => {
+        const timeout = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        console.log(`Attempting to reconnect in ${timeout}ms...`);
+        
+        reconnectTimeout.current = setTimeout(() => {
+          if (reconnectAttempts.current < maxReconnectAttempts) {
             reconnectAttempts.current++;
             connectWebSocket();
-          }, timeout);
-        }
+          }
+        }, timeout);
       };
     } catch (error) {
       console.error('Failed to initialize WebSocket:', error);
+      // Schedule a reconnection attempt
+      if (reconnectAttempts.current < maxReconnectAttempts) {
+        const timeout = 1000; // Start with 1 second delay
+        reconnectTimeout.current = setTimeout(() => {
+          reconnectAttempts.current++;
+          connectWebSocket();
+        }, timeout);
+      }
     }
-  }, [organizationId]);
+  }, [organizationId, addPost, updatePost, deletePost, maxReconnectAttempts]);
   
+  // Update WebSocket message handler to use processWebSocketMessage
+  useEffect(() => {
+    if (!ws.current) return;
+
+    const handleMessage = async (event) => {
+      try {
+        const message = JSON.parse(event.data);
+        const processedMessage = await processWebSocketMessage(message);
+        
+        if (!processedMessage) return;
+        
+        // Handle the processed message
+        const { type, payload } = processedMessage;
+        
+        switch (type) {
+          case 'POST_CREATED':
+            addPost(payload);
+            break;
+            
+          case 'POST_UPDATED':
+            updatePost(payload._id, payload);
+            break;
+            
+          case 'POST_DELETED':
+            deletePost(payload.postId);
+            break;
+            
+          case 'COMMENT_CREATED':
+          case 'COMMENT_UPDATED':
+            // Update the post with the new/updated comment
+            // Implementation depends on your data structure
+            break;
+            
+          case 'REACTION_UPDATED':
+            // Update the post/comment reactions
+            // Implementation depends on your data structure
+            break;
+            
+          default:
+            console.warn('Unhandled WebSocket message type:', type);
+        }
+      } catch (error) {
+        console.error('Error handling WebSocket message:', error);
+      }
+    };
+
+    ws.current.onmessage = handleMessage;
+    
+    return () => {
+      if (ws.current) {
+        ws.current.onmessage = null;
+      }
+    };
+  }, [processWebSocketMessage, addPost, updatePost, deletePost]);
+
   // Initialize WebSocket connection when organizationId is available
   useEffect(() => {
     if (organizationId) {
@@ -1109,28 +1213,60 @@ const EmployeeDashboard = () => {
     }
   };
 
-  // --- Helper function to process and decrypt WebSocket messages ---
+  // --- Media Upload Function ---
+  const uploadMedia = async (file) => {
+    try {
+      const formData = new FormData();
+      formData.append('media', file);
+      
+      const response = await api.post('/upload', formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+      
+      if (response.data?.url) {
+        return response.data.url;
+      }
+      
+      throw new Error('Failed to upload media: No URL returned');
+    } catch (error) {
+      console.error('Error uploading media:', error);
+      throw new Error(error.response?.data?.message || 'Failed to upload media');
+    }
+  };
+
+  // --- Process WebSocket Messages ---
   const processWebSocketMessage = useCallback(async (message) => {
     try {
-      const data = JSON.parse(message.data);
+      let data;
+      try {
+        // Parse the message data if it's a string
+        data = typeof message === 'string' ? JSON.parse(message) : message;
+      } catch (parseError) {
+        console.error('Error parsing WebSocket message:', parseError, message);
+        return null;
+      }
       
       // Skip if not for current organization
-      if (data.organization !== organizationId) return null;
+      if (data.organization && data.organization !== organizationId) {
+        return null;
+      }
 
       // Create a deep copy of the message to avoid mutating the original
       const processedMessage = JSON.parse(JSON.stringify(data));
       
-      // Handle different message types
+      // Process different message types
       switch (processedMessage.type) {
         case 'POST_CREATED':
         case 'POST_UPDATED':
           // Decrypt post content
-          if (processedMessage.payload.post?.content) {
-            processedMessage.payload.post.content = await safeDecrypt(processedMessage.payload.post.content);
+          if (processedMessage.payload?.content) {
+            processedMessage.payload.content = await safeDecrypt(processedMessage.payload.content);
           }
           // Decrypt comments in post if they exist
-          if (Array.isArray(processedMessage.payload.post?.comments)) {
-            for (const comment of processedMessage.payload.post.comments) {
+          if (Array.isArray(processedMessage.payload?.comments)) {
+            for (const comment of processedMessage.payload.comments) {
               if (comment.content) {
                 comment.content = await safeDecrypt(comment.content);
               }
@@ -1140,7 +1276,7 @@ const EmployeeDashboard = () => {
           
         case 'COMMENT_CREATED':
         case 'COMMENT_UPDATED':
-          if (processedMessage.payload.comment?.content) {
+          if (processedMessage.payload?.comment?.content) {
             processedMessage.payload.comment.content = await safeDecrypt(processedMessage.payload.comment.content);
           }
           break;
