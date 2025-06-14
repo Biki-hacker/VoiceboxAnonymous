@@ -829,6 +829,7 @@ const EmployeeDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
+  const [isDeletingPost, setIsDeletingPost] = useState(false); // Track post deletion loading state
   const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
@@ -1590,6 +1591,7 @@ const EmployeeDashboard = () => {
   const confirmDeletePost = async () => {
     if (!postToDelete) return;
     
+    setIsDeletingPost(true);
     try {
       // Use the post utility to delete the post
       await handleDeletePost(postToDelete._id);
@@ -1603,6 +1605,8 @@ const EmployeeDashboard = () => {
     } catch (err) {
       console.error('Error deleting post:', err);
       setPostError(err.response?.data?.message || 'Failed to delete post. Please try again.');
+    } finally {
+      setIsDeletingPost(false);
     }
   };
 
@@ -2200,7 +2204,7 @@ const EmployeeDashboard = () => {
 
       {/* Delete Post Confirmation Dialog */}
       <DeletionConfirmation
-        isOpen={showDeletePostDialog}
+        isOpen={showDeleteDialog}
         onClose={cancelDeletePost}
         title="Delete Post"
         itemType="post"
