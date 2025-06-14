@@ -829,6 +829,7 @@ const EmployeeDashboard = () => {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
   const [isEmailVerified, setIsEmailVerified] = useState(true); // Default to true to avoid UI issues
+  const [selectedPostType, setSelectedPostType] = useState('feedback'); // Default post type
   
   // Use the post utilities
   const {
