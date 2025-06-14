@@ -3,6 +3,18 @@ import React, { useEffect, useState, useRef, useMemo, useCallback, Fragment } fr
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  TagIcon, 
+  MapPinIcon, 
+  BuildingLibraryIcon, 
+  TrashIcon 
+} from '@heroicons/react/24/outline';
+import { 
+  TagIcon, 
+  MapPinIcon, 
+  BuildingLibraryIcon, 
+  TrashIcon 
+} from '@heroicons/react/24/outline';
 import { encryptContent, decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
@@ -833,6 +845,25 @@ const EmployeeDashboard = () => {
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  
+  // Handle post deletion is implemented below in the file
+  
+  // Fetch organization data
+  useEffect(() => {
+    const fetchOrganization = async () => {
+      if (!organizationId) return;
+      
+      try {
+        const response = await api.get(`/api/organizations/${organizationId}`);
+        setOrganization(response.data);
+      } catch (error) {
+        console.error('Error fetching organization data:', error);
+        // Don't show error to user as it's not critical
+      }
+    };
+
+    fetchOrganization();
+  }, [organizationId]);
   
   // Use the post utilities
   const {
@@ -2035,7 +2066,7 @@ const EmployeeDashboard = () => {
               <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-slate-400">
                 <span className="font-medium">Current Organization:</span>
                 <span className="ml-2 px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-200">
-                  {organizationName || 'Loading...'}
+                  {organization?.name || 'Loading...'}
                 </span>
               </div>
             </motion.div>
