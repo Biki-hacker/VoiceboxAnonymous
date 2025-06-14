@@ -6,7 +6,7 @@ const TestimonialOrbit = () => {
   const [angle, setAngle] = useState(0);
   const [activeIndex, setActiveIndex] = useState(0);
   
-  const radius = 210;
+  const radius = 230;
   const autoRotateSpeed = 0.01;
 
   const getTestimonialPosition = (index, currentAngle) => {
