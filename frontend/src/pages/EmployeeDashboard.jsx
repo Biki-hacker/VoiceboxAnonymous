@@ -1947,7 +1947,8 @@ const EmployeeDashboard = () => {
                 ))}
               </div>
             )}
-          </motion.div>
+          </div>
+        </motion.div>
         );
 
       default:
@@ -1987,20 +1988,20 @@ const EmployeeDashboard = () => {
 
   // Generate structured data for the dashboard
   const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "WebApplication",
-    "name": "Employee Dashboard - VoiceBox",
-    "description": "Employee feedback and communication platform for anonymous and transparent workplace feedback.",
-    "applicationCategory": "BusinessApplication",
-    "operatingSystem": "Web",
-    "offers": {
-      "@type": "Offer",
-      "price": "0",
-      "priceCurrency": "USD"
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    'name': 'Employee Dashboard - VoiceBox',
+    'description': 'Employee feedback and communication platform for anonymous and transparent workplace feedback.',
+    'applicationCategory': 'BusinessApplication',
+    'operatingSystem': 'Web',
+    'offers': {
+      '@type': 'Offer',
+      'price': '0',
+      'priceCurrency': 'USD'
     },
-    "publisher": {
-      "@type": "Organization",
-      "name": "VoiceBox"
+    'publisher': {
+      '@type': 'Organization',
+      'name': 'VoiceBox'
     }
   };
 
