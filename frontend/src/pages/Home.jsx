@@ -629,11 +629,11 @@ export default function Home() {
             whileInView={{ opacity: 1, y: 0 }} 
             viewport={{ once: true, amount: 0.2 }} 
             transition={{ duration: 0.7, delay: 0.1 }} 
-            className="text-3xl md:text-4xl font-bold mb-4 md:mb-8 text-center text-white"
+            className="text-3xl md:text-4xl font-bold mb-2 md:mb-4 text-center text-white"
           >
             What Our Users Say
           </motion.h2>
-          <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-16">
+          <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-12">
             <TestimonialOrbit />
           </div>
         </div>
