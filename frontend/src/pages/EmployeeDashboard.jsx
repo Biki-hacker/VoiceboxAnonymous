@@ -3,14 +3,6 @@ import React, { useEffect, useState, useRef, useMemo, useCallback, Fragment } fr
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  TagIcon, 
-  MapPinIcon, 
-  BuildingLibraryIcon, 
-  TrashIcon,
-  ChevronUpDownIcon,
-  HomeIcon
-} from '@heroicons/react/24/outline';
 import { encryptContent, decryptContent } from '../utils/crypto';
 import { Helmet } from 'react-helmet';
 import { Dialog, Transition, Listbox } from '@headlessui/react';
