@@ -1,5 +1,5 @@
 // src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useMemo, useCallback, Fragment } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
