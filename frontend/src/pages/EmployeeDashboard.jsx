@@ -788,6 +788,9 @@ const EmployeeDashboard = () => {
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [loading, setLoading] = useState({ posts: false, create: false });
+  const [error, setError] = useState(null);
+  const ws = useRef(null);
   
   // Handle post deletion is implemented below in the file
   
@@ -819,7 +822,8 @@ const EmployeeDashboard = () => {
     addComment,
     updateComment,
     deleteComment,
-    updateReaction
+    updateReaction,
+    fetchPosts: fetchPostsFromHook
   } = usePosts(organizationId, false);
   
   const { handleReaction, hasReacted } = usePostReactions(
@@ -838,6 +842,14 @@ const EmployeeDashboard = () => {
     handleUpdatePost,
     handleDeletePost
   } = usePostActions(addPost, updatePost, deletePost);
+  
+  // Wrap the fetchPosts function to handle the isEmailVerified check
+  const fetchPosts = useCallback(async () => {
+    if (!isEmailVerified || !organizationId) {
+      return;
+    }
+    await fetchPostsFromHook();
+  }, [fetchPostsFromHook, isEmailVerified, organizationId]);
   
   // Handle post creation
   const submitPost = async () => {
@@ -1241,106 +1253,10 @@ const EmployeeDashboard = () => {
   }, [organizationId]); // Dependencies for the WebSocket effect
 
 
-  // --- Fetch Posts ---
-  const fetchPosts = async () => {
-    // Don't fetch posts if not verified or no organization ID
-    if (!isEmailVerified || !organizationId) {
-      setPosts([]); // Clear any existing posts
-      return;
-    }
-
-    setLoading(prev => ({ ...prev, posts: true }));
-    setError(null);
-
-    try {
-      const storedToken = localStorage.getItem('token');
-      
-      // Ensure organizationId is trimmed before making the API call
-      const trimmedOrgId = organizationId.trim();
-      
-      // Use the correct endpoint format with organization ID as URL parameter
-      const response = await api.get(`/posts/org/${trimmedOrgId}`, {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${storedToken}`
-        }
-      });
-      
-      // Handle successful response
-      let postsData = [];
-      
-      // Handle different response formats
-      if (Array.isArray(response.data)) {
-        postsData = response.data;
-      } else if (response.data && Array.isArray(response.data.posts)) {
-        postsData = response.data.posts;
-      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        postsData = response.data.data;
-      } else {
-        console.warn('Unexpected response format, using empty array');
-      }
-
-      // Process and decrypt post and comment content
-      const processPost = async (post) => {
-        const processedPost = { ...post };
-        
-        // Decrypt post content if needed
-        if (processedPost.content) {
-          processedPost.content = await safeDecrypt(processedPost.content);
-        }
-        
-        // Decrypt comments if they exist
-        if (Array.isArray(processedPost.comments)) {
-          for (const comment of processedPost.comments) {
-            if (comment.content) {
-              comment.content = await safeDecrypt(comment.content);
-            }
-          }
-        }
-        
-        return processedPost;
-      };
-      
-      // Process all posts and their comments
-      const processedPosts = await Promise.all(postsData.map(processPost));
-      
-      // Sort posts by creation date (newest first)
-      const sortedPosts = processedPosts.sort(
-        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-      
-      setPosts(sortedPosts);
-      
-    } catch (err) {
-      console.error('Error fetching posts:', {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        config: {
-          url: err.config?.url,
-          method: err.config?.method,
-          headers: err.config?.headers
-        }
-      });
-      
-      // Set a more user-friendly error message
-      let errorMessage = 'Failed to fetch posts. Please try again later.';
-      if (err.response) {
-        if (err.response.status === 401) {
-          errorMessage = 'Session expired. Please sign in again.';
-          // Optionally redirect to login
-          navigate('/signin');
-        } else if (err.response.data?.message) {
-          errorMessage = err.response.data.message;
-        }
-      }
-      
-      setError(errorMessage);
-      setPosts([]); // Ensure posts is always an array
-    } finally {
-      setLoading(prev => ({ ...prev, posts: false }));
-    }
-  };
+  // Fetch posts when organizationId or isEmailVerified changes
+  useEffect(() => {
+    fetchPosts();
+  }, [fetchPosts]);
 
   // --- Handle File Upload ---
   const handleFileUpload = async (e) => {
