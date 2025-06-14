@@ -3,6 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } fr
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
+import { decryptPost } from '../utils/crypto';
 import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
 import { supabase } from '../supabaseClient';
 import Sidebar from '../components/Sidebar';
@@ -489,14 +490,17 @@ const AdminDashboard = () => {
             let hasUpdates = false;
             
             for (const post of posts) {
-                if (post && typeof post.content === 'object' && post.content.encrypted) {
+                if (post && typeof post.content === 'object' && 'iv' in post.content) {
                     try {
                         const decryptedPost = await decryptPost(post);
                         updatedPosts.push(decryptedPost);
                         hasUpdates = true;
                     } catch (error) {
                         console.error('Error decrypting post:', error);
-                        updatedPosts.push(post);
+                        updatedPosts.push({
+                            ...post,
+                            content: 'Error: Could not decrypt content'
+                        });
                     }
                 } else {
                     updatedPosts.push(post);
@@ -1785,9 +1789,11 @@ const AdminDashboard = () => {
                                                         </button>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                                                        {typeof post.content === 'object' && post.content.encrypted ? 
-                                                            'Decrypting content...' : 
-                                                            (typeof post.content === 'string' ? post.content : JSON.stringify(post.content))}
+                                                        {post.content === 'Error: Could not decrypt content' ? (
+                                                            <span className="text-red-500">{post.content}</span>
+                                                        ) : (
+                                                            typeof post.content === 'string' ? post.content : 'Loading content...'
+                                                        )}
                                                     </p>
                                                     
                                                     {/* Media Display */}
