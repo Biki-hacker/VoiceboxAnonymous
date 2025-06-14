@@ -184,52 +184,94 @@ const ThemeToggle = ({ theme, toggleTheme }) => (
 // --- Reaction Button Component ---
 const ReactionButton = ({ type, count, postId, commentId = null }) => {
   const [isReacted, setIsReacted] = useState(false);
-  const [currentCount, setCurrentCount] = useState(count || 0);
+  const [currentCount, setCurrentCount] = useState(count);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
   const orgId = localStorage.getItem('orgId');
 
-  // Update local state when count prop changes
+  // Helper function to build the API endpoint
+  const buildEndpoint = (basePath, includeOrgId = true) => {
+    if (includeOrgId && orgId) {
+      return commentId 
+        ? `${basePath}/org/${orgId}/${postId}/comments/${commentId}/reactions`
+        : `${basePath}/org/${orgId}/${postId}/reactions`;
+    }
+    return commentId 
+      ? `${basePath}/${postId}/comments/${commentId}/reactions`
+      : `${basePath}/${postId}/reactions`;
+  };
+
+  // Initialize with passed-in count
   useEffect(() => {
-    setCurrentCount(count || 0);
+    setCurrentCount(count);
   }, [count]);
 
   const handleReaction = async () => {
     if (isLoading) return;
     
+    const wasReacted = isReacted;
+    const newIsReacted = !wasReacted;
+    const storedToken = localStorage.getItem('token');
+    
+    if (!storedToken) {
+      console.error('No authentication token found');
+      return;
+    }
+    
+    // Optimistic UI updates
     setIsLoading(true);
-    setError(null);
+    setIsReacted(newIsReacted);
+    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
     
     try {
-      const storedToken = localStorage.getItem('token');
+      // First try with orgId if available
+      const endpoint = buildEndpoint('/posts', true);
       
-      if (!storedToken) {
-        throw new Error('Authentication required');
-      }
-
-      const endpoint = commentId 
-        ? `/posts/org/${orgId}/posts/${postId}/comments/${commentId}/reactions`
-        : `/posts/org/${orgId}/posts/${postId}/reactions`;
-
-      await api.post(
-        endpoint,
-        { type, action: isReacted ? 'remove' : 'add' },
-        {
-          headers: {
+      const response = await api.post(
+        endpoint, 
+        { type },
+        { 
+          headers: { 
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${storedToken}`
-          }
+            Authorization: `Bearer ${storedToken}` 
+          } 
         }
       );
+      
+      // Update with server response
+      if (response.data?.success && response.data?.reaction) {
+        setIsReacted(response.data.reaction.hasReacted);
+        setCurrentCount(response.data.reaction.count);
+        return;
+      }
+    } catch (error) {
+      // If we have an orgId and got a 404, try without orgId
+      if (orgId && error.response?.status === 404) {
+        try {
+          const fallbackEndpoint = buildEndpoint('/posts', false);
+          const fallbackResponse = await api.post(
+            fallbackEndpoint,
+            { type },
+            { 
+              headers: { 
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${storedToken}` 
+              } 
+            }
+          );
 
-      // Optimistic update
-      setIsReacted(!isReacted);
-      setCurrentCount(prev => isReacted ? Math.max(0, prev - 1) : prev + 1);
-    } catch (err) {
-      console.error('Error updating reaction:', err);
-      setError('Failed to update reaction');
-      // Revert optimistic update on error
-      setCurrentCount(count || 0);
+          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
+            setIsReacted(fallbackResponse.data.reaction.hasReacted);
+            setCurrentCount(fallbackResponse.data.reaction.count);
+            return;
+          }
+        } catch (fallbackError) {
+          console.error('Error updating reaction via fallback endpoint:', fallbackError);
+          throw fallbackError;
+        }
+      } else {
+        console.error('Error updating reaction:', error);
+        throw error;
+      }
     } finally {
       setIsLoading(false);
     }
