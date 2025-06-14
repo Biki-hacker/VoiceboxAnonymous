@@ -832,6 +832,7 @@ const EmployeeDashboard = () => {
   const [selectedPostType, setSelectedPostType] = useState('all'); // Default to show all post types
   const [selectedRegion, setSelectedRegion] = useState('all'); // Default to show all regions
   const [selectedDepartment, setSelectedDepartment] = useState('all'); // Default to show all departments
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   
   // Use the post utilities
   const {
