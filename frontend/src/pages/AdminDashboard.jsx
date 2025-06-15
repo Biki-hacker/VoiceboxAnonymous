@@ -3,7 +3,7 @@ import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } fr
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
-import { api } from '../utils/axios'; // Consolidated axios instance with auth interceptor
+import { api } from '../utils/axios';
 import { supabase } from '../supabaseClient';
 import Sidebar from '../components/Sidebar';
 import { Bar, Pie } from 'react-chartjs-2';
@@ -25,105 +25,35 @@ import {
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
 
+// Import common components and hooks
+import useTheme from '../hooks/useTheme';
+import useWebSocket from '../hooks/useWebSocket';
+import Modal from '../components/common/Modal';
+import CustomSelect from '../components/common/CustomSelect';
+import ThemeToggle from '../components/common/ThemeToggle';
+import CommentSection from '../components/common/CommentSection';
+import ReactionButton from '../components/common/ReactionButton';
+
 // Register Chart.js components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// --- Theme Hook ---
-const useTheme = () => {
-    const [theme, setThemeState] = useState(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) return savedTheme;
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            return 'dark';
-        }
-        return 'light'; // Default light
-    });
-
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (theme === 'dark') { root.classList.add('dark'); }
-        else { root.classList.remove('dark'); }
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const setTheme = (newTheme) => { if (newTheme === 'light' || newTheme === 'dark') setThemeState(newTheme); };
-    const toggleTheme = () => { setTheme(theme === 'light' ? 'dark' : 'light'); };
-    return [theme, toggleTheme, setTheme]; // Expose setTheme for direct setting if needed
-};
-
-
-// --- Reusable Modal Component ---
-const Modal = ({ isOpen, onClose, title, children, size = "max-w-md" }) => {
-    if (!isOpen) return null;
-    return (
-        <Transition.Root show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={onClose}>
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100"
-                    leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"
-                >
-                    <div className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm transition-opacity" />
-                </Transition.Child>
-                <div className="fixed inset-0 z-10 overflow-y-auto">
-                    <div className="flex min-h-full items-center justify-center p-4 text-center sm:items-center">
-                        <Transition.Child
-                            as={Fragment}
-                            enter="ease-out duration-300" enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" enterTo="opacity-100 translate-y-0 sm:scale-100"
-                            leave="ease-in duration-200" leaveFrom="opacity-100 translate-y-0 sm:scale-100" leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                        >
-                            <Dialog.Panel className={`relative transform overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-2xl transition-all sm:my-8 w-full ${size}`}>
-                                <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-slate-700">
-                                    <Dialog.Title as="h3" className="text-lg font-semibold text-gray-900 dark:text-slate-100">{title}</Dialog.Title>
-                                    <button onClick={onClose} className="text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" aria-label="Close modal"><XMarkIcon className="h-6 w-6" /></button>
-                                </div>
-                                <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">{children}</div>
-                            </Dialog.Panel>
-                        </Transition.Child>
-                    </div>
-                </div>
-            </Dialog>
-        </Transition.Root>
-    );
-};
-
 // --- Helper Components ---
 const NothingToShow = ({ message = "Nothing to show" }) => (
-    <div className="text-center py-8 px-4 bg-gray-50 dark:bg-slate-800/50 rounded-lg my-4 border border-gray-200 dark:border-slate-700"> <NoSymbolIcon className="h-10 w-10 text-gray-400 dark:text-slate-500 mx-auto mb-3" /> <p className="text-sm text-gray-500 dark:text-slate-400">{message}</p> </div>
+    <div className="text-center py-8 px-4 bg-gray-50 dark:bg-slate-800/50 rounded-lg my-4 border border-gray-200 dark:border-slate-700"> 
+        <NoSymbolIcon className="h-10 w-10 text-gray-400 dark:text-slate-500 mx-auto mb-3" /> 
+        <p className="text-sm text-gray-500 dark:text-slate-400">{message}</p> 
+    </div>
 );
+
 const DashboardCard = ({ children, className = "" }) => (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden ${className}`}> {children} </motion.div>
-);
-const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => {
-    const selectedOption = options.find(opt => opt.value === value) || (options.length > 0 ? options[0] : {label: 'Select', value: ''});
-    return (
-      <Listbox value={value} onChange={onChange} disabled={disabled}>
-        {({ open }) => (
-          <div className="relative w-full sm:w-40">
-            <Listbox.Label className="flex items-center text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
-              {Icon && <Icon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500" />}
-              {label}
-            </Listbox.Label>
-            <Listbox.Button className={`relative w-full cursor-default rounded-md py-3 pl-3 pr-10 text-left text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <span className="block truncate text-gray-900 dark:text-slate-100">{selectedOption.label || 'Select'}</span>
-              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2"><ChevronUpDownIcon className="h-5 w-5 text-gray-400 dark:text-slate-400" aria-hidden="true" /></span>
-            </Listbox.Button>
-            <Transition show={open} as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
-              <Listbox.Options className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-slate-700 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm custom-scrollbar">
-                {options.map((option) => (
-                  <Listbox.Option key={option.value} className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-slate-100'}`} value={option.value}>
-                    {({ selected }) => (<><span className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}>{option.label}</span>{selected && (<span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600 dark:text-blue-400"><CheckIcon className="h-5 w-5" aria-hidden="true" /></span>)}</>)}
-                  </Listbox.Option>
-                ))}
-              </Listbox.Options>
-            </Transition>
-          </div>
-        )}
-      </Listbox>
-    );
-  };
-const ThemeToggle = ({ theme, toggleTheme }) => (
-    <button onClick={toggleTheme} className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}> <AnimatePresence initial={false} mode="wait"> <motion.div key={theme === 'dark' ? 'moon' : 'sun'} initial={{ y: -20, opacity: 0, rotate: -90 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: 20, opacity: 0, rotate: 90 }} transition={{ duration: 0.2 }}> {theme === 'dark' ? ( <SunIcon className="h-6 w-6 text-yellow-400" /> ) : ( <MoonIcon className="h-6 w-6 text-blue-500" /> )} </motion.div> </AnimatePresence> </button>
+    <motion.div 
+        initial={{ opacity: 0, y: 15 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.3, ease: "easeOut" }} 
+        className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden ${className}`}
+    > 
+        {children} 
+    </motion.div>
 );
 
 // --- Main Dashboard Component ---
@@ -187,178 +117,163 @@ const AdminDashboard = () => {
     const [postToDelete, setPostToDelete] = useState(null);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
     const [deletingComment, setDeletingComment] = useState(null);
-    const ws = useRef(null); // WebSocket reference
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
-    const isMounted = useRef(true); // Track component mount state
-    let reconnectAttempts = 0;
-    let maxReconnectAttempts = 5;
-    let reconnectTimeout = null;
+    
+    // WebSocket message handler
+    const handleWebSocketMessage = useCallback((message) => {
+        console.log('AdminDashboard: WebSocket message received:', message);
+        const currentSelectedOrgId = selectedOrgRef.current?._id;
+        
+        if (!currentSelectedOrgId) {
+            console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
+            return;
+        }
 
-    // Initialize WebSocket connection
-    useEffect(() => {
-        const initializeWebSocket = () => {
-            if (!isMounted.current) return;
+        try {
+            const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
             
-            if (ws.current) {
-                if (ws.current.readyState === WebSocket.OPEN) return;
-                ws.current.close();
-            }
-
-            console.log(`AdminDashboard: Attempting to connect WebSocket to ${WS_URL}`);
-            ws.current = new WebSocket(WS_URL);
-
-            ws.current.onopen = () => {
-                console.log('AdminDashboard: WebSocket connected successfully.');
-                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-            };
-
-            ws.current.onmessage = async (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    console.log('AdminDashboard: WebSocket message received:', message);
-                    const currentSelectedOrgId = selectedOrgRef.current?._id;
-
-                    if (!currentSelectedOrgId) {
-                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
-                        return;
+            switch (parsedMessage.type) {
+                case 'POST_CREATED':
+                    if (parsedMessage.payload.organization === currentSelectedOrgId) {
+                        setPosts(prev => [parsedMessage.payload.post, ...prev]);
                     }
-
-                    switch (message.type) {
-                        case 'POST_CREATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                setPosts(prev => [message.payload.post, ...prev]);
-                            }
-                            break;
-                        case 'POST_UPDATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === message.payload.post._id 
-                                            ? message.payload.post 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'POST_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => prev.filter(p => p._id !== message.payload.postId));
-                            }
-                            break;
-                        case 'COMMENT_CREATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === message.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: [...(p.comments || []), message.payload.comment]
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'COMMENT_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === message.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: p.comments?.map(c => 
-                                                    c._id === message.payload.comment._id 
-                                                        ? message.payload.comment 
-                                                        : c
-                                                ) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'COMMENT_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === message.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                comments: p.comments?.filter(c => c._id !== message.payload.commentId) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        case 'REACTION_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                setPosts(prev => 
-                                    prev.map(p => 
-                                        p._id === message.payload.postId 
-                                            ? { 
-                                                ...p,
-                                                reactions: message.payload.reactionsSummary,
-                                                comments: p.comments?.map(c => 
-                                                    c._id === message.payload.commentId 
-                                                        ? { 
-                                                            ...c,
-                                                            reactions: message.payload.reactionsSummary
-                                                        } 
-                                                        : c
-                                                ) || []
-                                            } 
-                                            : p
-                                    )
-                                );
-                            }
-                            break;
-                        default:
-                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
+                    break;
+                case 'POST_UPDATED':
+                    if (parsedMessage.payload.organization === currentSelectedOrgId) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p._id === parsedMessage.payload.post._id 
+                                    ? parsedMessage.payload.post 
+                                    : p
+                            )
+                        );
                     }
-                } catch (error) {
-                    console.error('AdminDashboard: Failed to process WebSocket message:', error);
-                }
-            };
-
-            ws.current.onerror = (error) => {
-                console.error('AdminDashboard: WebSocket error:', error);
-            };
-
-            ws.current.onclose = (event) => {
-                console.log('AdminDashboard: WebSocket disconnected.', event.code, event.reason);
-                
-                if (!isMounted.current) return;
-                
-                // Attempt to reconnect with exponential backoff
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
-                    console.log(`AdminDashboard: Attempting to reconnect in ${delay}ms...`);
-                    
-                    reconnectTimeout = setTimeout(() => {
-                        reconnectAttempts++;
-                        initializeWebSocket();
-                    }, delay);
-                } else {
-                    console.error('AdminDashboard: Max reconnection attempts reached. Please refresh the page.');
-                }
-            };
-        };
-
-        initializeWebSocket();
-
-        // Cleanup
-        return () => {
-            isMounted.current = false;
-            if (ws.current) {
-                ws.current.close();
+                    break;
+                case 'POST_DELETED':
+                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                        setPosts(prev => prev.filter(p => p._id !== parsedMessage.payload.postId));
+                    }
+                    break;
+                case 'COMMENT_CREATED':
+                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: [...(p.comments || []), parsedMessage.payload.comment]
+                                    } 
+                                    : p
+                            )
+                        );
+                    }
+                    break;
+                case 'COMMENT_UPDATED':
+                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: p.comments?.map(c => 
+                                            c._id === parsedMessage.payload.comment._id 
+                                                ? parsedMessage.payload.comment 
+                                                : c
+                                        ) || []
+                                    } 
+                                    : p
+                            )
+                        );
+                    }
+                    break;
+                case 'COMMENT_DELETED':
+                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: p.comments?.filter(c => c._id !== parsedMessage.payload.commentId) || []
+                                    } 
+                                    : p
+                            )
+                        );
+                    }
+                    break;
+                case 'REACTION_UPDATED':
+                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                        const { entityType, entityId, postId, reactionsSummary } = parsedMessage.payload;
+                        
+                        setPosts(prev => 
+                            prev.map(post => {
+                                if (post._id !== postId) return post;
+                                
+                                if (entityType === 'post') {
+                                    return {
+                                        ...post,
+                                        reactions: reactionsSummary
+                                    };
+                                } else {
+                                    // Handle comment reactions
+                                    return {
+                                        ...post,
+                                        comments: post.comments?.map(comment => 
+                                            comment._id === entityId 
+                                                ? { ...comment, reactions: reactionsSummary }
+                                                : comment
+                                        ) || []
+                                    };
+                                }
+                            })
+                        );
+                    }
+                    break;
+                default:
+                    console.log('AdminDashboard: Unhandled WebSocket message type:', parsedMessage.type);
             }
-            if (reconnectTimeout) {
-                clearTimeout(reconnectTimeout);
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+        }
+    }, [setPosts]);
+
+    // Initialize WebSocket connection using the shared hook
+    const { sendMessage } = useWebSocket(
+        WS_URL,
+        handleWebSocketMessage,
+        () => {
+            console.log('WebSocket connected');
+            // Send authentication message if we have the required data
+            if (authToken && selectedOrg?._id) {
+                return {
+                    type: 'AUTH',
+                    token: authToken,
+                    organizationId: selectedOrg._id,
+                    role: 'admin'
+                };
             }
-        };
-    }, [selectedOrg]);
+            return null;
+        },
+        (error) => {
+            console.error('WebSocket error:', error);
+        },
+        [authToken, selectedOrg?._id]
+    );
+
+    // Update selectedOrgRef when selectedOrg changes
+    useEffect(() => {
+        selectedOrgRef.current = selectedOrg;
+        
+        // Re-authenticate with WebSocket if organization changes
+        if (authToken && selectedOrg?._id) {
+            sendMessage({
+                type: 'AUTH',
+                token: authToken,
+                organizationId: selectedOrg._id,
+                role: 'admin'
+            });
+        }
+    }, [selectedOrg, authToken, sendMessage]);
 
     // --- Post Deletion Handlers ---
     const handleDeletePost = async (postId) => {
