@@ -83,7 +83,7 @@ const AdminDashboard = () => {
     const [loading, setLoading] = useState({ orgList: true, orgDetails: false, modal: false, deleteOrg: {} });
     const [error, setError] = useState({ page: null, modal: null });
     const navigate = useNavigate();
-    const { logout } = useAuth();
+    const { user, logout, authToken } = useAuth();
     const [userData, setUserData] = useState(null);
     const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
     const [isEditParamsModalOpen, setIsEditParamsModalOpen] = useState(false);
@@ -502,7 +502,7 @@ const AdminDashboard = () => {
             // Log completion of organization selection
             console.log(`[selectOrganization] Completed loading for org: ${org?._id || 'none'}`);
         }
-    }, []);
+    }, [setSelectedOrg, setPosts, setStats, setLoading, setError, navigate]);
 
     /**
      * Fetches organizations for the currently authenticated admin user
@@ -614,7 +614,7 @@ const AdminDashboard = () => {
         } finally {
             setLoading(prev => ({ ...prev, orgList: false }));
         }
-    }, [userData, selectedOrg, selectOrganization]);
+    }, [userData, selectedOrg, selectOrganization, navigate]);
 
     // --- Effect to fetch organizations list when userData is available ---
     useEffect(() => {
