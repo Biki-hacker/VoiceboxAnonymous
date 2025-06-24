@@ -12,13 +12,13 @@ import SignIn from './pages/SignIn';
 import SignUp from './pages/SignUp';
 import ForgotPassword from './pages/ForgotPassword';
 import UpdatePassword from './pages/UpdatePassword';
-import EmployeeVerification from './components/EmployeeVerification';
+import EmployeeVerification from './pages/EmployeeVerification';
 import AdminDashboard from './pages/AdminDashboard';
 import EmployeeDashboard from './pages/EmployeeDashboard';
-import PricingPage from './components/PricingPage';
-import Subscriptions from './components/Subscriptions';
+import PricingPage from './pages/PricingPage';
+import Subscriptions from './pages/Subscriptions';
 import ProtectedRoute from './components/ProtectedRoute';
-import TermsPolicy from './components/TermsPolicy';
+import TermsPolicy from './pages/TermsPolicy';
 import AuthCallback from './pages/AuthCallback';
 
 // Component to handle page title and meta updates

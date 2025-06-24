@@ -46,7 +46,7 @@ const FeaturesSection = () => (
         }
       }
     }}
-    className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-6 md:px-12 lg:px-16 py-16 md:py-24 z-10"
+    className="w-full grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 px-6 md:px-12 lg:px-16 py-16 md:py-24 z-10"
     itemScope
     itemType="https://schema.org/ItemList"
   >

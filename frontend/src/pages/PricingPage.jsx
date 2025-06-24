@@ -1,11 +1,9 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { CheckIcon, UserGroupIcon, RocketLaunchIcon, ShieldCheckIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
-import AnimatedText from "./home/AnimatedText";
+import { CheckIcon, UserGroupIcon, RocketLaunchIcon, Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 import vblogo from '../assets/vblogo1.webp';
-import threadsLogo from '../assets/threads-seeklogo.svg';
-import Footer from "./common/Footer";
+import Footer from "../components/common/Footer";
 
 // Menu Button component
 const MenuButton = ({ isOpen, toggle }) => (

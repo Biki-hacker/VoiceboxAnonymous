@@ -36,6 +36,13 @@ const testimonials = [
     role: "Security Lead, BankSecure",
     message: "End-to-end encryption done right. Our security team is impressed.",
     avatar: "https://randomuser.me/api/portraits/women/3.jpg"
+  },
+  {
+    id: 6,
+    name: "Frank",
+    role: "VP Engineering, DataGuard",
+    message: "VoiceBox made secure collaboration effortless for our remote teams.",
+    avatar: "https://randomuser.me/api/portraits/men/3.jpg"
   }
 ];
 

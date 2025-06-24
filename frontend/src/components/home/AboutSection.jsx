@@ -7,7 +7,7 @@ const aboutBenefits = [
   {
     icon: <LockClosedIcon className="w-12 h-12 text-blue-400" />,
     title: "End-to-End Encryption",
-    description: "Your messages and feedback are secured with military-grade encryption"
+    description: "Messages are secured with end-to-end encryption"
   },
   {
     icon: <ShieldCheckIcon className="w-12 h-12 text-blue-400" />,
@@ -43,7 +43,7 @@ const AboutSection = () => (
           }
         }
       }}
-      className="w-full grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 md:gap-8 px-0 sm:px-4"
+      className="w-full grid grid-cols-1 sm:grid-cols-2 gap-6 md:gap-8 px-0 sm:px-4"
     >
       {aboutBenefits.map((benefit, idx) => (
         <motion.div key={idx} variants={{ hidden: { opacity: 0, y: 50 }, visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeOut" } } }}>

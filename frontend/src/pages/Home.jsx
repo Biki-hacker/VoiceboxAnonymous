@@ -276,7 +276,7 @@ export default function Home() {
 
       <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
         <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
-          <div className="text-2xl font-extrabold tracking-widest flex items-center relative">
+          <div className="text-xl font-extrabold tracking-widest flex items-center relative">
             <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-3">
               <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
             </motion.div>
