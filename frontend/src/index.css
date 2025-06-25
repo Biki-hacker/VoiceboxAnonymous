@@ -99,16 +99,16 @@ body {
 
 /* Default hero heading size for Chrome browsers */
 .chrome-hero-text {
-  font-size: 2.25rem;
+  font-size: 2.1rem;
 }
 @media (min-width: 768px) {
   .chrome-hero-text {
-    font-size: 3.15rem;
+    font-size: 3rem;
   }
 }
 @media (min-width: 1024px) {
   .chrome-hero-text {
-    font-size: 4.05rem;
+    font-size: 3.8rem;
   }
 }
 
