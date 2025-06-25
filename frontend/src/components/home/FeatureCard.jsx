@@ -11,7 +11,9 @@ const FeatureCard = ({ icon, title, description, itemScope, itemType, itemProp }
     itemProp={itemProp}
   >
     <StarBorder className="w-full h-full group" color="#38bdf8" speed="5s" thickness={2}>
-      <div className="mb-4 text-white" itemProp="image">{icon}</div>
+      <div className="mb-4 text-white w-full flex items-center justify-center" itemProp="image">
+        <div className="mx-auto">{icon}</div>
+      </div>
       <h3 className="text-xl font-semibold mb-3 bg-gradient-to-r from-blue-400 to-blue-500 text-transparent bg-clip-text" itemProp="name">
         {title}
       </h3>

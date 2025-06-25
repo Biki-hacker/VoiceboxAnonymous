@@ -97,34 +97,34 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Default hero heading size for all browsers */
+/* Default hero heading size for Chrome browsers */
 .chrome-hero-text {
-  font-size: 2.5rem;
+  font-size: 3.15rem;
 }
 @media (min-width: 768px) {
   .chrome-hero-text {
-    font-size: 3.5rem;
+    font-size: 4.2rem;
   }
 }
 @media (min-width: 1024px) {
   .chrome-hero-text {
-    font-size: 4.5rem;
+    font-size: 5.25rem;
   }
 }
 
-/* Chrome-only: smaller hero heading */
-body.chrome-only .chrome-hero-text {
-  font-size: 1.5rem !important;
+/* Non-Chrome browsers: smaller hero heading */
+body:not(.chrome-only) .chrome-hero-text {
+  font-size: 2.1rem !important;
   line-height: 1.1 !important;
 }
 @media (min-width: 768px) {
-  body.chrome-only .chrome-hero-text {
-    font-size: 2.25rem !important;
+  body:not(.chrome-only) .chrome-hero-text {
+    font-size: 2.89rem !important;
   }
 }
 @media (min-width: 1024px) {
-  body.chrome-only .chrome-hero-text {
-    font-size: 3rem !important;
+  body:not(.chrome-only) .chrome-hero-text {
+    font-size: 3.68rem !important;
   }
 }
 
