@@ -209,11 +209,11 @@ postSchema.methods.decryptContent = async function() {
     this.content = await decrypt(this.content);
   }
   
-  // Decrypt comments
+  // Decrypt comments (fix: use 'text' instead of 'content')
   if (this.comments && Array.isArray(this.comments)) {
     for (let comment of this.comments) {
-      if (comment.content && typeof comment.content === 'object' && comment.content.isEncrypted) {
-        comment.content = await decrypt(comment.content);
+      if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+        comment.text = await decrypt(comment.text);
       }
     }
   }

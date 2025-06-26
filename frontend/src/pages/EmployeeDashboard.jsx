@@ -8,7 +8,6 @@ import { Dialog, Transition, Listbox } from '@headlessui/react';
 import { Fragment } from 'react';
 import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
-import { hasReacted, toggleReaction } from '../utils/reactions';
 import {
   UserCircleIcon,
   SunIcon,
@@ -171,7 +170,6 @@ const EmployeeDashboard = () => {
   const [selectedRegion, setSelectedRegion] = useState('all');
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const ws = useRef(null); // WebSocket reference
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
 
   // --- Fetch Organization Details ---
@@ -280,301 +278,173 @@ const EmployeeDashboard = () => {
   }, [navigate]);
 
   // --- WebSocket Effect for Real-time Updates ---
-  useEffect(() => {
-    if (!organizationId) {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        console.log('EmployeeDashboard: No organizationId, closing WebSocket.');
-        ws.current.close();
+  const handleWebSocketMessage = (message) => {
+    try {
+      // message is already parsed by the hook
+      console.log('WebSocket message received:', message);
+      if (!message || !message.type || !message.payload) {
+        console.warn('Invalid WebSocket message format:', message);
+        return;
       }
-      return; // Don't connect if no organizationId
-    }
-
-    if (ws.current && ws.current.readyState !== WebSocket.CLOSED && ws.current.readyState !== WebSocket.CLOSING) {
-        // Initialize WebSocket connection when organizationId is available
-    } else {
-        // Use WebSocket URL from environment variable with fallback
-        const wsUrl = import.meta.env.VITE_WS_URL || 'ws://localhost:5000';
-        console.log(`Connecting to WebSocket at ${wsUrl}`);
-        ws.current = new WebSocket(wsUrl);
-
-        ws.current.onopen = () => {
-            console.log('WebSocket connection established');
-        };
-
-        ws.current.onclose = (event) => {
-            console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-                if (organizationId) {
-                    console.log('Attempting to reconnect WebSocket...');
-                    ws.current = new WebSocket(wsUrl);
+      // Skip if this message is not for the current organization
+      if (message.payload.organizationId && message.payload.organizationId !== organizationId) {
+        console.log(`Ignoring message for different organization: ${message.payload.organizationId}`);
+        return;
+      }
+      // Validate message structure
+      if (!message || typeof message !== 'object') {
+        console.warn('EmployeeDashboard: Invalid message format:', message);
+        return;
+      }
+      if (!message.payload || typeof message.payload !== 'object') {
+        console.warn('EmployeeDashboard: Message missing payload:', message);
+        return;
+      }
+      const orgId = message.payload.organizationId || message.payload.organization;
+      if (!orgId || orgId !== organizationId) {
+        console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
+        return;
+      }
+      switch (message.type) {
+        case 'POST_CREATED':
+          if (!message.payload._id || !message.payload.createdAt) {
+            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          break;
+        case 'POST_UPDATED':
+          if (!message.payload._id) {
+            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => prevPosts.map(p => (p._id === message.payload._id ? { ...p, ...message.payload } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          break;
+        case 'POST_DELETED':
+          if (!message.payload.postId) {
+            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
+          break;
+        case 'COMMENT_CREATED':
+          if (!message.payload.postId || !message.payload.comment?._id) {
+            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => {
+            return prevPosts.map(post => {
+              if (post._id === message.payload.postId) {
+                const commentExists = post.comments?.some(c => c._id === message.payload.comment._id);
+                if (commentExists) {
+                  console.log('Comment already exists, skipping duplicate');
+                  return post;
                 }
-            }, 3000);
-        };
-
-        ws.current.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-
-        ws.current.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                console.log('WebSocket message received:', message);
-
-                // Skip if message is invalid
-                if (!message || !message.type || !message.payload) {
-                    console.warn('Invalid WebSocket message format:', message);
-                    return;
+                return {
+                  ...post,
+                  comments: [message.payload.comment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                  commentCount: (post.commentCount || 0) + 1
+                };
+              }
+              return post;
+            });
+          });
+          break;
+        case 'COMMENT_UPDATED':
+          if (!message.payload.postId || !message.payload.comment?._id) {
+            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => {
+            return prevPosts.map(post => {
+              if (post._id === message.payload.postId) {
+                const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
+                if (!existingComment) {
+                  console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
+                  return post;
                 }
-
-                // Skip if this message is not for the current organization
-                if (message.payload.organizationId && 
-                    message.payload.organizationId !== organizationId) {
-                    console.log(`Ignoring message for different organization: ${message.payload.organizationId}`);
-                    return;
-                }
-
-                // Validate message structure
-                if (!message || typeof message !== 'object') {
-                    console.warn('EmployeeDashboard: Invalid message format:', message);
-                    return;
-                }
-
-
-                // Check if message has a valid payload
-                if (!message.payload || typeof message.payload !== 'object') {
-                    console.warn('EmployeeDashboard: Message missing payload:', message);
-                    return;
-                }
-
-
-                // Skip if message is not for current organization
-                const orgId = message.payload.organizationId || message.payload.organization;
-                if (!orgId || orgId !== organizationId) {
-                    console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
-                    return;
-                }
-
-
-                // Process message based on type
-                switch (message.type) {
-                    case 'POST_CREATED':
-                        if (!message.payload._id || !message.payload.createdAt) {
-                            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => 
-                            [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        );
-                        break;
-
-                    case 'POST_UPDATED':
-                        if (!message.payload._id) {
-                            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts =>
-                            prevPosts.map(p => (p._id === message.payload._id ? {...p, ...message.payload} : p))
-                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        );
-                        break;
-
-                    case 'POST_DELETED':
-                        if (!message.payload.postId) {
-                            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
-                        break;
-                    case 'COMMENT_CREATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    // Check if comment already exists to prevent duplicates
-                                    const commentExists = post.comments?.some(
-                                        c => c._id === message.payload.comment._id
-                                    );
-                                    
-                                    if (commentExists) {
-                                        console.log('Comment already exists, skipping duplicate');
-                                        return post;
-                                    }
-
-                                    return {
-                                        ...post,
-                                        comments: [
-                                            message.payload.comment,
-                                            ...(post.comments || [])
-                                        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-                                        commentCount: (post.commentCount || 0) + 1
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'COMMENT_UPDATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
-                                    if (!existingComment) {
-                                        console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
-                                        return post;
-                                    }
-                                    return {
-                                        ...post,
-                                        comments: (post.comments || [])
-                                            .map(c => c._id === message.payload.comment._id 
-                                                ? { ...c, ...message.payload.comment }
-                                                : c
-                                            )
-                                            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'COMMENT_DELETED':
-                        if (!message.payload.postId || !message.payload.commentId) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    return {
-                                        ...post,
-                                        comments: (post.comments || []).filter(c => c._id !== message.payload.commentId),
-                                        commentCount: Math.max(0, (post.commentCount || 0) - 1)
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'REACTION_UPDATED':
-                        if (!message.payload.entityType || !message.payload.entityId) {
-                            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        
-                        // Use reactions if available, otherwise fall back to reactionsSummary
-                        const reactionsData = message.payload.reactions || message.payload.reactionsSummary;
-                        if (!reactionsData) {
-                            console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
-                            return;
-                        }
-                        
-                        // Get the current user ID for hasReacted check
-                        const currentUserId = user?._id;
-                        
-                        // Process reactions to ensure they have the correct format
-                        const processedReactions = {};
-                        Object.entries(reactionsData).forEach(([reactionType, reaction]) => {
-                            if (!reaction) {
-                                processedReactions[reactionType] = { count: 0, users: [], hasReacted: false };
-                                return;
-                            }
-                            
-                            const userList = Array.isArray(reaction.users) ? 
-                                reaction.users : [];
-                                
-                            processedReactions[reactionType] = {
-                                count: reaction.count || 0,
-                                users: userList,
-                                hasReacted: currentUserId ? 
-                                    userList.some(id => id === currentUserId || id.toString() === currentUserId) : 
-                                    false
-                            };
-                        });
-                        
-                        console.log('Processing REACTION_UPDATED:', {
-                            entityType: message.payload.entityType,
-                            entityId: message.payload.entityId,
-                            postId: message.payload.postId,
-                            reactions: processedReactions
-                        });
-                        
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                // Handle post reactions
-                                if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
-                                    console.log(`Updating reactions for post ${post._id}`);
-                                    return { 
-                                        ...post, 
-                                        reactions: {
-                                            ...post.reactions, // Keep existing reactions
-                                            ...processedReactions // Update with new reaction data
-                                        },
-                                        updatedAt: message.payload.updatedAt || new Date().toISOString()
-                                    };
-                                } 
-                                // Handle comment reactions
-                                else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
-                                    console.log(`Checking comments in post ${post._id} for comment ${message.payload.entityId}`);
-                                    const updatedComments = (post.comments || []).map(comment => {
-                                        if (comment._id === message.payload.entityId) {
-                                            console.log(`Updating reactions for comment ${comment._id}`);
-                                            return { 
-                                                ...comment,
-                                                reactions: {
-                                                    ...comment.reactions, // Keep existing reactions
-                                                    ...processedReactions // Update with new reaction data
-                                                },
-                                                updatedAt: message.payload.updatedAt || new Date().toISOString()
-                                            };
-                                        }
-                                        return comment;
-                                    });
-                                    
-                                    return {
-                                        ...post,
-                                        comments: updatedComments
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-                    default:
-                        console.log('EmployeeDashboard: Unhandled WebSocket message type:', message.type);
-                }
-            } catch (error) {
-                console.error('EmployeeDashboard: Failed to parse WebSocket message or update state:', error);
+                return {
+                  ...post,
+                  comments: (post.comments || []).map(c => c._id === message.payload.comment._id ? { ...c, ...message.payload.comment } : c).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                };
+              }
+              return post;
+            });
+          });
+          break;
+        case 'COMMENT_DELETED':
+          if (!message.payload.postId || !message.payload.commentId) {
+            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', message.payload);
+            return;
+          }
+          setPosts(prevPosts => {
+            return prevPosts.map(post => {
+              if (post._id === message.payload.postId) {
+                return {
+                  ...post,
+                  comments: (post.comments || []).filter(c => c._id !== message.payload.commentId),
+                  commentCount: Math.max(0, (post.commentCount || 0) - 1)
+                };
+              }
+              return post;
+            });
+          });
+          break;
+        case 'REACTION_UPDATED':
+          if (!message.payload.entityType || !message.payload.entityId) {
+            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
+            return;
+          }
+          const reactionsData = message.payload.reactions || message.payload.reactionsSummary;
+          if (!reactionsData) {
+            console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
+            return;
+          }
+          const currentUserId = user?._id;
+          const processedReactions = {};
+          Object.entries(reactionsData).forEach(([reactionType, reaction]) => {
+            if (!reaction) {
+              processedReactions[reactionType] = { count: 0, users: [], hasReacted: false };
+              return;
             }
-        };
-
-        ws.current.onerror = (error) => {
-            console.error('EmployeeDashboard: WebSocket error:', error);
-        };
-
-        ws.current.onclose = (event) => {
-            console.log('EmployeeDashboard: WebSocket disconnected.', event.code, event.reason);
-        };
+            const userList = Array.isArray(reaction.users) ? reaction.users : [];
+            processedReactions[reactionType] = {
+              count: reaction.count || 0,
+              users: userList,
+              hasReacted: currentUserId ? userList.some(id => id === currentUserId || id.toString() === currentUserId) : false
+            };
+          });
+          setPosts(prevPosts => {
+            return prevPosts.map(post => {
+              if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
+                return { ...post, reactions: { ...post.reactions, ...processedReactions }, updatedAt: message.payload.updatedAt || new Date().toISOString() };
+              } else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
+                const updatedComments = (post.comments || []).map(comment => {
+                  if (comment._id === message.payload.entityId) {
+                    return { ...comment, reactions: { ...comment.reactions, ...processedReactions }, updatedAt: message.payload.updatedAt || new Date().toISOString() };
+                  }
+                  return comment;
+                });
+                return { ...post, comments: updatedComments };
+              }
+              return post;
+            });
+          });
+          break;
+        default:
+          console.log('EmployeeDashboard: Unhandled WebSocket message type:', message.type);
+      }
+    } catch (error) {
+      console.error('EmployeeDashboard: Failed to parse WebSocket message or update state:', error);
     }
+  };
 
-    // Cleanup on component unmount or when organizationId changes
-    return () => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            console.log('EmployeeDashboard: Closing WebSocket connection.');
-            ws.current.close();
-        }
-    };
-  }, [organizationId, setPosts]); // Dependencies for the WebSocket effect
-
+  useWebSocket(
+    WS_URL,
+    handleWebSocketMessage,
+    () => { console.log('WebSocket connected'); },
+    (error) => { console.error('WebSocket error:', error); }
+  );
 
   // --- Fetch Posts ---
   const fetchPosts = async () => {
@@ -832,8 +702,6 @@ const EmployeeDashboard = () => {
     localStorage.clear();
     navigate('/signin');
   };
-
-
 
   // --- Handle Comment Submit ---
   // This function is no longer needed as CommentSection handles its own submission

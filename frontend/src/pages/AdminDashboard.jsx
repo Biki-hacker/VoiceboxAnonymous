@@ -120,6 +120,9 @@ const AdminDashboard = () => {
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
     
+    // --- Add media error handling state ---
+    const [mediaErrors, setMediaErrors] = useState({});
+    
     // WebSocket message handler
     const handleWebSocketMessage = useCallback((message) => {
         console.log('AdminDashboard: WebSocket message received:', message);
@@ -278,13 +281,12 @@ const AdminDashboard = () => {
     // --- Post Deletion Handlers ---
     const handleDeletePost = async (postId) => {
         if (!selectedOrg || !postId) return;
-        
+        let isMounted = true;
         try {
             const storedToken = localStorage.getItem('token');
             if (!storedToken) {
                 throw new Error('No authentication token found');
             }
-            
             const response = await api.delete(`/posts/${postId}`, {
                 headers: {
                     'Content-Type': 'application/json',
@@ -292,33 +294,27 @@ const AdminDashboard = () => {
                 },
                 data: { organizationId: selectedOrg._id }
             });
-            
-            // Remove the deleted post from the UI
-            setPosts(prev => prev.filter(p => p._id !== postId));
-            
-            // Close the delete dialog
-            setShowDeletePostDialog(false);
-            setPostToDelete(null);
-            
-            // Show success message
-            setPostSuccess('Post deleted successfully');
-            setTimeout(() => setPostSuccess(''), 3000);
-            
-            // Refresh stats
+            if (isMounted) {
+                setPosts(prev => prev.filter(p => p._id !== postId));
+                setShowDeletePostDialog(false);
+                setPostToDelete(null);
+                setPostSuccess('Post deleted successfully');
+                setTimeout(() => setPostSuccess(''), 3000);
+            }
             if (selectedOrg?._id) {
                 const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-                setStats(statsRes.data);
+                if (isMounted) setStats(statsRes.data);
             }
-            
             return response;
         } catch (error) {
             console.error('Error deleting post:', error);
             const errorMessage = error.response?.data?.message || 'Failed to delete post.';
-            setPostError(errorMessage);
+            if (isMounted) setPostError(errorMessage);
             throw error;
         } finally {
-            setIsDeletingPost(false);
+            if (isMounted) setIsDeletingPost(false);
         }
+        return () => { isMounted = false; };
     };
 
     const confirmDeletePost = (post) => {
@@ -387,226 +383,85 @@ const AdminDashboard = () => {
      */
     const selectOrganization = useCallback(async (org) => {
         if (!org || !org._id) {
-            console.log('[selectOrganization] Clearing organization selection');
             setSelectedOrg(null);
             setPosts([]);
             setStats([]);
             setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
             return;
         }
-
-        console.log(`[selectOrganization] Selecting organization:`, { 
-            id: org._id, 
-            name: org.name,
-            adminId: org.adminId
-        });
-        
-        // Update selected org and reset related state
         setSelectedOrg(org);
-        setLoading(prev => ({ 
-            ...prev, 
-            orgDetails: true, 
-            posts: true, 
-            stats: true 
-        }));
+        setLoading(prev => ({ ...prev, orgDetails: true, posts: true, stats: true }));
         setError(prev => ({ ...prev, page: null }));
         setPosts([]);
         setStats([]);
-
         try {
-            // Fetch posts and stats in parallel
             const [statsRes, postsRes] = await Promise.all([
-                // Fetch stats with error handling
-                api.get(`/posts/stats/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching stats for org ${org._id}:`, err);
-                    return { data: null };
-                }),
-                // Fetch posts with error handling
-                api.get(`/posts/org/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
-                    return { data: [] };
-                })
+                api.get(`/posts/stats/${org._id}`, { validateStatus: status => status < 500 }).catch(() => ({ data: null })),
+                api.get(`/posts/org/${org._id}`, { validateStatus: status => status < 500 }).catch(() => ({ data: [] }))
             ]);
-
-            // Process stats response
-            if (statsRes?.data) {
-                setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
-            } else {
-                setStats([]);
-            }
-
-            // Process posts response
+            setStats(Array.isArray(statsRes?.data) ? statsRes.data : []);
             if (Array.isArray(postsRes?.data)) {
-                const sortedPosts = [...postsRes.data].sort((a, b) => 
-                    new Date(b.createdAt) - new Date(a.createdAt)
-                );
+                const sortedPosts = [...postsRes.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                 setPosts(sortedPosts);
             } else {
                 setPosts([]);
             }
         } catch (err) {
-            console.error(`[selectOrganization] Error fetching data for ${org?.name || 'organization'}:`, {
-                error: err,
-                response: err.response?.data,
-                status: err.response?.status
-            });
-
             let errorMessage = `Failed to load details for ${org?.name || 'the organization'}.`;
-            
-            // Handle different types of errors
             if (err.response) {
-                // Server responded with an error status code
-                if (err.response.status === 401) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                    // Optionally redirect to login
-                    // navigate('/login', { state: { from: 'session-expired' } });
-                } else if (err.response.status === 403) {
-                    errorMessage = 'You do not have permission to view this organization.';
-                } else if (err.response.status === 404) {
-                    // Clear any previous errors if we get a 404 (no posts)
-                    setError(prev => ({ ...prev, page: null }));
-                    return; // Exit early for 404 errors
-                } else if (err.response.data?.message) {
-                    errorMessage = err.response.data.message;
-                }
-            } else if (err.request) {
-                // Request was made but no response received
-                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-            } else if (err.message) {
-                // Other errors (e.g., from throw new Error)
-                errorMessage = err.message;
-            }
-            
-            // Update error state
-            setError(prev => ({
-                ...prev,
-                page: errorMessage
-            }));
-            
-            // Reset states on error
+                if (err.response.status === 401) errorMessage = 'Your session has expired. Please log in again.';
+                else if (err.response.status === 403) errorMessage = 'You do not have permission to view this organization.';
+                else if (err.response.status === 404) { setError(prev => ({ ...prev, page: null })); return; }
+                else if (err.response.data?.message) errorMessage = err.response.data.message;
+            } else if (err.request) errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            else if (err.message) errorMessage = err.message;
+            setError(prev => ({ ...prev, page: errorMessage }));
             setPosts([]);
             setStats([]);
         } finally {
-            // Ensure all loading states are reset
-            setLoading(prev => ({
-                ...prev,
-                orgDetails: false,
-                posts: false,
-                stats: false
-            }));
-            
-            // Log completion of organization selection
-            console.log(`[selectOrganization] Completed loading for org: ${org?._id || 'none'}`);
+            setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
         }
-    }, [setSelectedOrg, setPosts, setStats, setLoading, setError, navigate]);
+    }, [setSelectedOrg, setPosts, setStats, setLoading, setError]);
 
     /**
      * Fetches organizations for the currently authenticated admin user
      * @returns {Promise<void>}
      */
     const fetchOrganizationsList = useCallback(async () => {
-        if (!userData) {
-            console.log('[fetchOrganizationsList] No user data available');
-            return;
-        }
-
-        console.log('[fetchOrganizationsList] Starting to fetch organizations for user:', userData.email);
+        if (!userData) return;
         setLoading(prev => ({ ...prev, orgList: true }));
         setError(prev => ({ ...prev, page: null }));
-
         try {
             const storedToken = localStorage.getItem('token');
             if (!storedToken) {
-                const errorMsg = 'No authentication token found. Please log in again.';
-                console.error('[fetchOrganizationsList]', errorMsg);
-                setError(prev => ({ ...prev, page: errorMsg }));
+                setError(prev => ({ ...prev, page: 'No authentication token found. Please log in again.' }));
                 return;
             }
-
-            console.log('[fetchOrganizationsList] Making API request to /organizations/by-admin');
-            
             const response = await api.get('/organizations/by-admin', {
-                headers: { 
-                    'Authorization': `Bearer ${storedToken}`,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                },
-                validateStatus: status => status < 500 // Don't throw for 4xx errors
+                headers: { 'Authorization': `Bearer ${storedToken}`, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+                validateStatus: status => status < 500
             });
-
-            console.log('[fetchOrganizationsList] API Response:', {
-                status: response.status,
-                data: response.data
-            });
-
-            // Handle different response statuses
-            if (!response.data) {
-                throw new Error('No data received from server');
-            }
-
-            if (!response.data.success) {
-                // Handle API-level errors (e.g., validation errors)
-                const errorMessage = response.data.message || 'Failed to fetch organizations';
-                throw new Error(errorMessage);
-            }
-
-            // Extract organizations from response
+            if (!response.data) throw new Error('No data received from server');
+            if (!response.data.success) throw new Error(response.data.message || 'Failed to fetch organizations');
             const orgs = Array.isArray(response.data.data) ? response.data.data : [];
-            console.log(`[fetchOrganizationsList] Found ${orgs.length} organizations`);
-            
-            // Update state with the organizations
             setOrganizations(orgs);
-
-            // Auto-select first organization if none selected
-            if (!selectedOrg && orgs.length > 0) {
-                console.log('[fetchOrganizationsList] Auto-selecting first organization:', orgs[0]._id);
+            // Only auto-select if not already selected
+            if ((!selectedOrg || !orgs.find(o => o._id === selectedOrg._id)) && orgs.length > 0) {
                 selectOrganization(orgs[0]);
             } else if (orgs.length === 0) {
-                console.log('[fetchOrganizationsList] No organizations found for user');
                 setSelectedOrg(null);
                 setPosts([]);
                 setStats([]);
             }
         } catch (err) {
-            console.error('[fetchOrganizationsList] Error loading organizations:', {
-                error: err,
-                response: err.response?.data,
-                status: err.response?.status
-            });
-            
             let errorMessage = 'Failed to load organizations. Please try again.';
-            
-            // Handle different types of errors
             if (err.response) {
-                // Server responded with an error status code
-                if (err.response.status === 401) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                    // Optionally redirect to login
-                    // navigate('/login', { state: { from: 'session-expired' } });
-                } else if (err.response.status === 403) {
-                    errorMessage = 'You do not have permission to view organizations.';
-                } else if (err.response.data?.message) {
-                    errorMessage = err.response.data.message;
-                }
-            } else if (err.request) {
-                // Request was made but no response received
-                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-            } else if (err.message) {
-                // Other errors (e.g., from throw new Error)
-                errorMessage = err.message;
-            }
-            
-            // Update error state
-            setError(prev => ({
-                ...prev,
-                page: errorMessage
-            }));
-            
-            // Reset states
+                if (err.response.status === 401) errorMessage = 'Your session has expired. Please log in again.';
+                else if (err.response.status === 403) errorMessage = 'You do not have permission to view organizations.';
+                else if (err.response.data?.message) errorMessage = err.response.data.message;
+            } else if (err.request) errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            else if (err.message) errorMessage = err.message;
+            setError(prev => ({ ...prev, page: errorMessage }));
             setOrganizations([]);
             setSelectedOrg(null);
             setPosts([]);
@@ -614,9 +469,9 @@ const AdminDashboard = () => {
         } finally {
             setLoading(prev => ({ ...prev, orgList: false }));
         }
-    }, [userData, selectedOrg, selectOrganization, navigate]);
+    }, [userData, selectedOrg, selectOrganization]);
 
-    // --- Effect to fetch organizations list when userData is available ---
+    // Only call fetchOrganizationsList when userData changes
     useEffect(() => {
         if (userData) {
             fetchOrganizationsList();
@@ -640,165 +495,6 @@ const AdminDashboard = () => {
             throw err;
         }
     }, [api]);
-
-    // --- WebSocket Effect for Real-time Updates ---
-    useEffect(() => {
-        if (!userData) {
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                console.log('AdminDashboard: No user data, closing WebSocket.');
-                ws.current.close();
-            }
-            return; // Don't connect if no user data (not authenticated)
-        }
-
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        let reconnectTimeout;
-        let isMounted = true;
-        
-        // Create a wrapper for refreshOrgStats that checks isMounted
-        const safeRefreshOrgStats = async (orgId) => {
-            if (!isMounted) return Promise.resolve();
-            try {
-                return await refreshOrgStats(orgId);
-            } catch (err) {
-                console.error('Error in safeRefreshOrgStats:', err);
-                return Promise.reject(err);
-            }
-        };
-
-        const connectWebSocket = () => {
-            if (!isMounted) return;
-            
-            if (ws.current) {
-                if (ws.current.readyState === WebSocket.OPEN) return;
-                ws.current.close();
-            }
-
-            console.log(`AdminDashboard: Attempting to connect WebSocket to ${WS_URL}`);
-            ws.current = new WebSocket(WS_URL);
-
-            ws.current.onopen = () => {
-                console.log('AdminDashboard: WebSocket connected successfully.');
-                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-            };
-
-            ws.current.onmessage = async (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    console.log('AdminDashboard: WebSocket message received:', message);
-                    const currentSelectedOrgId = selectedOrgRef.current?._id;
-
-                    if (!currentSelectedOrgId) {
-                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
-                        return;
-                    }
-
-                    switch (message.type) {
-                        case 'POST_CREATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_CREATED event for current org', message.payload);
-                                setPosts(prevPosts =>
-                                    [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                );
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'POST_UPDATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_UPDATED event for current org', message.payload);
-                                setPosts(prevPosts =>
-                                    prevPosts.map(p => (p._id === message.payload._id ? message.payload : p))
-                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                );
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'POST_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_DELETED event for current org', message.payload);
-                                setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'COMMENT_CREATED':
-                        case 'COMMENT_UPDATED':
-                        case 'COMMENT_DELETED':
-                        case 'REACTION_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                console.log(`AdminDashboard: ${message.type} event for current org, refreshing stats and potentially specific post.`);
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                                
-                                if (message.payload.postId) {
-                                    setPosts(prevPosts => prevPosts.map(p => {
-                                        if (p._id === message.payload.postId) {
-                                            let updatedPost = { ...p };
-                                            if (message.type === 'COMMENT_CREATED') {
-                                                updatedPost.commentCount = (updatedPost.commentCount || 0) + 1;
-                                            } else if (message.type === 'COMMENT_DELETED') {
-                                                updatedPost.commentCount = Math.max(0, (updatedPost.commentCount || 0) - 1);
-                                            }
-                                            return updatedPost;
-                                        }
-                                        return p;
-                                    }));
-                                }
-                            }
-                            break;
-                        default:
-                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
-                    }
-                } catch (error) {
-                    console.error('AdminDashboard: Failed to process WebSocket message:', error);
-                }
-            };
-
-            ws.current.onerror = (error) => {
-                console.error('AdminDashboard: WebSocket error:', error);
-            };
-
-            ws.current.onclose = (event) => {
-                console.log('AdminDashboard: WebSocket disconnected.', event.code, event.reason);
-                
-                if (!isMounted) return;
-                
-                // Attempt to reconnect with exponential backoff
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
-                    console.log(`AdminDashboard: Attempting to reconnect in ${delay}ms...`);
-                    
-                    reconnectTimeout = setTimeout(() => {
-                        reconnectAttempts++;
-                        connectWebSocket();
-                    }, delay);
-                } else {
-                    console.error('AdminDashboard: Max reconnection attempts reached. Please refresh the page.');
-                }
-            };
-        };
-
-        // Initial connection
-        connectWebSocket();
-
-        // Cleanup on component unmount or when userData changes
-        return () => {
-            isMounted = false;
-            clearTimeout(reconnectTimeout);
-            
-            if (ws.current) {
-                ws.current.onopen = null;
-                ws.current.onmessage = null;
-                ws.current.onerror = null;
-                ws.current.onclose = null;
-                
-                if (ws.current.readyState === WebSocket.OPEN) {
-                    console.log('AdminDashboard: Closing WebSocket connection due to unmount or userData change.');
-                    ws.current.close();
-                }
-            }
-        };
-    }, [userData, refreshOrgStats]); // Dependencies for the WebSocket effect
-
 
     // --- Effect to handle auto-selection of an organization ---
     useEffect(() => {
@@ -1443,7 +1139,7 @@ const AdminDashboard = () => {
                                 <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5 flex items-center">
     ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded mx-1">{selectedOrg._id}</code>
     <button 
-        onClick={() => {
+        onClick={(event) => {
             navigator.clipboard.writeText(selectedOrg._id);
             // Show a tooltip that the ID was copied
             const tooltip = document.createElement('div');
@@ -1622,17 +1318,10 @@ const AdminDashboard = () => {
                                                     {post.mediaUrls && post.mediaUrls.length > 0 && (
                                                         <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                             {post.mediaUrls.map((media, idx) => {
-                                                                // Handle both string and object formats
                                                                 const mediaUrl = typeof media === 'string' ? media : (media.url || media.preview);
                                                                 if (!mediaUrl) return null;
-                                                                
-                                                                // Determine if it's an image or video
-                                                                const isImage = typeof mediaUrl === 'string' && 
-                                                                    mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
-                                                                
-                                                                const isVideo = typeof mediaUrl === 'string' && 
-                                                                    mediaUrl.match(/\.(mp4|webm|ogg)$/i);
-                                                                
+                                                                const isImage = typeof mediaUrl === 'string' && mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
+                                                                const isVideo = typeof mediaUrl === 'string' && mediaUrl.match(/\.(mp4|webm|ogg)$/i);
                                                                 const handleMediaClick = (e) => {
                                                                     e.stopPropagation();
                                                                     setViewingMedia({
@@ -1641,7 +1330,14 @@ const AdminDashboard = () => {
                                                                         type: isImage ? 'image' : 'video'
                                                                     });
                                                                 };
-                                                                
+                                                                // --- Media error fallback ---
+                                                                if (mediaErrors[mediaUrl]) {
+                                                                    return (
+                                                                        <div key={`${post._id}-media-${idx}`} className="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                                                                            <span className="text-gray-500">{isImage ? 'Image not available' : 'Video not available'}</span>
+                                                                        </div>
+                                                                    );
+                                                                }
                                                                 return isImage ? (
                                                                     <div 
                                                                         key={`${post._id}-media-${idx}`} 
@@ -1652,10 +1348,7 @@ const AdminDashboard = () => {
                                                                             src={mediaUrl}
                                                                             alt={`Media ${idx + 1}`}
                                                                             className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
-                                                                            onError={(e) => {
-                                                                                console.error('Error loading image:', mediaUrl);
-                                                                                e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found';
-                                                                            }}
+                                                                            onError={() => setMediaErrors(prev => ({ ...prev, [mediaUrl]: true }))}
                                                                         />
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-200 rounded-lg" />
                                                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1673,14 +1366,7 @@ const AdminDashboard = () => {
                                                                         <video
                                                                             src={mediaUrl}
                                                                             className="w-full h-32 object-cover rounded-lg"
-                                                                            onError={(e) => {
-                                                                                console.error('Error loading video:', mediaUrl);
-                                                                                e.target.parentElement.innerHTML = `
-                                                                                    <div class="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                                                                                        <span class="text-gray-500">Video not available</span>
-                                                                                    </div>
-                                                                                `;
-                                                                            }}
+                                                                            onError={() => setMediaErrors(prev => ({ ...prev, [mediaUrl]: true }))}
                                                                         />
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
                                                                             <div className="bg-black bg-opacity-50 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity">

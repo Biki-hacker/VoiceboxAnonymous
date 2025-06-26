@@ -4,7 +4,7 @@ const useWebSocket = (url, onMessage, onOpen, onClose, onError) => {
   const ws = useRef(null);
   const reconnectAttempts = useRef(0);
   const maxReconnectAttempts = 5;
-  let reconnectTimeout = null;
+  const reconnectTimeout = useRef(null);
 
   const connect = () => {
     if (ws.current) {
@@ -15,30 +15,45 @@ const useWebSocket = (url, onMessage, onOpen, onClose, onError) => {
 
     ws.current.onopen = (event) => {
       reconnectAttempts.current = 0;
-      if (onOpen) onOpen(event);
+      console.log('[WebSocket] Connected');
+      if (typeof onOpen === 'function') onOpen(event);
     };
 
     ws.current.onmessage = (event) => {
-      if (onMessage) onMessage(JSON.parse(event.data));
+      if (typeof onMessage === 'function') onMessage(JSON.parse(event.data));
     };
 
     ws.current.onclose = (event) => {
-      if (onClose) onClose(event);
-      
-      // Attempt to reconnect
-      if (reconnectAttempts.current < maxReconnectAttempts) {
+      console.log('[WebSocket] Closed', event, 'code:', event.code, 'wasClean:', event.wasClean);
+      if (typeof onClose === 'function') onClose(event);
+      if (event.code === 1006 && reconnectAttempts.current < maxReconnectAttempts) {
         reconnectAttempts.current += 1;
-        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000); // Exponential backoff with max 30s
-        
-        reconnectTimeout = setTimeout(() => {
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        console.log(`[WebSocket] Attempting reconnect #${reconnectAttempts.current} in ${delay}ms`);
+        reconnectTimeout.current = setTimeout(() => {
           connect();
         }, delay);
+      } else if (event.code !== 1000 && event.code !== 1005 && reconnectAttempts.current < maxReconnectAttempts) {
+        reconnectAttempts.current += 1;
+        const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+        console.log(`[WebSocket] Attempting reconnect #${reconnectAttempts.current} in ${delay}ms (abnormal code)`);
+        reconnectTimeout.current = setTimeout(() => {
+          connect();
+        }, delay);
+      } else {
+        if (event.code === 1000) {
+          console.log('[WebSocket] Normal closure, no reconnect.');
+        } else if (event.code === 1005) {
+          console.log('[WebSocket] No status received (1005), not reconnecting.');
+        } else {
+          console.log('[WebSocket] Max reconnect attempts reached or not reconnecting for this code.');
+        }
       }
     };
 
     ws.current.onerror = (error) => {
-      console.error('WebSocket error:', error);
-      if (onError) onError(error);
+      console.error('[WebSocket] Error:', error);
+      if (typeof onError === 'function') onError(error);
     };
   };
 
@@ -49,8 +64,8 @@ const useWebSocket = (url, onMessage, onOpen, onClose, onError) => {
       if (ws.current) {
         ws.current.close();
       }
-      if (reconnectTimeout) {
-        clearTimeout(reconnectTimeout);
+      if (reconnectTimeout.current) {
+        clearTimeout(reconnectTimeout.current);
       }
     };
   }, [url]);
