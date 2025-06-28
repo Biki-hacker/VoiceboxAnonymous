@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
-import { HandThumbUpIcon, HeartIcon } from '@heroicons/react/24/outline';
-import { HandThumbUpIcon as HandThumbUpIconSolid, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { 
+  HandThumbUpIcon, 
+  HeartIcon, 
+  FaceSmileIcon, 
+  FaceFrownIcon 
+} from '@heroicons/react/24/outline';
+import { 
+  HandThumbUpIcon as HandThumbUpIconSolid, 
+  HeartIcon as HeartIconSolid,
+  FaceSmileIcon as FaceSmileIconSolid,
+  FaceFrownIcon as FaceFrownIconSolid
+} from '@heroicons/react/24/solid';
 import { api } from '../../utils/axios';
 
 const ReactionButton = ({ 
@@ -22,7 +32,7 @@ const ReactionButton = ({
     const fetchReactionStatus = async () => {
       try {
         setIsLoading(true);
-        const response = await api.get(`/api/posts/${postId}${commentId ? `/comments/${commentId}` : ''}/reactions`);
+        const response = await api.get(`/posts/${postId}${commentId ? `/comments/${commentId}` : ''}/reactions`);
         const reactions = response.data.reactions || [];
         const userReaction = reactions.find(r => r.type === type);
         
@@ -45,8 +55,8 @@ const ReactionButton = ({
       setIsLoading(true);
       
       const endpoint = commentId 
-        ? `/api/posts/${postId}/comments/${commentId}/reactions`
-        : `/api/posts/${postId}/reactions`;
+        ? `/posts/${postId}/comments/${commentId}/reactions`
+        : `/posts/${postId}/reactions`;
       
       if (isReacted) {
         await api.delete(`${endpoint}?type=${type}`);
@@ -92,6 +102,18 @@ const ReactionButton = ({
           <HeartIconSolid {...iconProps} className={`${iconProps.className} text-red-500`} />
         ) : (
           <HeartIcon {...iconProps} />
+        );
+      case 'laugh':
+        return isReacted ? (
+          <FaceSmileIconSolid {...iconProps} className={`${iconProps.className} text-yellow-500`} />
+        ) : (
+          <FaceSmileIcon {...iconProps} />
+        );
+      case 'angry':
+        return isReacted ? (
+          <FaceFrownIconSolid {...iconProps} className={`${iconProps.className} text-orange-500`} />
+        ) : (
+          <FaceFrownIcon {...iconProps} />
         );
       default:
         return null;

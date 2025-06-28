@@ -61,6 +61,7 @@ const decrypt = async (encryptedData, password = ENCRYPTION_KEY) => {
 
 // Middleware to encrypt post/comment content before saving
 const encryptContent = async function(next) {
+  // Encrypt post content
   if (this.isModified('content') && this.content && typeof this.content === 'string') {
     try {
       this.content = await encrypt(this.content);
@@ -68,6 +69,16 @@ const encryptContent = async function(next) {
       return next(error);
     }
   }
+  
+  // Encrypt comment text
+  if (this.isModified('text') && this.text && typeof this.text === 'string') {
+    try {
+      this.text = await encrypt(this.text);
+    } catch (error) {
+      return next(error);
+    }
+  }
+  
   next();
 };
 

@@ -37,9 +37,8 @@ const commentSchema = new mongoose.Schema({
     default: () => new mongoose.Types.ObjectId()
   },
   text: {
-    type: String,
-    required: true,
-    trim: true
+    type: mongoose.Schema.Types.Mixed,
+    required: true
   },
   createdAt: {
     type: Date,
@@ -72,6 +71,8 @@ const commentSchema = new mongoose.Schema({
 
 // Add pre-save middleware to initialize reactions
 commentSchema.pre('save', initializeReactions);
+// Add pre-save middleware to encrypt comment text
+commentSchema.pre('save', encryptContent);
 
 // Add a method to safely add a reaction to a comment
 commentSchema.methods.addReaction = async function(userId, reactionType) {
@@ -133,7 +134,7 @@ const postSchema = new mongoose.Schema(
       required: true
     },
     content: {
-      type: String,
+      type: mongoose.Schema.Types.Mixed,
       required: true
     },
     mediaUrls: {
@@ -185,16 +186,18 @@ postSchema.pre('save', encryptContent);
 postSchema.post('find', async function(docs) {
   if (Array.isArray(docs)) {
     for (let doc of docs) {
-      await doc.decryptContent();
+      if (doc && typeof doc.decryptContent === 'function') {
+        await doc.decryptContent();
+      }
     }
-  } else if (docs) {
+  } else if (docs && typeof docs.decryptContent === 'function') {
     await docs.decryptContent();
   }
   return docs;
 });
 
 postSchema.post('findOne', async function(doc) {
-  if (doc) {
+  if (doc && typeof doc.decryptContent === 'function') {
     await doc.decryptContent();
   }
   return doc;

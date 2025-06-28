@@ -1,10 +1,17 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { XMarkIcon, PaperAirplaneIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import { 
+  XMarkIcon, 
+  PaperAirplaneIcon, 
+  UserCircleIcon,
+  PencilSquareIcon,
+  TrashIcon
+} from '@heroicons/react/24/outline';
 import { formatDistanceToNow } from 'date-fns';
 import { api } from '../../utils/axios';
+import { useAuth } from '../../context/AuthContext';
 import ReactionButton from './ReactionButton';
-import MediaViewer from '../MediaViewer';
+import DeletionConfirmation from '../DeletionConfirmation';
 
 const CommentSection = ({ 
   postId, 
@@ -22,9 +29,8 @@ const CommentSection = ({
   const [editingContent, setEditingContent] = useState('');
   const [deletingComment, setDeletingComment] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [viewingMedia, setViewingMedia] = useState({ isOpen: false, url: '', type: 'image' });
   const commentInputRef = useRef(null);
-  const { currentUser } = useAuth();
+  const { user } = useAuth();
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
@@ -40,11 +46,11 @@ const CommentSection = ({
       
       if (editingComment) {
         // Update existing comment
-        const response = await api.put(`/api/posts/${postId}/comments/${editingComment._id}`, {
-          content: newComment
+        const response = await api.put(`/posts/${postId}/comments/${editingComment._id}`, {
+          text: newComment
         });
         
-        const updatedComment = response.data;
+        const updatedComment = response.data.comment || response.data;
         const updatedComments = comments.map(comment => 
           comment._id === updatedComment._id ? updatedComment : comment
         );
@@ -57,12 +63,11 @@ const CommentSection = ({
         }
       } else {
         // Create new comment
-        const response = await api.post(`/api/posts/${postId}/comments`, {
-          content: newComment,
-          organizationId
+        const response = await api.post(`/posts/${postId}/comments`, {
+          text: newComment
         });
         
-        const newCommentData = response.data;
+        const newCommentData = response.data.comment || response.data;
         const updatedComments = [newCommentData, ...comments];
         
         setComments(updatedComments);
@@ -73,7 +78,9 @@ const CommentSection = ({
       }
       
       setNewComment('');
-      commentInputRef.current.focus();
+      if (commentInputRef.current) {
+        commentInputRef.current.focus();
+      }
     } catch (error) {
       console.error('Error submitting comment:', error);
     } finally {
@@ -83,7 +90,7 @@ const CommentSection = ({
 
   const handleEditComment = (comment) => {
     setEditingComment(comment);
-    setNewComment(comment.content);
+    setNewComment(comment.text || comment.content);
     commentInputRef.current.focus();
   };
 
@@ -93,7 +100,7 @@ const CommentSection = ({
     try {
       setIsDeleting(true);
       
-      await api.delete(`/api/posts/${postId}/comments/${deletingComment._id}`);
+      await api.delete(`/posts/${postId}/comments/${deletingComment._id}`);
       
       const updatedComments = comments.filter(c => c._id !== deletingComment._id);
       setComments(updatedComments);
@@ -109,24 +116,31 @@ const CommentSection = ({
     }
   };
 
-  const handleReactionUpdate = (reactionData) => {
-    const { commentId, type, isReacted, count } = reactionData;
-    
-    setComments(prevComments => 
-      prevComments.map(comment => {
+  const handleReactionUpdate = async (commentId, reactionType, newCount) => {
+    try {
+      await api.post(`/posts/${postId}/comments/${commentId}/reactions`, {
+        reactionType
+      });
+      
+      // Update the comment's reaction count
+      setComments(prev => prev.map(comment => {
         if (comment._id === commentId) {
-          const reactions = { ...comment.reactions };
-          reactions[type] = count;
-          
           return {
             ...comment,
-            reactions,
-            userReaction: isReacted ? type : null
+            reactions: {
+              ...comment.reactions,
+              [reactionType]: {
+                ...comment.reactions?.[reactionType],
+                count: newCount
+              }
+            }
           };
         }
         return comment;
-      })
-    );
+      }));
+    } catch (error) {
+      console.error('Error updating reaction:', error);
+    }
   };
 
   const formatDate = (dateString) => {
@@ -134,7 +148,7 @@ const CommentSection = ({
   };
 
   const isCurrentUserComment = (comment) => {
-    return currentUser && comment.userId === currentUser._id;
+    return user && (comment.author?._id === user._id || comment.author === user._id || comment.userId === user._id);
   };
 
   return (
@@ -193,7 +207,7 @@ const CommentSection = ({
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {comment.userName || 'Anonymous'}
+                        {comment.author?.name || comment.userName || 'Anonymous'}
                       </p>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatDate(comment.createdAt)}
@@ -221,40 +235,10 @@ const CommentSection = ({
                   </div>
                   
                   <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                    {comment.content}
+                    {typeof (comment.text || comment.content) === 'string'
+                      ? (comment.text || comment.content)
+                      : '[Encrypted or invalid comment]'}
                   </p>
-                  
-                  {/* Comment Media */}
-                  {comment.media && comment.media.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {comment.media.map((media, idx) => (
-                        <div 
-                          key={idx} 
-                          className="relative group cursor-pointer"
-                          onClick={() => setViewingMedia({
-                            isOpen: true,
-                            url: media.url,
-                            type: media.type
-                          })}
-                        >
-                          {media.type.startsWith('image/') ? (
-                            <img 
-                              src={media.url} 
-                              alt="Comment media"
-                              className="h-20 w-20 object-cover rounded-md border border-gray-200 dark:border-slate-600"
-                            />
-                          ) : (
-                            <div className="h-20 w-20 bg-gray-100 dark:bg-slate-600 rounded-md flex items-center justify-center">
-                              <DocumentTextIcon className="h-8 w-8 text-gray-400" />
-                            </div>
-                          )}
-                          <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-20 rounded-md transition-all duration-200 flex items-center justify-center">
-                            <ArrowsPointingOutIcon className="h-5 w-5 text-white opacity-0 group-hover:opacity-100" />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
                   
                   {/* Comment Reactions */}
                   <div className="mt-2 flex items-center space-x-2">
@@ -263,7 +247,6 @@ const CommentSection = ({
                       count={comment.reactions?.like || 0}
                       postId={postId}
                       commentId={comment._id}
-                      organizationId={organizationId}
                       onReactionUpdate={handleReactionUpdate}
                       size="sm"
                     />
@@ -272,7 +255,22 @@ const CommentSection = ({
                       count={comment.reactions?.love || 0}
                       postId={postId}
                       commentId={comment._id}
-                      organizationId={organizationId}
+                      onReactionUpdate={handleReactionUpdate}
+                      size="sm"
+                    />
+                    <ReactionButton
+                      type="laugh"
+                      count={comment.reactions?.laugh || 0}
+                      postId={postId}
+                      commentId={comment._id}
+                      onReactionUpdate={handleReactionUpdate}
+                      size="sm"
+                    />
+                    <ReactionButton
+                      type="angry"
+                      count={comment.reactions?.angry || 0}
+                      postId={postId}
+                      commentId={comment._id}
                       onReactionUpdate={handleReactionUpdate}
                       size="sm"
                     />
@@ -299,14 +297,6 @@ const CommentSection = ({
         description="Are you sure you want to delete this comment? This action cannot be undone."
         confirmText="Delete"
         isDeleting={isDeleting}
-      />
-      
-      {/* Media Viewer Modal */}
-      <MediaViewer
-        isOpen={viewingMedia.isOpen}
-        onClose={() => setViewingMedia({ ...viewingMedia, isOpen: false })}
-        url={viewingMedia.url}
-        type={viewingMedia.type}
       />
     </div>
   );

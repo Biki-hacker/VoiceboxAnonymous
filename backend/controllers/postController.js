@@ -370,6 +370,23 @@ exports.commentOnPost = async (req, res) => {
         throw new Error('Failed to retrieve the updated post');
       }
 
+      // Manually decrypt content since we're using .lean()
+      const { decrypt } = require('../utils/cryptoUtils');
+      
+      // Decrypt post content
+      if (populatedPost.content && typeof populatedPost.content === 'object' && populatedPost.content.isEncrypted) {
+        populatedPost.content = await decrypt(populatedPost.content);
+      }
+      
+      // Decrypt comments
+      if (populatedPost.comments && Array.isArray(populatedPost.comments)) {
+        for (let comment of populatedPost.comments) {
+          if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+            comment.text = await decrypt(comment.text);
+          }
+        }
+      }
+
       // Ensure we have comments array
       if (!Array.isArray(populatedPost.comments)) {
         populatedPost.comments = [];
@@ -1046,12 +1063,14 @@ exports.editComment = async (req, res) => {
     }
 
     // Decrypt the comment text for the response
-    const decryptedComment = await decryptContent(comment.toObject());
-    
+    const commentObj = comment.toObject();
+    if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+      commentObj.text = await decrypt(commentObj.text);
+    }
     res.status(200).json({ 
       message: 'Comment updated successfully', 
       post: post.toObject(), 
-      comment: decryptedComment 
+      comment: commentObj 
     });
   } catch (err) {
     console.error('Edit comment error:', err);
