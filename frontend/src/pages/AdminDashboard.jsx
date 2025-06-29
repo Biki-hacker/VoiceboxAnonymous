@@ -81,6 +81,7 @@ const AdminDashboard = () => {
     const [selectedType, setSelectedType] = useState('all');
     const [selectedRegion, setSelectedRegion] = useState('all');
     const [selectedDepartment, setSelectedDepartment] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState({ orgList: true, orgDetails: false, modal: false, deleteOrg: {} });
     const [error, setError] = useState({ page: null, modal: null });
     const navigate = useNavigate();
@@ -587,7 +588,12 @@ const AdminDashboard = () => {
 
 
     // --- Memoized Data for Filters and Charts ---
-    const filteredPosts = useMemo(() => posts.filter(post => (selectedType === 'all' || post.postType === selectedType) && (selectedRegion === 'all' || post.region === selectedRegion) && (selectedDepartment === 'all' || post.department === selectedDepartment)), [posts, selectedType, selectedRegion, selectedDepartment]);
+    const filteredPosts = useMemo(() => posts.filter(post => 
+        (selectedType === 'all' || post.postType === selectedType) && 
+        (selectedRegion === 'all' || post.region === selectedRegion) && 
+        (selectedDepartment === 'all' || post.department === selectedDepartment) &&
+        (searchQuery === '' || post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+    ), [posts, selectedType, selectedRegion, selectedDepartment, searchQuery]);
     const uniqueRegions = useMemo(() => [...new Set(posts.map(p => p.region).filter(Boolean))], [posts]);
     const uniqueDepartments = useMemo(() => [...new Set(posts.map(p => p.department).filter(Boolean))], [posts]);
     const typeOptions = [ { value: 'all', label: 'All Types' }, { value: 'feedback', label: 'Feedback' }, { value: 'complaint', label: 'Complaint' }, { value: 'suggestion', label: 'Suggestion' }, { value: 'public', label: 'Public' } ];
@@ -1300,7 +1306,19 @@ const AdminDashboard = () => {
                                     <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
                                     
                                     <div className="mb-6 bg-gray-50 dark:bg-slate-800/50 p-3 sm:p-4 rounded-md border border-gray-200 dark:border-slate-700">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
+                                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    placeholder="Search posts..."
+                                                    value={searchQuery}
+                                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                                    className="w-full px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                                />
+                                                <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                                                </svg>
+                                            </div>
                                             <CustomSelect 
                                                 label="Type" 
                                                 value={selectedType} 
@@ -1324,6 +1342,11 @@ const AdminDashboard = () => {
                                             />
                                         </div>
                                     </div>
+                                    {posts.length > 0 && (
+                                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
+                                            Showing {filteredPosts.length} of {posts.length} posts
+                                        </p>
+                                    )}
                                     {loading.orgDetails ? (
                                         <div className="text-center py-10">
                                             <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -980,21 +980,22 @@ const EmployeeDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
-            <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
-              <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
-                <div className="relative">
+            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
+              <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Search */}
+                <div className="relative w-full sm:w-64">
                   <input
                     type="text"
                     placeholder="Search posts..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full sm:w-64 px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    className="w-full px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                   <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
                   </svg>
                 </div>
+                {/* Type */}
                 <CustomSelect 
                   label="Type" 
                   value={selectedPostType} 
@@ -1008,6 +1009,7 @@ const EmployeeDashboard = () => {
                   ]} 
                   icon={TagIcon} 
                 />
+                {/* Region */}
                 <CustomSelect 
                   label="Region" 
                   value={selectedRegion} 
@@ -1021,6 +1023,7 @@ const EmployeeDashboard = () => {
                   ]} 
                   icon={MapPinIcon}
                 />
+                {/* Department */}
                 <CustomSelect 
                   label="Department" 
                   value={selectedDepartment} 
@@ -1034,26 +1037,28 @@ const EmployeeDashboard = () => {
                   ]} 
                   icon={BuildingLibraryIcon}
                 />
-                <button
-                  onClick={fetchPosts}
-                  disabled={loading.posts}
-                  className="px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                >
-                  {loading.posts ? (
-                    <div className="flex items-center">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></div>
-                      Refreshing...
-                    </div>
-                  ) : (
-                    <div className="flex items-center">
-                      <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
-                      Refresh
-                    </div>
-                  )}
-                </button>
               </div>
+              {/* Refresh Button */}
+              <button
+                onClick={fetchPosts}
+                disabled={loading.posts}
+                className="flex-shrink-0 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                style={{ minWidth: 110 }}
+              >
+                {loading.posts ? (
+                  <span className="flex items-center">
+                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></span>
+                    Refreshing...
+                  </span>
+                ) : (
+                  <span className="flex items-center">
+                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Refresh
+                  </span>
+                )}
+              </button>
             </div>
             {error && (
               <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
