@@ -34,6 +34,8 @@ import useWebSocket from '../hooks/useWebSocket';
 import CustomSelect from '../components/common/CustomSelect';
 import CommentSection from '../components/common/CommentSection';
 import ReactionButton from '../components/common/ReactionButton';
+import { decryptContent, decryptPost } from '../utils/crypto';
+
 // --- Organization Access Modal Component ---
 const OrgAccessModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;
@@ -275,7 +277,7 @@ const EmployeeDashboard = () => {
   }, [isEmailVerified, organizationId, viewMode]);
 
   // --- WebSocket Effect for Real-time Updates ---
-  const handleWebSocketMessage = useCallback((message) => {
+  const handleWebSocketMessage = useCallback(async (message) => {
     try {
       // message is already parsed by the hook
       console.log('WebSocket message received:', message);
@@ -308,16 +310,20 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
             return;
           }
-          setPosts(prevPosts => [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          // Decrypt the post content before adding to state
+          const decryptedPost = await decryptPost(message.payload);
+          setPosts(prevPosts => [decryptedPost, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           break;
         case 'POST_UPDATED':
           if (!message.payload._id) {
             console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
             return;
           }
-          setPosts(prevPosts => prevPosts.map(p => (p._id === message.payload._id ? { 
+          // Decrypt the post content before updating state
+          const decryptedUpdatedPost = await decryptPost(message.payload);
+          setPosts(prevPosts => prevPosts.map(p => (p._id === decryptedUpdatedPost._id ? { 
             ...p, 
-            ...message.payload,
+            ...decryptedUpdatedPost,
             comments: p.comments || [] // Preserve existing decrypted comments
           } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           break;
@@ -334,6 +340,22 @@ const EmployeeDashboard = () => {
             return;
           }
           console.log('EmployeeDashboard: Processing COMMENT_CREATED for post:', message.payload.postId, 'comment:', message.payload.comment._id);
+          
+          // Decrypt the comment text if it's encrypted
+          let decryptedComment = message.payload.comment;
+          if (message.payload.comment.text && typeof message.payload.comment.text === 'object' && message.payload.comment.text.isEncrypted) {
+            try {
+              const decryptedText = await decryptContent(message.payload.comment.text);
+              decryptedComment = {
+                ...message.payload.comment,
+                text: decryptedText
+              };
+            } catch (decryptError) {
+              console.error('Error decrypting comment text:', decryptError);
+              decryptedComment = message.payload.comment;
+            }
+          }
+          
           setPosts(prevPosts => {
             // Check if the post exists in the current list
             const postExists = prevPosts.some(post => post._id === message.payload.postId);
@@ -342,7 +364,7 @@ const EmployeeDashboard = () => {
               // Update existing post with new comment
               return prevPosts.map(post => {
                 if (post._id === message.payload.postId) {
-                  const commentExists = post.comments?.some(c => c._id === message.payload.comment._id);
+                  const commentExists = post.comments?.some(c => c._id === decryptedComment._id);
                   if (commentExists) {
                     console.log('Comment already exists, skipping duplicate');
                     return post;
@@ -350,8 +372,8 @@ const EmployeeDashboard = () => {
                   console.log('Adding comment to existing post');
                   // Check if we already have a comment with the same text (local comment)
                   const hasLocalComment = post.comments?.some(c => 
-                    c.text === message.payload.comment.text || 
-                    c.content === message.payload.comment.text
+                    c.text === decryptedComment.text || 
+                    c.content === decryptedComment.text
                   );
                   if (hasLocalComment) {
                     console.log('Local comment already exists, skipping WebSocket comment');
@@ -359,7 +381,7 @@ const EmployeeDashboard = () => {
                   }
                   return {
                     ...post,
-                    comments: [message.payload.comment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                    comments: [decryptedComment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
                     commentCount: (post.commentCount || 0) + 1
                   };
                 }
@@ -371,14 +393,14 @@ const EmployeeDashboard = () => {
               console.log('Creating new post with comment');
               const newPost = {
                 _id: message.payload.postId,
-                comments: [message.payload.comment],
+                comments: [decryptedComment],
                 commentCount: 1,
-                createdAt: message.payload.comment.createdAt || new Date().toISOString(),
+                createdAt: decryptedComment.createdAt || new Date().toISOString(),
                 // Add other required fields with defaults
                 content: '[Post not loaded]',
                 postType: 'feedback',
-                author: message.payload.comment.author,
-                createdByRole: message.payload.comment.createdByRole || 'user'
+                author: decryptedComment.author,
+                createdByRole: decryptedComment.createdByRole || 'user'
               };
               return [newPost, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
             }
@@ -389,17 +411,33 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
             return;
           }
+          
+          // Decrypt the comment text if it's encrypted
+          let decryptedUpdatedComment = message.payload.comment;
+          if (message.payload.comment.text && typeof message.payload.comment.text === 'object' && message.payload.comment.text.isEncrypted) {
+            try {
+              const decryptedText = await decryptContent(message.payload.comment.text);
+              decryptedUpdatedComment = {
+                ...message.payload.comment,
+                text: decryptedText
+              };
+            } catch (decryptError) {
+              console.error('Error decrypting updated comment text:', decryptError);
+              decryptedUpdatedComment = message.payload.comment;
+            }
+          }
+          
           setPosts(prevPosts => {
             return prevPosts.map(post => {
               if (post._id === message.payload.postId) {
-                const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
+                const existingComment = post.comments?.find(c => c._id === decryptedUpdatedComment._id);
                 if (!existingComment) {
-                  console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
+                  console.warn('EmployeeDashboard: Comment not found for update:', decryptedUpdatedComment._id);
                   return post;
                 }
                 return {
                   ...post,
-                  comments: (post.comments || []).map(c => c._id === message.payload.comment._id ? { ...c, ...message.payload.comment } : c).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+                  comments: (post.comments || []).map(c => c._id === decryptedUpdatedComment._id ? { ...c, ...decryptedUpdatedComment } : c).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
                 };
               }
               return post;
