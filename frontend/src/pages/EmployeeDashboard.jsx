@@ -35,8 +35,7 @@ import {
   BuildingLibraryIcon,
   HomeIcon,
   DocumentTextIcon,
-  NoSymbolIcon,
-  ArrowPathIcon
+  NoSymbolIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon, HandThumbUpIcon as HandThumbUpIconSolid, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import Sidebar from '../components/Sidebar';
@@ -178,12 +177,6 @@ const EmployeeDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
 
-  // Add refs for tracking fetch state and retry logic
-  const fetchAttemptsRef = useRef(0);
-  const maxRetries = 3;
-  const retryDelay = 2000; // 2 seconds
-  const isInitialLoadRef = useRef(true);
-
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
     try {
@@ -221,127 +214,6 @@ const EmployeeDashboard = () => {
       return false;
     }
   };
-
-  // --- Optimized Fetch Posts Function ---
-  const fetchPosts = useCallback(async (retryCount = 0) => {
-    // Don't fetch posts if not verified or no organization ID
-    if (!isEmailVerified || !organizationId) {
-      setPosts([]); // Clear any existing posts
-      return;
-    }
-
-    // Prevent multiple simultaneous fetches
-    if (loading.posts) {
-      console.log('Fetch already in progress, skipping...');
-      return;
-    }
-
-    setLoading(prev => ({ ...prev, posts: true }));
-    setError(null);
-
-    try {
-      const storedToken = localStorage.getItem('token');
-      
-      if (!storedToken) {
-        throw new Error('No authentication token found');
-      }
-      
-      // Ensure organizationId is trimmed before making the API call
-      const trimmedOrgId = organizationId.trim();
-      
-      if (!trimmedOrgId) {
-        throw new Error('Invalid organization ID');
-      }
-      
-      console.log(`Fetching posts for organization: ${trimmedOrgId} (attempt ${retryCount + 1})`);
-      
-      // Use the correct endpoint format with organization ID as URL parameter
-      const response = await api.get(`/posts/org/${trimmedOrgId}`, {
-        headers: { 
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${storedToken}`
-        },
-        timeout: 10000 // 10 second timeout
-      });
-      
-      // Handle successful response
-      let postsData = [];
-      
-      // Handle different response formats
-      if (Array.isArray(response.data)) {
-        postsData = response.data;
-      } else if (response.data && Array.isArray(response.data.posts)) {
-        postsData = response.data.posts;
-      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
-        postsData = response.data.data;
-      } else {
-        console.warn('Unexpected response format, using empty array');
-        postsData = [];
-      }
-
-      // Sort posts by creation date (newest first)
-      const sortedPosts = [...postsData].sort(
-        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-      
-      console.log(`Successfully fetched ${sortedPosts.length} posts`);
-      setPosts(sortedPosts);
-      fetchAttemptsRef.current = 0; // Reset retry counter on success
-      
-    } catch (err) {
-      console.error('Error fetching posts:', {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        config: {
-          url: err.config?.url,
-          method: err.config?.method,
-          headers: err.config?.headers
-        }
-      });
-      
-      // Set a more user-friendly error message
-      let errorMessage = 'Failed to fetch posts. Please try again later.';
-      if (err.response) {
-        if (err.response.status === 401) {
-          errorMessage = 'Session expired. Please sign in again.';
-          // Redirect to login
-          localStorage.clear();
-          navigate('/signin');
-          return;
-        } else if (err.response.status === 403) {
-          errorMessage = 'Access denied. Please contact your administrator.';
-        } else if (err.response.status === 404) {
-          errorMessage = 'Organization not found.';
-        } else if (err.response.data?.message) {
-          errorMessage = err.response.data.message;
-        }
-      } else if (err.code === 'ECONNABORTED') {
-        errorMessage = 'Request timed out. Please check your connection.';
-      } else if (err.message === 'Network Error') {
-        errorMessage = 'Network error. Please check your internet connection.';
-      }
-      
-      setError(errorMessage);
-      setPosts([]); // Ensure posts is always an array
-      
-      // Implement retry logic for network errors
-      if (retryCount < maxRetries && (
-        err.code === 'ECONNABORTED' || 
-        err.message === 'Network Error' || 
-        err.response?.status >= 500
-      )) {
-        console.log(`Retrying fetch posts in ${retryDelay}ms (attempt ${retryCount + 1}/${maxRetries})`);
-        setTimeout(() => {
-          fetchPosts(retryCount + 1);
-        }, retryDelay);
-      } else {
-        fetchAttemptsRef.current = retryCount;
-      }
-    } finally {
-      setLoading(prev => ({ ...prev, posts: false }));
-    }
-  }, [isEmailVerified, organizationId, loading.posts, navigate]);
 
   // --- Authentication Effect ---
   useEffect(() => {
@@ -395,7 +267,7 @@ const EmployeeDashboard = () => {
           // Fetch organization details and posts in parallel
           await Promise.all([
             fetchOrganizationDetails(storedOrgId),
-            fetchPosts() // Automatically fetch posts on page load
+            fetchPosts() // Automatically fetch posts when user enters the page
           ]);
         } else {
           localStorage.clear();
@@ -409,18 +281,7 @@ const EmployeeDashboard = () => {
     };
 
     verifyAuth();
-  }, [navigate, fetchPosts]);
-
-  // --- Effect to refetch posts when organizationId or isEmailVerified changes ---
-  useEffect(() => {
-    if (organizationId && isEmailVerified && isInitialLoadRef.current) {
-      isInitialLoadRef.current = false;
-      // Initial load is handled by the auth effect
-    } else if (organizationId && isEmailVerified && !isInitialLoadRef.current) {
-      // Refetch posts when organizationId or verification status changes
-      fetchPosts();
-    }
-  }, [organizationId, isEmailVerified, fetchPosts]);
+  }, [navigate]);
 
   // --- WebSocket Effect for Real-time Updates ---
   const handleWebSocketMessage = (message) => {
@@ -626,6 +487,83 @@ const EmployeeDashboard = () => {
     (error) => { console.error('WebSocket error:', error); },
     [organizationId]
   );
+
+  // --- Fetch Posts ---
+  const fetchPosts = async () => {
+    // Don't fetch posts if not verified or no organization ID
+    if (!isEmailVerified || !organizationId) {
+      setPosts([]); // Clear any existing posts
+      return;
+    }
+
+    setLoading(prev => ({ ...prev, posts: true }));
+    setError(null);
+
+    try {
+      const storedToken = localStorage.getItem('token');
+      
+      // Ensure organizationId is trimmed before making the API call
+      const trimmedOrgId = organizationId.trim();
+      
+      // Use the correct endpoint format with organization ID as URL parameter
+      const response = await api.get(`/posts/org/${trimmedOrgId}`, {
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${storedToken}`
+        }
+      });
+      
+      // Handle successful response
+      let postsData = [];
+      
+      // Handle different response formats
+      if (Array.isArray(response.data)) {
+        postsData = response.data;
+      } else if (response.data && Array.isArray(response.data.posts)) {
+        postsData = response.data.posts;
+      } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
+        postsData = response.data.data;
+      } else {
+        console.warn('Unexpected response format, using empty array');
+      }
+
+      // Sort posts by creation date (newest first)
+      const sortedPosts = [...postsData].sort(
+        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
+      );
+      
+      setPosts(sortedPosts);
+      
+    } catch (err) {
+      console.error('Error fetching posts:', {
+        error: err.message,
+        response: err.response?.data,
+        status: err.response?.status,
+        config: {
+          url: err.config?.url,
+          method: err.config?.method,
+          headers: err.config?.headers
+        }
+      });
+      
+      // Set a more user-friendly error message
+      let errorMessage = 'Failed to fetch posts. Please try again later.';
+      if (err.response) {
+        if (err.response.status === 401) {
+          errorMessage = 'Session expired. Please sign in again.';
+          // Optionally redirect to login
+          navigate('/signin');
+        } else if (err.response.data?.message) {
+          errorMessage = err.response.data.message;
+        }
+      }
+      
+      setError(errorMessage);
+      setPosts([]); // Ensure posts is always an array
+    } finally {
+      setLoading(prev => ({ ...prev, posts: false }));
+    }
+  };
 
   // --- Handle File Upload ---
   const handleFileUpload = async (e) => {
@@ -1013,29 +951,25 @@ const EmployeeDashboard = () => {
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <div className="flex items-center gap-3">
-                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
-                {loading.posts && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600 dark:text-slate-400">
-                    <ArrowPathIcon className="h-4 w-4 animate-spin" />
-                    <span>Loading...</span>
-                  </div>
-                )}
-                {error && (
-                  <div className="flex items-center gap-2 text-sm text-red-600 dark:text-red-400">
-                    <ExclamationTriangleIcon className="h-4 w-4" />
-                    <span>{error}</span>
-                  </div>
-                )}
-              </div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
               <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
                 <button
                   onClick={() => fetchPosts()}
                   disabled={loading.posts}
-                  className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/30 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="inline-flex items-center px-3 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                  title="Refresh posts"
                 >
-                  <ArrowPathIcon className={`h-4 w-4 ${loading.posts ? 'animate-spin' : ''}`} />
-                  Refresh
+                  {loading.posts ? (
+                    <svg className="animate-spin h-4 w-4 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  ) : (
+                    <svg className="h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  )}
+                  <span className="ml-2 hidden sm:inline">Refresh</span>
                 </button>
                 <CustomSelect 
                   label="Type" 
@@ -1078,60 +1012,36 @@ const EmployeeDashboard = () => {
                 />
               </div>
             </div>
-            
-            {/* Search input */}
-            <div className="mb-4">
-              <div className="relative">
-                <input
-                  type="text"
-                  placeholder="Search posts..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="w-full px-4 py-2 pl-10 border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            {loading.posts ? (
+              <div className="text-center py-10">
+                <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                  <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
                 </svg>
-              </div>
-            </div>
-
-            {loading.posts && posts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <ArrowPathIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 animate-spin mb-4" />
                 <p className="text-gray-600 dark:text-slate-400">Loading posts...</p>
               </div>
-            ) : error && posts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <ExclamationTriangleIcon className="h-12 w-12 text-red-400 dark:text-red-500 mb-4" />
-                <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
+            ) : error ? (
+              <div className="bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700/50 text-red-800 dark:text-red-300 px-4 py-3 rounded-lg text-sm flex items-center mb-4">
+                <ExclamationTriangleIcon className="h-5 w-5 mr-2 flex-shrink-0"/> 
+                {error}
                 <button
                   onClick={() => fetchPosts()}
-                  className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                  className="ml-auto text-red-600 dark:text-red-400 hover:text-red-800 dark:hover:text-red-200 underline"
                 >
-                  Try Again
+                  Try again
                 </button>
               </div>
             ) : filteredPosts.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12">
-                <DocumentTextIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mb-4" />
-                <p className="text-gray-600 dark:text-slate-400 mb-2">No posts found</p>
-                <p className="text-sm text-gray-500 dark:text-slate-500">
-                  {posts.length === 0 
-                    ? "Be the first to create a post!" 
-                    : "Try adjusting your filters or search terms."
-                  }
-                </p>
-              </div>
+              <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
             ) : (
               <div className="space-y-4">
-                <div className="flex items-center justify-between text-sm text-gray-500 dark:text-slate-400">
-                  <span>Showing {filteredPosts.length} of {posts.length} posts</span>
-                  {fetchAttemptsRef.current > 0 && (
-                    <span className="text-yellow-600 dark:text-yellow-400">
-                      Retry attempt {fetchAttemptsRef.current}/{maxRetries}
-                    </span>
-                  )}
-                </div>
+                {posts.length === 0 ? (
+                  <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
+                ) : (
+                  <p className="text-sm text-gray-500 dark:text-slate-400">
+                    Showing {filteredPosts.length} of {posts.length} posts
+                  </p>
+                )}
                 {filteredPosts.map((post) => (
                   <motion.div
                     key={post._id}
@@ -1404,6 +1314,28 @@ const EmployeeDashboard = () => {
                   {organizationName || 'Loading...'}
                 </span>
               </div>
+              {isEmailVerified && (
+                <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-slate-400">
+                  <span className="font-medium">Posts Status:</span>
+                  {loading.posts ? (
+                    <span className="ml-2 px-2.5 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 flex items-center">
+                      <svg className="animate-spin h-3 w-3 mr-1" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path>
+                      </svg>
+                      Loading...
+                    </span>
+                  ) : error ? (
+                    <span className="ml-2 px-2.5 py-0.5 rounded-full bg-red-100 dark:bg-red-900/30 text-red-800 dark:text-red-200">
+                      Error loading posts
+                    </span>
+                  ) : (
+                    <span className="ml-2 px-2.5 py-0.5 rounded-full bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                      {posts.length} posts loaded
+                    </span>
+                  )}
+                </div>
+              )}
             </motion.div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {actions.map((action) => (
