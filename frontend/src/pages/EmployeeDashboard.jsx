@@ -35,7 +35,9 @@ import {
   BuildingLibraryIcon,
   HomeIcon,
   DocumentTextIcon,
-  NoSymbolIcon
+  NoSymbolIcon,
+  MagnifyingGlassIcon,
+  ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon, HandThumbUpIcon as HandThumbUpIconSolid, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
 import Sidebar from '../components/Sidebar';
@@ -980,85 +982,94 @@ const EmployeeDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
-            <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4">
-              <div className="flex-1 flex flex-col sm:flex-row sm:items-center gap-3">
-                {/* Search */}
-                <div className="relative w-full sm:w-64">
-                  <input
-                    type="text"
-                    placeholder="Search posts..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full px-3 py-2 pl-10 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  />
-                  <svg className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                  </svg>
-                </div>
-                {/* Type */}
-                <CustomSelect 
-                  label="Type" 
-                  value={selectedPostType} 
-                  onChange={setSelectedPostType} 
-                  options={[
-                    { value: 'all', label: 'All Types' },
-                    { value: 'feedback', label: 'Feedback' },
-                    { value: 'complaint', label: 'Complaint' },
-                    { value: 'suggestion', label: 'Suggestion' },
-                    { value: 'public', label: 'Public' }
-                  ]} 
-                  icon={TagIcon} 
-                />
-                {/* Region */}
-                <CustomSelect 
-                  label="Region" 
-                  value={selectedRegion} 
-                  onChange={setSelectedRegion} 
-                  options={[
-                    { value: 'all', label: 'All Regions' },
-                    ...Array.from(new Set(posts.map(post => post.region).filter(Boolean))).map(region => ({
-                      value: region,
-                      label: region
-                    }))
-                  ]} 
-                  icon={MapPinIcon}
-                />
-                {/* Department */}
-                <CustomSelect 
-                  label="Department" 
-                  value={selectedDepartment} 
-                  onChange={setSelectedDepartment} 
-                  options={[
-                    { value: 'all', label: 'All Departments' },
-                    ...Array.from(new Set(posts.map(post => post.department).filter(Boolean))).map(department => ({
-                      value: department,
-                      label: department
-                    }))
-                  ]} 
-                  icon={BuildingLibraryIcon}
-                />
+            <div className="mb-6">
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+                <button
+                  onClick={fetchPosts}
+                  disabled={loading.posts}
+                  className="h-10 min-w-[110px] px-3 flex items-center justify-center rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                >
+                  {loading.posts ? (
+                    <span className="flex items-center"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>Refreshing...</span>
+                  ) : (
+                    <span className="flex items-center"><ArrowPathIcon className="h-5 w-5 mr-2" />Refresh</span>
+                  )}
+                </button>
               </div>
-              {/* Refresh Button */}
-              <button
-                onClick={fetchPosts}
-                disabled={loading.posts}
-                className="flex-shrink-0 px-3 py-2 text-sm font-medium text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 rounded-lg hover:bg-blue-100 dark:hover:bg-blue-800/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                style={{ minWidth: 110 }}
-              >
-                {loading.posts ? (
-                  <span className="flex items-center">
-                    <span className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600 mr-2"></span>
-                    Refreshing...
-                  </span>
-                ) : (
-                  <span className="flex items-center">
-                    <svg className="h-4 w-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    Refresh
-                  </span>
-                )}
-              </button>
+              <div className="flex flex-col gap-y-2">
+                {/* Row 1: Search */}
+                <div className="w-full">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search posts..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full h-11 pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-gray-800 dark:bg-slate-700 text-gray-100 dark:text-white placeholder-gray-400 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  </div>
+                </div>
+                {/* Row 2: Type (full width) */}
+                <div className="w-full flex flex-col">
+                  <label htmlFor="type-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Type</label>
+                  <CustomSelect
+                    id="type-select"
+                    className="h-11 w-full"
+                    label=""
+                    value={selectedPostType}
+                    onChange={setSelectedPostType}
+                    options={[
+                      { value: 'all', label: 'All Types' },
+                      { value: 'feedback', label: 'Feedback' },
+                      { value: 'complaint', label: 'Complaint' },
+                      { value: 'suggestion', label: 'Suggestion' },
+                      { value: 'public', label: 'Public' }
+                    ]}
+                    icon={TagIcon}
+                  />
+                </div>
+                {/* Row 3: Region + Department */}
+                <div className="flex flex-col md:flex-row gap-2 md:gap-x-4">
+                  <div className="w-full md:w-1/2 flex flex-col">
+                    <label htmlFor="region-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Region</label>
+                    <CustomSelect
+                      id="region-select"
+                      className="h-11 w-full"
+                      label=""
+                      value={selectedRegion}
+                      onChange={setSelectedRegion}
+                      options={[
+                        { value: 'all', label: 'All Regions' },
+                        ...Array.from(new Set(posts.map(post => post.region).filter(Boolean))).map(region => ({
+                          value: region,
+                          label: region
+                        }))
+                      ]}
+                      icon={MapPinIcon}
+                    />
+                  </div>
+                  <div className="w-full md:w-1/2 flex flex-col">
+                    <label htmlFor="department-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Department</label>
+                    <CustomSelect
+                      id="department-select"
+                      className="h-11 w-full"
+                      label=""
+                      value={selectedDepartment}
+                      onChange={setSelectedDepartment}
+                      options={[
+                        { value: 'all', label: 'All Departments' },
+                        ...Array.from(new Set(posts.map(post => post.department).filter(Boolean))).map(department => ({
+                          value: department,
+                          label: department
+                        }))
+                      ]}
+                      icon={BuildingLibraryIcon}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
             {error && (
               <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
