@@ -488,77 +488,159 @@ const EmployeeDashboard = () => {
   );
 
   // --- Fetch Posts ---
-  const fetchPosts = async () => {
+  const fetchPosts = async (retryCount = 0) => {
     // Don't fetch posts if not verified or no organization ID
     if (!isEmailVerified || !organizationId) {
       setPosts([]); // Clear any existing posts
       return;
     }
 
+    // Prevent multiple simultaneous requests
+    if (loading.posts) {
+      console.log('Fetch posts already in progress, skipping...');
+      return;
+    }
+
     setLoading(prev => ({ ...prev, posts: true }));
     setError(null);
+
+    // Create AbortController for request cancellation
+    const abortController = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortController.abort();
+    }, 30000); // 30 second timeout
 
     try {
       const storedToken = localStorage.getItem('token');
       
-      // Ensure organizationId is trimmed before making the API call
+      if (!storedToken) {
+        throw new Error('No authentication token found');
+      }
+      
+      // Ensure organizationId is trimmed and valid
       const trimmedOrgId = organizationId.trim();
+      if (!trimmedOrgId) {
+        throw new Error('Invalid organization ID');
+      }
+      
+      console.log('Fetching posts for organization:', trimmedOrgId);
       
       // Use the correct endpoint format with organization ID as URL parameter
       const response = await api.get(`/posts/org/${trimmedOrgId}`, {
         headers: { 
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${storedToken}`
-        }
+          'Authorization': `Bearer ${storedToken}`,
+          'Cache-Control': 'no-cache' // Ensure fresh data
+        },
+        signal: abortController.signal,
+        timeout: 25000 // 25 second timeout for axios
       });
+      
+      clearTimeout(timeoutId);
       
       // Handle successful response
       let postsData = [];
       
-      // Handle different response formats
+      // Handle different response formats with better validation
       if (Array.isArray(response.data)) {
         postsData = response.data;
       } else if (response.data && Array.isArray(response.data.posts)) {
         postsData = response.data.posts;
       } else if (response.data && response.data.data && Array.isArray(response.data.data)) {
         postsData = response.data.data;
+      } else if (response.data && response.data.success && Array.isArray(response.data.data)) {
+        postsData = response.data.data;
       } else {
-        console.warn('Unexpected response format, using empty array');
+        console.warn('Unexpected response format:', response.data);
+        postsData = [];
       }
 
-      // Sort posts by creation date (newest first)
-      const sortedPosts = [...postsData].sort(
-        (a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0)
-      );
-      
-      setPosts(sortedPosts);
-      
-    } catch (err) {
-      console.error('Error fetching posts:', {
-        error: err.message,
-        response: err.response?.data,
-        status: err.response?.status,
-        config: {
-          url: err.config?.url,
-          method: err.config?.method,
-          headers: err.config?.headers
-        }
+      // Validate and clean posts data
+      const validPosts = postsData.filter(post => {
+        return post && 
+               typeof post === 'object' && 
+               post._id && 
+               (post.content || (post.mediaUrls && post.mediaUrls.length > 0));
+      });
+
+      // Sort posts by creation date (newest first) with fallback
+      const sortedPosts = [...validPosts].sort((a, b) => {
+        const dateA = new Date(a.createdAt || a.created_at || 0);
+        const dateB = new Date(b.createdAt || b.created_at || 0);
+        return dateB - dateA;
       });
       
-      // Set a more user-friendly error message
-      let errorMessage = 'Failed to fetch posts. Please try again later.';
-      if (err.response) {
+      console.log(`Successfully fetched ${sortedPosts.length} posts`);
+      setPosts(sortedPosts);
+      
+      // Clear any previous errors on success
+      setError(null);
+      
+    } catch (err) {
+      clearTimeout(timeoutId);
+      
+      // Handle different types of errors
+      if (err.name === 'AbortError' || err.code === 'ECONNABORTED') {
+        console.warn('Request was aborted or timed out');
+        if (retryCount < 2) {
+          console.log(`Retrying fetch posts (attempt ${retryCount + 1})...`);
+          setTimeout(() => fetchPosts(retryCount + 1), 1000 * (retryCount + 1)); // Exponential backoff
+          return;
+        } else {
+          setError('Request timed out. Please check your connection and try again.');
+        }
+      } else if (err.response) {
+        // Server responded with error status
+        console.error('Server error fetching posts:', {
+          status: err.response.status,
+          data: err.response.data,
+          url: err.config?.url
+        });
+        
+        let errorMessage = 'Failed to fetch posts. Please try again later.';
+        
         if (err.response.status === 401) {
           errorMessage = 'Session expired. Please sign in again.';
-          // Optionally redirect to login
+          localStorage.clear();
           navigate('/signin');
+        } else if (err.response.status === 403) {
+          errorMessage = 'Access denied. Please verify your organization access.';
+        } else if (err.response.status === 404) {
+          errorMessage = 'No posts found for this organization.';
+        } else if (err.response.status >= 500) {
+          errorMessage = 'Server error. Please try again later.';
+          // Retry on server errors
+          if (retryCount < 2) {
+            console.log(`Retrying fetch posts after server error (attempt ${retryCount + 1})...`);
+            setTimeout(() => fetchPosts(retryCount + 1), 2000 * (retryCount + 1));
+            return;
+          }
         } else if (err.response.data?.message) {
           errorMessage = err.response.data.message;
         }
+        
+        setError(errorMessage);
+      } else if (err.request) {
+        // Network error (no response received)
+        console.error('Network error fetching posts:', err.message);
+        
+        if (retryCount < 2) {
+          console.log(`Retrying fetch posts after network error (attempt ${retryCount + 1})...`);
+          setTimeout(() => fetchPosts(retryCount + 1), 1500 * (retryCount + 1));
+          return;
+        } else {
+          setError('Network error. Please check your internet connection and try again.');
+        }
+      } else {
+        // Other errors (e.g., invalid token, missing orgId)
+        console.error('Error fetching posts:', err.message);
+        setError(err.message || 'An unexpected error occurred. Please try again.');
       }
       
-      setError(errorMessage);
-      setPosts([]); // Ensure posts is always an array
+      // Keep existing posts if available, otherwise clear
+      if (posts.length === 0) {
+        setPosts([]);
+      }
     } finally {
       setLoading(prev => ({ ...prev, posts: false }));
     }
@@ -835,16 +917,23 @@ const EmployeeDashboard = () => {
       description: isEmailVerified 
         ? "Browse all anonymous posts within your organization"
         : "Please verify your email with the organization to view posts.",
-      buttonText: "View Posts",
+      buttonText: loading.posts ? "Loading Posts..." : "View Posts",
       onClick: isEmailVerified 
-        ? () => {
-            fetchPosts();
-            setViewMode('view');
+        ? async () => {
+            try {
+              await fetchPosts();
+              setViewMode('view');
+            } catch (error) {
+              console.error('Failed to fetch posts:', error);
+              // Error is already handled in fetchPosts function
+            }
           }
         : () => setShowOrgAccessModal(true),
       icon: EyeIcon,
       bgColorClass: isEmailVerified 
-        ? "bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/40" 
+        ? loading.posts 
+          ? "bg-indigo-100 dark:bg-indigo-800/50 cursor-not-allowed opacity-80"
+          : "bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/40" 
         : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70 hover:opacity-100 transition-opacity",
       accentColorClass: isEmailVerified 
         ? "text-indigo-600 dark:text-indigo-400" 
@@ -876,13 +965,18 @@ const EmployeeDashboard = () => {
       name: 'View Posts', 
       icon: EyeIcon, 
       action: isEmailVerified 
-        ? () => {
-            fetchPosts();
-            setViewMode('view');
+        ? async () => {
+            try {
+              await fetchPosts();
+              setViewMode('view');
+            } catch (error) {
+              console.error('Failed to fetch posts:', error);
+              // Error is already handled in fetchPosts function
+            }
           }
         : () => setShowOrgAccessModal(true),
       current: viewMode === 'view',
-      disabled: !isEmailVerified
+      disabled: !isEmailVerified || loading.posts
     },
     { 
       name: 'Verify Details', 
@@ -956,7 +1050,29 @@ const EmployeeDashboard = () => {
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
             <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+              <div className="flex items-center gap-3">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+                <button
+                  onClick={() => fetchPosts()}
+                  disabled={loading.posts}
+                  className="p-2 text-gray-500 hover:text-indigo-600 dark:text-slate-400 dark:hover:text-indigo-400 transition-colors rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  title="Refresh posts"
+                >
+                  <svg 
+                    className={`h-5 w-5 ${loading.posts ? 'animate-spin' : ''}`} 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path 
+                      strokeLinecap="round" 
+                      strokeLinejoin="round" 
+                      strokeWidth={2} 
+                      d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" 
+                    />
+                  </svg>
+                </button>
+              </div>
               <div className="w-full sm:w-auto flex flex-col sm:flex-row gap-3">
                 <CustomSelect 
                   label="Type" 
@@ -999,17 +1115,44 @@ const EmployeeDashboard = () => {
                 />
               </div>
             </div>
-            {filteredPosts.length === 0 ? (
-              <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
+            {loading.posts ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600 dark:border-indigo-400 mb-4"></div>
+                <p className="text-gray-600 dark:text-slate-400 text-lg">Loading posts...</p>
+                <p className="text-gray-500 dark:text-slate-500 text-sm mt-2">Please wait while we fetch your organization's posts</p>
+              </div>
+            ) : error ? (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6">
+                <div className="flex items-start">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-400 mt-0.5 mr-3 flex-shrink-0" />
+                  <div className="flex-1">
+                    <h3 className="text-sm font-medium text-red-800 dark:text-red-200">Error Loading Posts</h3>
+                    <p className="text-sm text-red-700 dark:text-red-300 mt-1">{error}</p>
+                    <button
+                      onClick={() => fetchPosts()}
+                      className="mt-3 inline-flex items-center px-3 py-1.5 border border-transparent text-xs font-medium rounded-md text-red-700 bg-red-100 hover:bg-red-200 dark:text-red-200 dark:bg-red-800/30 dark:hover:bg-red-800/50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : filteredPosts.length === 0 ? (
+              <div className="text-center py-12">
+                <DocumentTextIcon className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500 mb-4" />
+                <p className="text-gray-600 dark:text-slate-300 text-lg">No posts found</p>
+                <p className="text-gray-500 dark:text-slate-500 text-sm mt-2">
+                  {posts.length === 0 
+                    ? "There are no posts in your organization yet. Be the first to share feedback!"
+                    : "No posts match your current filters. Try adjusting your search criteria."
+                  }
+                </p>
+              </div>
             ) : (
               <div className="space-y-4">
-                {posts.length === 0 ? (
-                  <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Showing {filteredPosts.length} of {posts.length} posts
-                  </p>
-                )}
+                <p className="text-sm text-gray-500 dark:text-slate-400">
+                  Showing {filteredPosts.length} of {posts.length} posts
+                </p>
                 {filteredPosts.map((post) => (
                   <motion.div
                     key={post._id}
