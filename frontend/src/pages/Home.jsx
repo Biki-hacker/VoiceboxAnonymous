@@ -221,8 +221,7 @@ export default function Home() {
     setContactStatus("Sending...");
     try {
       // Replace with your actual backend API endpoint
-      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/mail/contact`, {
-
+      const response = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/contact`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', },
         body: JSON.stringify(formData),
@@ -232,13 +231,17 @@ export default function Home() {
 
       if (response.ok) {
         setContactStatus("Message sent successfully!");
-        // Optionally clear form fields from ContactModal if not handled internally
-        // For now, we just close it after a delay.
+        // Close modal after a delay
         setTimeout(() => {
           closeContactModal();
         }, 2000);
       } else {
-        setContactStatus(result.message || "Failed to send message. Please try again.");
+        // Handle specific error cases
+        if (response.status === 429) {
+          setContactStatus("Too many messages sent. Please try again after 15 minutes.");
+        } else {
+          setContactStatus(result.message || "Failed to send message. Please try again.");
+        }
       }
     } catch (error) {
       console.error("Contact form submission error:", error);

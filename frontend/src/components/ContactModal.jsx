@@ -34,10 +34,20 @@ const ContactModal = ({ isOpen, onClose, onSubmit }) => {
     }
     setError("");
     setIsSubmitting(true);
-    await onSubmit({ name, email, message });
-    setIsSubmitting(false);
-    // Optionally reset form fields here if desired
-    // setName(""); setEmail(""); setMessage(""); setWordCount(0);
+    
+    try {
+      await onSubmit({ name, email, message });
+      // Clear form on successful submission
+      setName("");
+      setEmail("");
+      setMessage("");
+      setWordCount(0);
+    } catch (error) {
+      console.error('Form submission error:', error);
+      setError("Failed to send message. Please try again later.");
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   if (!isOpen) return null;
