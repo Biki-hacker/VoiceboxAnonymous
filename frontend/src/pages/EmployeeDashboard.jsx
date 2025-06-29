@@ -163,6 +163,207 @@ const EmployeeDashboard = () => {
   // Add ref to track current organizationId for WebSocket
   const organizationIdRef = useRef(organizationId);
 
+  // Helper function to deduplicate comments by ID
+  const deduplicateComments = (comments) => {
+    if (!Array.isArray(comments)) return [];
+    const seen = new Set();
+    return comments.filter(comment => {
+      if (!comment || !comment._id) return false;
+      if (seen.has(comment._id)) return false;
+      seen.add(comment._id);
+      return true;
+    });
+  };
+
+  // Helper function to check if post has been edited (excluding pinning)
+  const isPostEdited = (post) => {
+    // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
+    if (post.updatedAt === post.createdAt) {
+      return false;
+    }
+    
+    // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
+    // We can't easily detect this on the frontend, so we'll use a different approach
+    // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
+    const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
+    return timeDiff > 60000; // More than 1 minute difference
+  };
+
+  // --- WebSocket Effect for Real-time Updates ---
+  const handleWebSocketMessage = useCallback((message) => {
+    console.log('EmployeeDashboard: WebSocket message received:', message);
+    const currentSelectedOrgId = organizationIdRef.current;
+    
+    if (!currentSelectedOrgId) {
+      console.log('EmployeeDashboard: No organization selected, ignoring WebSocket message.');
+      return;
+    }
+
+    try {
+      const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
+      
+      switch (parsedMessage.type) {
+        case 'POST_CREATED':
+          if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
+            setPosts(prev => [parsedMessage.payload.post, ...prev]);
+          }
+          break;
+        case 'POST_UPDATED':
+          if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.post._id 
+                  ? {
+                      ...parsedMessage.payload.post,
+                      comments: deduplicateComments(p.comments || []) // Preserve existing decrypted comments
+                    }
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'POST_DELETED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
+            setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
+          }
+          break;
+        case 'COMMENT_CREATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: deduplicateComments([...(p.comments || []), parsedMessage.payload.comment])
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'COMMENT_UPDATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: p.comments?.map(c => {
+                        if (c?._id === parsedMessage.payload.comment._id) {
+                          // Only update if the comment text is different or if we're updating other fields
+                          const currentText = typeof c.text === 'string' ? c.text : (c.content || '');
+                          const newText = typeof parsedMessage.payload.comment.text === 'string' 
+                            ? parsedMessage.payload.comment.text 
+                            : (parsedMessage.payload.comment.content || '');
+                          
+                          // If the text is the same, don't update to prevent duplicates
+                          if (currentText === newText && !parsedMessage.payload.comment.updatedAt) {
+                            return c;
+                          }
+                          
+                          return parsedMessage.payload.comment;
+                        }
+                        return c;
+                      }).filter(Boolean) || []
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'COMMENT_DELETED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.commentId) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: p.comments?.filter(c => c?._id !== parsedMessage.payload.commentId) || []
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'REACTION_UPDATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId) {
+            const { entityType, entityId, postId, reactionsSummary } = parsedMessage.payload;
+            
+            if (postId && reactionsSummary) {
+              setPosts(prev => 
+                prev.map(post => {
+                  if (post?._id !== postId) return post;
+                  
+                  if (entityType === 'post') {
+                    return {
+                      ...post,
+                      reactions: reactionsSummary
+                    };
+                  } else if (entityType === 'comment' && entityId) {
+                    // Handle comment reactions
+                    return {
+                      ...post,
+                      comments: post.comments?.map(comment => 
+                        comment?._id === entityId 
+                          ? { ...comment, reactions: reactionsSummary }
+                          : comment
+                      ).filter(Boolean) || []
+                    };
+                  }
+                  return post;
+                }).filter(Boolean) // Remove any undefined posts
+              );
+            }
+          }
+          break;
+        default:
+          console.log('EmployeeDashboard: Unhandled WebSocket message type:', parsedMessage.type);
+      }
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+    }
+  }, [setPosts, posts]);
+
+  const { sendMessage } = useWebSocket(
+    WS_URL,
+    handleWebSocketMessage,
+    () => {
+      console.log('WebSocket connected');
+      // Send authentication message if we have the required data
+      const storedToken = localStorage.getItem('token');
+      const currentOrgId = organizationIdRef.current;
+      if (storedToken && currentOrgId) {
+        return {
+          type: 'AUTH',
+          token: storedToken,
+          organizationId: currentOrgId,
+          role: 'employee'
+        };
+      }
+      return null;
+    },
+    (error) => {
+      console.error('WebSocket error:', error);
+    },
+    [organizationId]
+  );
+
+  // Update organizationIdRef when organizationId changes and re-authenticate
+  useEffect(() => {
+    organizationIdRef.current = organizationId;
+    
+    // Re-authenticate with WebSocket if organization changes
+    const storedToken = localStorage.getItem('token');
+    if (storedToken && organizationId) {
+      sendMessage({
+        type: 'AUTH',
+        token: storedToken,
+        organizationId: organizationId,
+        role: 'employee'
+      });
+    }
+  }, [organizationId, sendMessage]);
+
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
     try {
@@ -274,234 +475,6 @@ const EmployeeDashboard = () => {
       fetchPosts();
     }
   }, [isEmailVerified, organizationId, viewMode]);
-
-  // --- WebSocket Effect for Real-time Updates ---
-  const handleWebSocketMessage = useCallback((message) => {
-    try {
-      // message is already parsed by the hook
-      console.log('WebSocket message received:', message);
-      if (!message || !message.type || !message.payload) {
-        console.warn('Invalid WebSocket message format:', message);
-        return;
-      }
-      
-      // Validate message structure
-      if (!message || typeof message !== 'object') {
-        console.warn('EmployeeDashboard: Invalid message format:', message);
-        return;
-      }
-      if (!message.payload || typeof message.payload !== 'object') {
-        console.warn('EmployeeDashboard: Message missing payload:', message);
-        return;
-      }
-
-      // Check organization ID for all message types
-      const orgId = message.payload.organizationId || message.payload.organization;
-      const currentOrgId = organizationIdRef.current;
-      if (!orgId || orgId !== currentOrgId) {
-        console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
-        return;
-      }
-
-      switch (message.type) {
-        case 'POST_CREATED':
-          console.log('EmployeeDashboard: POST_CREATED message structure:', message.payload);
-          // Handle both message formats: direct payload or nested payload.post
-          const postData = message.payload.post || message.payload;
-          if (!postData?._id || !postData?.createdAt) {
-            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => [postData, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-          break;
-        case 'POST_UPDATED':
-          console.log('EmployeeDashboard: POST_UPDATED message structure:', message.payload);
-          // Handle both message formats: direct payload or nested payload.post
-          const updatedPostData = message.payload.post || message.payload;
-          if (!updatedPostData?._id) {
-            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => prevPosts.map(p => (p._id === updatedPostData._id ? { 
-            ...p, 
-            ...updatedPostData,
-            comments: p.comments || [] // Preserve existing decrypted comments
-          } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
-          break;
-        case 'POST_DELETED':
-          if (!message.payload.postId) {
-            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
-          break;
-        case 'COMMENT_CREATED':
-          if (!message.payload.postId || !message.payload.comment?._id) {
-            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
-            return;
-          }
-          console.log('EmployeeDashboard: Processing COMMENT_CREATED for post:', message.payload.postId, 'comment:', message.payload.comment._id);
-          setPosts(prevPosts => {
-            // Check if the post exists in the current list
-            const postExists = prevPosts.some(post => post._id === message.payload.postId);
-            
-            if (postExists) {
-              // Update existing post with new comment
-              return prevPosts.map(post => {
-                if (post._id === message.payload.postId) {
-                  const commentExists = post.comments?.some(c => c._id === message.payload.comment._id);
-                  if (commentExists) {
-                    console.log('Comment already exists, skipping duplicate');
-                    return post;
-                  }
-                  console.log('Adding comment to existing post');
-                  // Check if we already have a comment with the same text (local comment)
-                  const hasLocalComment = post.comments?.some(c => 
-                    c.text === message.payload.comment.text || 
-                    c.content === message.payload.comment.text
-                  );
-                  if (hasLocalComment) {
-                    console.log('Local comment already exists, skipping WebSocket comment');
-                    return post;
-                  }
-                  return {
-                    ...post,
-                    comments: [message.payload.comment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-                    commentCount: (post.commentCount || 0) + 1
-                  };
-                }
-                return post;
-              });
-            } else {
-              // Post doesn't exist in current list, add it with the comment
-              // This creates a minimal post object with just the comment
-              console.log('Creating new post with comment');
-              const newPost = {
-                _id: message.payload.postId,
-                comments: [message.payload.comment],
-                commentCount: 1,
-                createdAt: message.payload.comment.createdAt || new Date().toISOString(),
-                // Add other required fields with defaults
-                content: '[Post not loaded]',
-                postType: 'feedback',
-                author: message.payload.comment.author,
-                createdByRole: message.payload.comment.createdByRole || 'user'
-              };
-              return [newPost, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-            }
-          });
-          break;
-        case 'COMMENT_UPDATED':
-          if (!message.payload.postId || !message.payload.comment?._id) {
-            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => {
-            return prevPosts.map(post => {
-              if (post._id === message.payload.postId) {
-                const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
-                if (!existingComment) {
-                  console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
-                  return post;
-                }
-                return {
-                  ...post,
-                  comments: (post.comments || []).map(c => c._id === message.payload.comment._id ? { ...c, ...message.payload.comment } : c).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                };
-              }
-              return post;
-            });
-          });
-          break;
-        case 'COMMENT_DELETED':
-          if (!message.payload.postId || !message.payload.commentId) {
-            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => {
-            return prevPosts.map(post => {
-              if (post._id === message.payload.postId) {
-                return {
-                  ...post,
-                  comments: (post.comments || []).filter(c => c._id !== message.payload.commentId),
-                  commentCount: Math.max(0, (post.commentCount || 0) - 1)
-                };
-              }
-              return post;
-            });
-          });
-          break;
-        case 'REACTION_UPDATED':
-          if (!message.payload.entityType || !message.payload.entityId) {
-            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
-            return;
-          }
-          const reactionsSummary = message.payload.reactionsSummary || message.payload.reactions;
-          if (!reactionsSummary) {
-            console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
-            return;
-          }
-          setPosts(prevPosts => {
-            return prevPosts.map(post => {
-              if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
-                return { ...post, reactions: reactionsSummary, updatedAt: message.payload.updatedAt || new Date().toISOString() };
-              } else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
-                const updatedComments = (post.comments || []).map(comment => {
-                  if (comment._id === message.payload.entityId) {
-                    return { ...comment, reactions: reactionsSummary, updatedAt: message.payload.updatedAt || new Date().toISOString() };
-                  }
-                  return comment;
-                });
-                return { ...post, comments: updatedComments };
-              }
-              return post;
-            });
-          });
-          break;
-        default:
-          console.log('EmployeeDashboard: Unhandled WebSocket message type:', message.type);
-      }
-    } catch (error) {
-      console.error('EmployeeDashboard: Failed to parse WebSocket message or update state:', error);
-    }
-  }, [setPosts]);
-
-  const { sendMessage } = useWebSocket(
-    WS_URL,
-    handleWebSocketMessage,
-    () => { 
-      console.log('WebSocket connected');
-      // Send authentication message if we have the required data
-      const storedToken = localStorage.getItem('token');
-      const currentOrgId = organizationIdRef.current;
-      if (storedToken && currentOrgId) {
-        return {
-          type: 'AUTH',
-          token: storedToken,
-          organizationId: currentOrgId,
-          role: 'employee'
-        };
-      }
-      return null;
-    },
-    (error) => { console.error('WebSocket error:', error); }
-  );
-
-  // Update organizationIdRef when organizationId changes and re-authenticate
-  useEffect(() => {
-    organizationIdRef.current = organizationId;
-    
-    // Re-authenticate with WebSocket if organization changes
-    const storedToken = localStorage.getItem('token');
-    if (storedToken && organizationId) {
-      sendMessage({
-        type: 'AUTH',
-        token: storedToken,
-        organizationId: organizationId,
-        role: 'employee'
-      });
-    }
-  }, [organizationId, sendMessage]);
 
   // --- Fetch Posts ---
   const fetchPosts = async () => {
@@ -836,20 +809,6 @@ const EmployeeDashboard = () => {
     ));
     setShowEditPostModal(false);
     setPostToEdit(null);
-  };
-
-  // Helper function to check if post has been edited (excluding pinning)
-  const isPostEdited = (post) => {
-    // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
-    if (post.updatedAt === post.createdAt) {
-      return false;
-    }
-    
-    // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
-    // We can't easily detect this on the frontend, so we'll use a different approach
-    // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
-    const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
-    return timeDiff > 60000; // More than 1 minute difference
   };
 
   const actions = [
