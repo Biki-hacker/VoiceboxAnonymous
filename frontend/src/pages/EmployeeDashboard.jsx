@@ -162,6 +162,27 @@ const EmployeeDashboard = () => {
   // Add ref to track current organizationId for WebSocket
   const organizationIdRef = useRef(organizationId);
 
+  // Helper function to safely render post content
+  const renderPostContent = (content) => {
+    // If content is a string, render it directly
+    if (typeof content === 'string') {
+      return content;
+    }
+    
+    // If content is an encrypted object, show a placeholder
+    if (content && typeof content === 'object' && content.isEncrypted) {
+      return '[Encrypted content - please refresh to decrypt]';
+    }
+    
+    // If content is any other object, convert to string
+    if (content && typeof content === 'object') {
+      return '[Content not available]';
+    }
+    
+    // Fallback for null/undefined
+    return content || '';
+  };
+
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
     try {
@@ -1215,7 +1236,7 @@ const EmployeeDashboard = () => {
                       </div>
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                      {post.content}
+                      {renderPostContent(post.content)}
                     </p>
                     
                     {/* Media Display */}
