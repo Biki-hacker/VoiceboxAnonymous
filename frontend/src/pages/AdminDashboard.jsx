@@ -24,6 +24,7 @@ import {
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
+import PostEditModal from '../components/PostEditModal';
 
 // Import common components and hooks
 import useTheme from '../hooks/useTheme';
@@ -117,12 +118,37 @@ const AdminDashboard = () => {
     const [postToDelete, setPostToDelete] = useState(null);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
     const [deletingComment, setDeletingComment] = useState(null);
+    // Post editing state
+    const [showEditPostModal, setShowEditPostModal] = useState(false);
+    const [postToEdit, setPostToEdit] = useState(null);
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
     
     // --- Add media error handling state ---
     const [mediaErrors, setMediaErrors] = useState({});
     
+    // Helper functions for post permissions
+    const isCurrentUserPost = (post) => {
+        if (!post) return false;
+        const currentUserId = localStorage.getItem('userId');
+        // Handle both cases: author as string ID or author as object with _id
+        const authorId = typeof post.author === 'string' ? post.author : post.author?._id;
+        return currentUserId && authorId === currentUserId;
+    };
+
+    const canEditPost = (post) => {
+        return isCurrentUserPost(post);
+    };
+
+    const canDeletePost = (post) => {
+        if (!post) return false;
+        const currentUserId = localStorage.getItem('userId');
+        const userRole = localStorage.getItem('role');
+        // Handle both cases: author as string ID or author as object with _id
+        const authorId = typeof post.author === 'string' ? post.author : post.author?._id;
+        return currentUserId && (authorId === currentUserId || userRole === 'admin');
+    };
+
     // WebSocket message handler
     const handleWebSocketMessage = useCallback((message) => {
         console.log('AdminDashboard: WebSocket message received:', message);
@@ -138,98 +164,104 @@ const AdminDashboard = () => {
             
             switch (parsedMessage.type) {
                 case 'POST_CREATED':
-                    if (parsedMessage.payload.organization === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
                         setPosts(prev => [parsedMessage.payload.post, ...prev]);
                     }
                     break;
                 case 'POST_UPDATED':
-                    if (parsedMessage.payload.organization === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
                         setPosts(prev => 
                             prev.map(p => 
-                                p._id === parsedMessage.payload.post._id 
-                                    ? parsedMessage.payload.post 
+                                p?._id === parsedMessage.payload.post._id 
+                                    ? {
+                                        ...parsedMessage.payload.post,
+                                        comments: p.comments || [] // Preserve existing decrypted comments
+                                    }
                                     : p
-                            )
+                            ).filter(Boolean) // Remove any undefined posts
                         );
                     }
                     break;
                 case 'POST_DELETED':
-                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
-                        setPosts(prev => prev.filter(p => p._id !== parsedMessage.payload.postId));
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
+                        setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
                     }
                     break;
                 case 'COMMENT_CREATED':
-                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
                         setPosts(prev => 
                             prev.map(p => 
-                                p._id === parsedMessage.payload.postId 
+                                p?._id === parsedMessage.payload.postId 
                                     ? { 
                                         ...p,
                                         comments: [...(p.comments || []), parsedMessage.payload.comment]
                                     } 
                                     : p
-                            )
+                            ).filter(Boolean) // Remove any undefined posts
                         );
                     }
                     break;
                 case 'COMMENT_UPDATED':
-                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
                         setPosts(prev => 
                             prev.map(p => 
-                                p._id === parsedMessage.payload.postId 
+                                p?._id === parsedMessage.payload.postId 
                                     ? { 
                                         ...p,
                                         comments: p.comments?.map(c => 
-                                            c._id === parsedMessage.payload.comment._id 
+                                            c?._id === parsedMessage.payload.comment._id 
                                                 ? parsedMessage.payload.comment 
                                                 : c
-                                        ) || []
+                                        ).filter(Boolean) || []
                                     } 
                                     : p
-                            )
+                            ).filter(Boolean) // Remove any undefined posts
                         );
                     }
                     break;
                 case 'COMMENT_DELETED':
-                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.commentId) {
                         setPosts(prev => 
                             prev.map(p => 
-                                p._id === parsedMessage.payload.postId 
+                                p?._id === parsedMessage.payload.postId 
                                     ? { 
                                         ...p,
-                                        comments: p.comments?.filter(c => c._id !== parsedMessage.payload.commentId) || []
+                                        comments: p.comments?.filter(c => c?._id !== parsedMessage.payload.commentId) || []
                                     } 
                                     : p
-                            )
+                            ).filter(Boolean) // Remove any undefined posts
                         );
                     }
                     break;
                 case 'REACTION_UPDATED':
-                    if (parsedMessage.payload.organizationId === currentSelectedOrgId) {
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId) {
                         const { entityType, entityId, postId, reactionsSummary } = parsedMessage.payload;
                         
-                        setPosts(prev => 
-                            prev.map(post => {
-                                if (post._id !== postId) return post;
-                                
-                                if (entityType === 'post') {
-                                    return {
-                                        ...post,
-                                        reactions: reactionsSummary
-                                    };
-                                } else {
-                                    // Handle comment reactions
-                                    return {
-                                        ...post,
-                                        comments: post.comments?.map(comment => 
-                                            comment._id === entityId 
-                                                ? { ...comment, reactions: reactionsSummary }
-                                                : comment
-                                        ) || []
-                                    };
-                                }
-                            })
-                        );
+                        if (postId && reactionsSummary) {
+                            setPosts(prev => 
+                                prev.map(post => {
+                                    if (post?._id !== postId) return post;
+                                    
+                                    if (entityType === 'post') {
+                                        return {
+                                            ...post,
+                                            reactions: reactionsSummary
+                                        };
+                                    } else if (entityType === 'comment' && entityId) {
+                                        // Handle comment reactions
+                                        return {
+                                            ...post,
+                                            comments: post.comments?.map(comment => 
+                                                comment?._id === entityId 
+                                                    ? { ...comment, reactions: reactionsSummary }
+                                                    : comment
+                                            ).filter(Boolean) || []
+                                        };
+                                    }
+                                    return post;
+                                }).filter(Boolean) // Remove any undefined posts
+                            );
+                        }
                     }
                     break;
                 default:
@@ -238,7 +270,7 @@ const AdminDashboard = () => {
         } catch (error) {
             console.error('Error processing WebSocket message:', error);
         }
-    }, [setPosts]);
+    }, [setPosts, posts]);
 
     // Initialize WebSocket connection using the shared hook
     const { sendMessage } = useWebSocket(
@@ -340,6 +372,20 @@ const AdminDashboard = () => {
         } finally {
             setIsDeletingPost(false);
         }
+    };
+
+    // --- Handle Post Edit ---
+    const handlePostEdit = (post) => {
+        setPostToEdit(post);
+        setShowEditPostModal(true);
+    };
+
+    const handlePostUpdated = (updatedPost) => {
+        setPosts(prev => prev.map(post => 
+            post._id === updatedPost._id ? { ...post, ...updatedPost, comments: post.comments || [], author: post.author } : post
+        ));
+        setShowEditPostModal(false);
+        setPostToEdit(null);
     };
 
     // --- Authentication Effect ---
@@ -1265,7 +1311,7 @@ const AdminDashboard = () => {
                                         <NothingToShow message={posts.length === 0 ? "No posts found for this organization." : "No posts match the current filters."} />
                                     ) : (
                                         <div className="space-y-4">
-                                            {filteredPosts.map((post, i) => (
+                                            {filteredPosts.filter(post => post && post._id).map((post, i) => (
                                                 <motion.div 
                                                     key={post._id} 
                                                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
@@ -1291,24 +1337,40 @@ const AdminDashboard = () => {
                                                                 {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : 'User'}
                                                             </span>
                                                         </div>
-                                                        <button 
-                                                            onClick={(e) => {
+                                                        <div className="flex space-x-1">
+                                                          {canEditPost(post) && (
+                                                            <button
+                                                              onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                confirmDeletePost(post);
-                                                            }}
-                                                            className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
-                                                            title="Delete Post"
-                                                            disabled={isDeletingPost}
-                                                        >
-                                                            {isDeletingPost && postToDelete?._id === post._id ? (
-                                                                <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                                </svg>
-                                                            ) : (
-                                                                <TrashIcon className="h-4 w-4" />
-                                                            )}
-                                                        </button>
+                                                                handlePostEdit(post);
+                                                              }}
+                                                              className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                              title="Edit Post"
+                                                            >
+                                                              <PencilSquareIcon className="h-4 w-4" />
+                                                            </button>
+                                                          )}
+                                                          {canDeletePost(post) && (
+                                                            <button 
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  confirmDeletePost(post);
+                                                              }}
+                                                              className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
+                                                              title="Delete Post"
+                                                              disabled={isDeletingPost}
+                                                          >
+                                                              {isDeletingPost && postToDelete?._id === post._id ? (
+                                                                  <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                  </svg>
+                                                              ) : (
+                                                                  <TrashIcon className="h-4 w-4" />
+                                                              )}
+                                                            </button>
+                                                          )}
+                                                        </div>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
                                                         {post.content}
@@ -1389,7 +1451,7 @@ const AdminDashboard = () => {
                                                           </span>
                                                         )}
                                                         <span>|</span>
-                                                        <span>{new Date(post.createdAt).toLocaleString()}</span>
+                                                        <span>{new Date(post.createdAt).toLocaleString()}{post.updatedAt !== post.createdAt && ' (edited)'}</span>
                                                         {post.region && (
                                                             <>
                                                                 <span className="hidden sm:inline">|</span>
@@ -1444,6 +1506,36 @@ const AdminDashboard = () => {
                                                             postId={post._id} 
                                                             comments={post.comments || []} 
                                                             selectedOrg={selectedOrg}
+                                                            onCommentAdded={(newComment) => {
+                                                              // Update the posts state with the new comment
+                                                              console.log('AdminDashboard: onCommentAdded called with:', newComment);
+                                                              setPosts(prevPosts => 
+                                                                prevPosts.map(p => 
+                                                                  p._id === post._id 
+                                                                    ? { 
+                                                                        ...p, 
+                                                                        comments: [newComment, ...(p.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                                                                        commentCount: (p.commentCount || 0) + 1
+                                                                      } 
+                                                                    : p
+                                                                )
+                                                              );
+                                                            }}
+                                                            onCommentDeleted={(deletedComment) => {
+                                                              // Update the posts state to remove the deleted comment
+                                                              console.log('AdminDashboard: onCommentDeleted called with:', deletedComment);
+                                                              setPosts(prevPosts => 
+                                                                prevPosts.map(p => 
+                                                                  p._id === post._id 
+                                                                    ? { 
+                                                                        ...p, 
+                                                                        comments: (p.comments || []).filter(c => c._id !== deletedComment._id),
+                                                                        commentCount: Math.max(0, (p.commentCount || 0) - 1)
+                                                                      } 
+                                                                    : p
+                                                                )
+                                                              );
+                                                            }}
                                                         />
                                                     </div>
                                                 </motion.div>
@@ -1717,8 +1809,16 @@ const AdminDashboard = () => {
             confirmButtonText="Delete"
             cancelButtonText="Cancel"
         />
-        <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">{/* ... Manage Orgs Modal Content ... */ loading.orgList ? (<div className="text-center py-10"><p className="text-gray-600 dark:text-slate-400">Loading organizations...</p></div>) : organizations.length === 0 ? (<NothingToShow message="No organizations to manage. Add one first." />) : (<div className="space-y-3"><p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p><ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">{organizations.map((org) => (<li key={org._id} className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}><div className="flex items-center justify-between space-x-3"><div className="flex-1 min-w-0"><button onClick={() => { selectOrganization(org); setIsManageOrgModalOpen(false); }} className="text-left w-full group"><p className={`text-sm font-medium truncate ${selectedOrg?._id === org._id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{org.name}</p><p className="text-xs text-gray-500 dark:text-slate-400 truncate">ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}</p></button></div><button onClick={() => initiateDeleteOrganization(org)} disabled={loading.deleteOrg?.[org._id]} className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50" title="Delete Organization">{loading.deleteOrg?.[org._id] ? <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> : <TrashIcon className="h-4 w-4" />}</button></div></li>))}</ul></div>)}<div className="mt-6 flex justify-end"><button type="button" onClick={() => setIsManageOrgModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800">Close</button></div></Modal>
-        <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
+        {/* Post Edit Modal */}
+        <PostEditModal
+            isOpen={showEditPostModal}
+            onClose={() => {
+                setShowEditPostModal(false);
+                setPostToEdit(null);
+            }}
+            post={postToEdit}
+            onPostUpdated={handlePostUpdated}
+        />
         </>
     );
 };

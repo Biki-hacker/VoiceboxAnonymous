@@ -41,6 +41,7 @@ import { ArrowsPointingOutIcon, HandThumbUpIcon as HandThumbUpIconSolid, HeartIc
 import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
+import PostEditModal from '../components/PostEditModal';
 
 // Import common components and hooks
 import useTheme from '../hooks/useTheme';
@@ -165,6 +166,10 @@ const EmployeeDashboard = () => {
   const [isDeletingPost, setIsDeletingPost] = useState(false);
   const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
   
+  // Post editing state
+  const [showEditPostModal, setShowEditPostModal] = useState(false);
+  const [postToEdit, setPostToEdit] = useState(null);
+  
   // Post filters
   const [selectedPostType, setSelectedPostType] = useState('all');
   const [selectedRegion, setSelectedRegion] = useState('all');
@@ -286,11 +291,7 @@ const EmployeeDashboard = () => {
         console.warn('Invalid WebSocket message format:', message);
         return;
       }
-      // Skip if this message is not for the current organization
-      if (message.payload.organizationId && message.payload.organizationId !== organizationId) {
-        console.log(`Ignoring message for different organization: ${message.payload.organizationId}`);
-        return;
-      }
+      
       // Validate message structure
       if (!message || typeof message !== 'object') {
         console.warn('EmployeeDashboard: Invalid message format:', message);
@@ -300,11 +301,14 @@ const EmployeeDashboard = () => {
         console.warn('EmployeeDashboard: Message missing payload:', message);
         return;
       }
+
+      // Check organization ID for all message types
       const orgId = message.payload.organizationId || message.payload.organization;
       if (!orgId || orgId !== organizationId) {
         console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
         return;
       }
+
       switch (message.type) {
         case 'POST_CREATED':
           if (!message.payload._id || !message.payload.createdAt) {
@@ -318,7 +322,11 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
             return;
           }
-          setPosts(prevPosts => prevPosts.map(p => (p._id === message.payload._id ? { ...p, ...message.payload } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          setPosts(prevPosts => prevPosts.map(p => (p._id === message.payload._id ? { 
+            ...p, 
+            ...message.payload,
+            comments: p.comments || [] // Preserve existing decrypted comments
+          } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           break;
         case 'POST_DELETED':
           if (!message.payload.postId) {
@@ -332,22 +340,55 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
             return;
           }
+          console.log('EmployeeDashboard: Processing COMMENT_CREATED for post:', message.payload.postId, 'comment:', message.payload.comment._id);
           setPosts(prevPosts => {
-            return prevPosts.map(post => {
-              if (post._id === message.payload.postId) {
-                const commentExists = post.comments?.some(c => c._id === message.payload.comment._id);
-                if (commentExists) {
-                  console.log('Comment already exists, skipping duplicate');
-                  return post;
+            // Check if the post exists in the current list
+            const postExists = prevPosts.some(post => post._id === message.payload.postId);
+            
+            if (postExists) {
+              // Update existing post with new comment
+              return prevPosts.map(post => {
+                if (post._id === message.payload.postId) {
+                  const commentExists = post.comments?.some(c => c._id === message.payload.comment._id);
+                  if (commentExists) {
+                    console.log('Comment already exists, skipping duplicate');
+                    return post;
+                  }
+                  console.log('Adding comment to existing post');
+                  // Check if we already have a comment with the same text (local comment)
+                  const hasLocalComment = post.comments?.some(c => 
+                    c.text === message.payload.comment.text || 
+                    c.content === message.payload.comment.text
+                  );
+                  if (hasLocalComment) {
+                    console.log('Local comment already exists, skipping WebSocket comment');
+                    return post;
+                  }
+                  return {
+                    ...post,
+                    comments: [message.payload.comment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                    commentCount: (post.commentCount || 0) + 1
+                  };
                 }
-                return {
-                  ...post,
-                  comments: [message.payload.comment, ...(post.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-                  commentCount: (post.commentCount || 0) + 1
-                };
-              }
-              return post;
-            });
+                return post;
+              });
+            } else {
+              // Post doesn't exist in current list, add it with the comment
+              // This creates a minimal post object with just the comment
+              console.log('Creating new post with comment');
+              const newPost = {
+                _id: message.payload.postId,
+                comments: [message.payload.comment],
+                commentCount: 1,
+                createdAt: message.payload.comment.createdAt || new Date().toISOString(),
+                // Add other required fields with defaults
+                content: '[Post not loaded]',
+                postType: 'feedback',
+                author: message.payload.comment.author,
+                createdByRole: message.payload.comment.createdByRole || 'user'
+              };
+              return [newPost, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            }
           });
           break;
         case 'COMMENT_UPDATED':
@@ -395,33 +436,19 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
             return;
           }
-          const reactionsData = message.payload.reactions || message.payload.reactionsSummary;
-          if (!reactionsData) {
+          const reactionsSummary = message.payload.reactionsSummary || message.payload.reactions;
+          if (!reactionsSummary) {
             console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
             return;
           }
-          const currentUserId = localStorage.getItem('userId');
-          const processedReactions = {};
-          Object.entries(reactionsData).forEach(([reactionType, reaction]) => {
-            if (!reaction) {
-              processedReactions[reactionType] = { count: 0, users: [], hasReacted: false };
-              return;
-            }
-            const userList = Array.isArray(reaction.users) ? reaction.users : [];
-            processedReactions[reactionType] = {
-              count: reaction.count || 0,
-              users: userList,
-              hasReacted: currentUserId ? userList.some(id => id === currentUserId || id.toString() === currentUserId) : false
-            };
-          });
           setPosts(prevPosts => {
             return prevPosts.map(post => {
               if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
-                return { ...post, reactions: { ...post.reactions, ...processedReactions }, updatedAt: message.payload.updatedAt || new Date().toISOString() };
+                return { ...post, reactions: reactionsSummary, updatedAt: message.payload.updatedAt || new Date().toISOString() };
               } else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
                 const updatedComments = (post.comments || []).map(comment => {
                   if (comment._id === message.payload.entityId) {
-                    return { ...comment, reactions: { ...comment.reactions, ...processedReactions }, updatedAt: message.payload.updatedAt || new Date().toISOString() };
+                    return { ...comment, reactions: reactionsSummary, updatedAt: message.payload.updatedAt || new Date().toISOString() };
                   }
                   return comment;
                 });
@@ -439,11 +466,25 @@ const EmployeeDashboard = () => {
     }
   };
 
-  useWebSocket(
+  const { sendMessage } = useWebSocket(
     WS_URL,
     handleWebSocketMessage,
-    () => { console.log('WebSocket connected'); },
-    (error) => { console.error('WebSocket error:', error); }
+    () => { 
+      console.log('WebSocket connected');
+      // Send authentication message if we have the required data
+      const storedToken = localStorage.getItem('token');
+      if (storedToken && organizationId) {
+        return {
+          type: 'AUTH',
+          token: storedToken,
+          organizationId: organizationId,
+          role: 'employee'
+        };
+      }
+      return null;
+    },
+    (error) => { console.error('WebSocket error:', error); },
+    [organizationId]
   );
 
   // --- Fetch Posts ---
@@ -759,6 +800,20 @@ const EmployeeDashboard = () => {
     }
   };
 
+  // --- Handle Post Edit ---
+  const handlePostEdit = (post) => {
+    setPostToEdit(post);
+    setShowEditPostModal(true);
+  };
+
+  const handlePostUpdated = (updatedPost) => {
+    setPosts(prev => prev.map(post => 
+      post._id === updatedPost._id ? { ...post, ...updatedPost, comments: post.comments || [], author: post.author } : post
+    ));
+    setShowEditPostModal(false);
+    setPostToEdit(null);
+  };
+
   const actions = [
     {
       title: "Create New Post",
@@ -991,16 +1046,28 @@ const EmployeeDashboard = () => {
                         </div>
                       </div>
                       {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePostDelete(post._id);
-                          }}
-                          className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Delete Post"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
+                        <div className="flex space-x-1">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePostEdit(post);
+                            }}
+                            className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                            title="Edit Post"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handlePostDelete(post._id);
+                            }}
+                            className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                            title="Delete Post"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        </div>
                       )}
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
@@ -1092,7 +1159,7 @@ const EmployeeDashboard = () => {
                         </span>
                       )}
                       <span className="text-gray-400 dark:text-slate-500">|</span>
-                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}</span>
+                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}{post.updatedAt !== post.createdAt && ' (edited)'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
                       <span className="block sm:inline mt-1 sm:mt-0 text-gray-600 dark:text-slate-300">Region: {post.region || 'N/A'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
@@ -1100,46 +1167,87 @@ const EmployeeDashboard = () => {
                     </div>
                     {post.reactions && Object.entries(post.reactions).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {Object.entries(post.reactions).map(([type, {count}]) => (
-                          <ReactionButton
-                            key={type}
-                            type={type}
-                            count={count || 0}
-                            postId={post._id}
-                            onReactionUpdate={(reactionData) => {
-                              // Update the post's reactions locally
-                              setPosts(prevPosts => 
-                                prevPosts.map(p => {
-                                  if (p._id === post._id) {
-                                    return {
-                                      ...p,
-                                      reactions: {
-                                        ...p.reactions,
-                                        [reactionData.type]: {
-                                          count: reactionData.count || 0,
-                                          hasReacted: reactionData.isReacted || false
+                        {Object.entries(post.reactions).map(([type, reactionData]) => {
+                          // Get the current user's reaction status
+                          const currentUserId = localStorage.getItem('userId');
+                          const hasReacted = reactionData.users && reactionData.users.includes(currentUserId);
+                          
+                          return (
+                            <ReactionButton
+                              key={type}
+                              type={type}
+                              count={reactionData.count || 0}
+                              postId={post._id}
+                              onReactionUpdate={(reactionData) => {
+                                // Update the post's reactions locally with single selection behavior
+                                setPosts(prevPosts => 
+                                  prevPosts.map(p => {
+                                    if (p._id === post._id) {
+                                      // Create a new reactions object with all reaction types
+                                      const updatedReactions = {};
+                                      Object.keys(p.reactions || {}).forEach(reactionType => {
+                                        if (reactionType === reactionData.type) {
+                                          // Update the clicked reaction type
+                                          updatedReactions[reactionType] = {
+                                            count: reactionData.count || 0,
+                                            users: reactionData.isReacted 
+                                              ? [...(p.reactions[reactionType]?.users || []), currentUserId].filter((v, i, a) => a.indexOf(v) === i)
+                                              : (p.reactions[reactionType]?.users || []).filter(id => id !== currentUserId)
+                                          };
+                                        } else {
+                                          // For other reaction types, remove current user if they were added
+                                          const filteredUsers = (p.reactions[reactionType]?.users || []).filter(id => id !== currentUserId);
+                                          updatedReactions[reactionType] = {
+                                            count: filteredUsers.length,
+                                            users: filteredUsers
+                                          };
                                         }
-                                      }
-                                    };
-                                  }
-                                  return p;
-                                })
-                              );
-                            }}
-                          />
-                        ))}
+                                      });
+                                      
+                                      return {
+                                        ...p,
+                                        reactions: updatedReactions
+                                      };
+                                    }
+                                    return p;
+                                  })
+                                );
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                     <div className="mt-3">
                       <CommentSection 
                         postId={post._id} 
                         comments={post.comments || []} 
-                        onCommentAdded={(updatedComments) => {
-                          // Update the posts state with the new comments
+                        onCommentAdded={(newComment) => {
+                          // Update the posts state with the new comment
+                          console.log('EmployeeDashboard: onCommentAdded called with:', newComment);
                           setPosts(prevPosts => 
                             prevPosts.map(p => 
                               p._id === post._id 
-                                ? { ...p, comments: updatedComments } 
+                                ? { 
+                                    ...p, 
+                                    comments: [newComment, ...(p.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                                    commentCount: (p.commentCount || 0) + 1
+                                  } 
+                                : p
+                            )
+                          );
+                        }}
+                        onCommentDeleted={(deletedComment) => {
+                          // Update the posts state to remove the deleted comment
+                          console.log('EmployeeDashboard: onCommentDeleted called with:', deletedComment);
+                          setPosts(prevPosts => 
+                            prevPosts.map(p => 
+                              p._id === post._id 
+                                ? { 
+                                    ...p, 
+                                    comments: (p.comments || []).filter(c => c._id !== deletedComment._id),
+                                    commentCount: Math.max(0, (p.commentCount || 0) - 1)
+                                  } 
                                 : p
                             )
                           );
@@ -1325,6 +1433,17 @@ const EmployeeDashboard = () => {
         isDeleting={isDeletingPost}
         onConfirm={confirmDeletePost}
         confirmButtonText={isDeletingPost ? 'Deleting...' : 'Delete'}
+      />
+
+      {/* Post Edit Modal */}
+      <PostEditModal
+        isOpen={showEditPostModal}
+        onClose={() => {
+          setShowEditPostModal(false);
+          setPostToEdit(null);
+        }}
+        post={postToEdit}
+        onPostUpdated={handlePostUpdated}
       />
     </div>
   );

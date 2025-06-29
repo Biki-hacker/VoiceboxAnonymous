@@ -12,6 +12,7 @@ import { api } from '../../utils/axios';
 import { useAuth } from '../../context/AuthContext';
 import ReactionButton from './ReactionButton';
 import DeletionConfirmation from '../DeletionConfirmation';
+import CommentEditModal from './CommentEditModal';
 
 const CommentSection = ({ 
   postId, 
@@ -25,10 +26,12 @@ const CommentSection = ({
   const [comments, setComments] = useState(initialComments);
   const [newComment, setNewComment] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingComment, setEditingComment] = useState(null);
-  const [editingContent, setEditingContent] = useState('');
   const [deletingComment, setDeletingComment] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [commentToEdit, setCommentToEdit] = useState(null);
+  const [editError, setEditError] = useState(null);
+  const [editSubmitting, setEditSubmitting] = useState(false);
   const commentInputRef = useRef(null);
   const { user } = useAuth();
 
@@ -43,40 +46,16 @@ const CommentSection = ({
 
     try {
       setIsSubmitting(true);
-      
-      if (editingComment) {
-        // Update existing comment
-        const response = await api.put(`/posts/${postId}/comments/${editingComment._id}`, {
-          text: newComment
-        });
-        
-        const updatedComment = response.data.comment || response.data;
-        const updatedComments = comments.map(comment => 
-          comment._id === updatedComment._id ? updatedComment : comment
-        );
-        
-        setComments(updatedComments);
-        setEditingComment(null);
-        
-        if (onCommentUpdated) {
-          onCommentUpdated(updatedComment);
-        }
-      } else {
-        // Create new comment
-        const response = await api.post(`/posts/${postId}/comments`, {
-          text: newComment
-        });
-        
-        const newCommentData = response.data.comment || response.data;
-        const updatedComments = [newCommentData, ...comments];
-        
-        setComments(updatedComments);
-        
-        if (onCommentAdded) {
-          onCommentAdded(newCommentData);
-        }
+      // Create new comment
+      const response = await api.post(`/posts/${postId}/comments`, {
+        text: newComment
+      });
+      const newCommentData = response.data.comment || response.data;
+      const updatedComments = [newCommentData, ...comments];
+      setComments(updatedComments);
+      if (onCommentAdded) {
+        onCommentAdded(newCommentData);
       }
-      
       setNewComment('');
       if (commentInputRef.current) {
         commentInputRef.current.focus();
@@ -89,23 +68,45 @@ const CommentSection = ({
   };
 
   const handleEditComment = (comment) => {
-    setEditingComment(comment);
-    setNewComment(comment.text || comment.content);
-    commentInputRef.current.focus();
+    setCommentToEdit(comment);
+    setEditModalOpen(true);
+    setEditError(null);
+  };
+
+  const handleSaveEdit = async (text) => {
+    if (!commentToEdit) return;
+    setEditSubmitting(true);
+    setEditError(null);
+    try {
+      const response = await api.put(`/posts/${postId}/comments/${commentToEdit._id}`, {
+        text
+      });
+      const updatedComment = response.data.comment || response.data;
+      const updatedComments = comments.map(comment => 
+        comment._id === updatedComment._id ? updatedComment : comment
+      );
+      setComments(updatedComments);
+      setEditModalOpen(false);
+      setCommentToEdit(null);
+      if (onCommentUpdated) {
+        onCommentUpdated(updatedComment);
+      }
+    } catch (error) {
+      setEditError(error.response?.data?.message || 'Failed to update comment.');
+      console.error('Error editing comment:', error);
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const handleDeleteComment = async () => {
     if (!deletingComment || isDeleting) return;
-
     try {
       setIsDeleting(true);
-      
       await api.delete(`/posts/${postId}/comments/${deletingComment._id}`);
-      
       const updatedComments = comments.filter(c => c._id !== deletingComment._id);
       setComments(updatedComments);
       setDeletingComment(null);
-      
       if (onCommentDeleted) {
         onCommentDeleted(deletingComment);
       }
@@ -119,19 +120,29 @@ const CommentSection = ({
   const handleReactionUpdate = async (reactionData) => {
     try {
       const { type, postId, commentId, isReacted, count } = reactionData;
-      
-      // Update the comment's reaction count locally
       setComments(prev => prev.map(comment => {
         if (comment._id === commentId) {
-          return {
-            ...comment,
-            reactions: {
-              ...comment.reactions,
-              [type]: {
+          // Create a new reactions object with all reaction types
+          const updatedReactions = {};
+          Object.keys(comment.reactions || {}).forEach(reactionType => {
+            if (reactionType === type) {
+              // Update the clicked reaction type
+              updatedReactions[reactionType] = {
                 count: count || 0,
                 hasReacted: isReacted || false
-              }
+              };
+            } else {
+              // For other reaction types, ensure they are not selected
+              updatedReactions[reactionType] = {
+                count: comment.reactions[reactionType]?.count || 0,
+                hasReacted: false
+              };
             }
+          });
+          
+          return {
+            ...comment,
+            reactions: updatedReactions
           };
         }
         return comment;
@@ -146,7 +157,20 @@ const CommentSection = ({
   };
 
   const isCurrentUserComment = (comment) => {
-    return user && (comment.author?._id === user._id || comment.author === user._id || comment.userId === user._id);
+    const currentUserId = localStorage.getItem('userId');
+    // Handle both cases: author as string ID or author as object with _id
+    const authorId = typeof comment.author === 'string' ? comment.author : comment.author?._id;
+    return currentUserId && (authorId === currentUserId || comment.userId === currentUserId);
+  };
+
+  const canEditComment = (comment) => {
+    return isCurrentUserComment(comment);
+  };
+
+  const canDeleteComment = (comment) => {
+    const currentUserId = localStorage.getItem('userId');
+    const userRole = localStorage.getItem('role');
+    return currentUserId && (isCurrentUserComment(comment) || userRole === 'admin');
   };
 
   return (
@@ -173,23 +197,11 @@ const CommentSection = ({
             <PaperAirplaneIcon className="h-5 w-5" />
           </button>
         </div>
-        {editingComment && (
-          <button
-            type="button"
-            onClick={() => {
-              setEditingComment(null);
-              setNewComment('');
-            }}
-            className="ml-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-          >
-            <XMarkIcon className="h-5 w-5" />
-          </button>
-        )}
       </form>
 
       <div className="space-y-3 max-h-96 overflow-y-auto custom-scrollbar pr-2">
         <AnimatePresence>
-          {comments.map((comment) => (
+          {Array.isArray(comments) && comments.map((comment) => (
             <motion.div
               key={comment._id}
               initial={{ opacity: 0, y: 10 }}
@@ -204,40 +216,50 @@ const CommentSection = ({
                 <div className="bg-gray-100 dark:bg-slate-700 rounded-lg p-3">
                   <div className="flex justify-between items-start">
                     <div>
-                      <p className="text-sm font-medium text-gray-900 dark:text-white">
-                        {comment.author?.name || comment.userName || 'Anonymous'}
-                      </p>
+                      <div className="flex items-center gap-2">
+                        {(comment.createdByRole === 'admin' || (comment.author && comment.author.role === 'admin')) ? (
+                          <span className="inline-block px-1.5 py-0.5 text-[10px] rounded-full font-medium bg-purple-100 dark:bg-purple-900/40 text-purple-800 dark:text-purple-300">
+                            Admin
+                          </span>
+                        ) : (
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
+                            {comment.author?.name || comment.userName || 'User'}
+                          </p>
+                        )}
+                      </div>
                       <p className="text-xs text-gray-500 dark:text-gray-400">
                         {formatDate(comment.createdAt)}
                         {comment.updatedAt !== comment.createdAt && ' (edited)'}
                       </p>
                     </div>
-                    {isCurrentUserComment(comment) && (
-                      <div className="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleEditComment(comment)}
-                          className="text-gray-500 hover:text-blue-500 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600"
-                          title="Edit comment"
-                        >
-                          <PencilSquareIcon className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => setDeletingComment(comment)}
-                          className="text-gray-500 hover:text-red-500 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600"
-                          title="Delete comment"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
+                    {(canEditComment(comment) || canDeleteComment(comment)) && (
+                      <div className="flex space-x-1">
+                        {canEditComment(comment) && (
+                          <button
+                            onClick={() => handleEditComment(comment)}
+                            className="text-gray-500 hover:text-blue-500 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600"
+                            title="Edit comment"
+                          >
+                            <PencilSquareIcon className="h-4 w-4" />
+                          </button>
+                        )}
+                        {canDeleteComment(comment) && (
+                          <button
+                            onClick={() => setDeletingComment(comment)}
+                            className="text-gray-500 hover:text-red-500 p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-600"
+                            title="Delete comment"
+                          >
+                            <TrashIcon className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
-                  
                   <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
                     {typeof (comment.text || comment.content) === 'string'
                       ? (comment.text || comment.content)
                       : '[Encrypted or invalid comment]'}
                   </p>
-                  
                   {/* Comment Reactions */}
                   <div className="mt-2 flex items-center space-x-2">
                     <ReactionButton
@@ -278,8 +300,7 @@ const CommentSection = ({
             </motion.div>
           ))}
         </AnimatePresence>
-        
-        {comments.length === 0 && (
+        {(!Array.isArray(comments) || comments.length === 0) && (
           <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
             No comments yet. Be the first to comment!
           </div>
@@ -292,9 +313,22 @@ const CommentSection = ({
         onClose={() => setDeletingComment(null)}
         onConfirm={handleDeleteComment}
         title="Delete Comment"
-        description="Are you sure you want to delete this comment? This action cannot be undone."
-        confirmText="Delete"
+        itemType="comment"
+        itemPreview={deletingComment ? (deletingComment.text || deletingComment.content) : ''}
+        confirmButtonText="Delete"
         isDeleting={isDeleting}
+      />
+      {/* Edit Comment Modal */}
+      <CommentEditModal
+        isOpen={editModalOpen}
+        onClose={() => {
+          setEditModalOpen(false);
+          setCommentToEdit(null);
+        }}
+        comment={commentToEdit}
+        onSave={handleSaveEdit}
+        isSubmitting={editSubmitting}
+        error={editError}
       />
     </div>
   );
