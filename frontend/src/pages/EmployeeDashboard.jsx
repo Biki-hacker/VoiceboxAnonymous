@@ -207,8 +207,16 @@ const EmployeeDashboard = () => {
           // Support both formats: payload.post or payload directly
           const postObj = parsedMessage.payload.post || parsedMessage.payload;
           const orgId = parsedMessage.payload.organization || parsedMessage.payload.organizationId;
-          if (orgId === currentSelectedOrgId && postObj?._id) {
+          // Only add if content is a string (decrypted)
+          if (
+            orgId === currentSelectedOrgId &&
+            postObj?._id &&
+            typeof postObj.content === 'string'
+          ) {
             setPosts(prev => [postObj, ...prev]);
+          } else {
+            // Optionally log or handle encrypted content
+            console.warn('POST_CREATED received with encrypted or invalid content:', postObj);
           }
           break;
         }
