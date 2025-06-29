@@ -149,6 +149,18 @@ const AdminDashboard = () => {
         return currentUserId && (authorId === currentUserId || userRole === 'admin');
     };
 
+    // Helper function to deduplicate comments by ID
+    const deduplicateComments = (comments) => {
+        if (!Array.isArray(comments)) return [];
+        const seen = new Set();
+        return comments.filter(comment => {
+            if (!comment || !comment._id) return false;
+            if (seen.has(comment._id)) return false;
+            seen.add(comment._id);
+            return true;
+        });
+    };
+
     // WebSocket message handler
     const handleWebSocketMessage = useCallback((message) => {
         console.log('AdminDashboard: WebSocket message received:', message);
@@ -175,7 +187,7 @@ const AdminDashboard = () => {
                                 p?._id === parsedMessage.payload.post._id 
                                     ? {
                                         ...parsedMessage.payload.post,
-                                        comments: p.comments || [] // Preserve existing decrypted comments
+                                        comments: deduplicateComments(p.comments || []) // Preserve existing decrypted comments
                                     }
                                     : p
                             ).filter(Boolean) // Remove any undefined posts
@@ -194,7 +206,7 @@ const AdminDashboard = () => {
                                 p?._id === parsedMessage.payload.postId 
                                     ? { 
                                         ...p,
-                                        comments: [...(p.comments || []), parsedMessage.payload.comment]
+                                        comments: deduplicateComments([...(p.comments || []), parsedMessage.payload.comment])
                                     } 
                                     : p
                             ).filter(Boolean) // Remove any undefined posts
@@ -208,11 +220,23 @@ const AdminDashboard = () => {
                                 p?._id === parsedMessage.payload.postId 
                                     ? { 
                                         ...p,
-                                        comments: p.comments?.map(c => 
-                                            c?._id === parsedMessage.payload.comment._id 
-                                                ? parsedMessage.payload.comment 
-                                                : c
-                                        ).filter(Boolean) || []
+                                        comments: p.comments?.map(c => {
+                                            if (c?._id === parsedMessage.payload.comment._id) {
+                                                // Only update if the comment text is different or if we're updating other fields
+                                                const currentText = typeof c.text === 'string' ? c.text : (c.content || '');
+                                                const newText = typeof parsedMessage.payload.comment.text === 'string' 
+                                                    ? parsedMessage.payload.comment.text 
+                                                    : (parsedMessage.payload.comment.content || '');
+                                                
+                                                // If the text is the same, don't update to prevent duplicates
+                                                if (currentText === newText && !parsedMessage.payload.comment.updatedAt) {
+                                                    return c;
+                                                }
+                                                
+                                                return parsedMessage.payload.comment;
+                                            }
+                                            return c;
+                                        }).filter(Boolean) || []
                                     } 
                                     : p
                             ).filter(Boolean) // Remove any undefined posts
@@ -1114,7 +1138,7 @@ const AdminDashboard = () => {
                                             setViewMode('dashboard');
                                             
                                             // Refresh posts
-                                            const postsRes = await api.get(`/posts/${selectedOrg._id}`);
+                                            const postsRes = await api.get(`/posts/org/${selectedOrg._id}`);
                                             setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
                                             
                                             // Refresh stats

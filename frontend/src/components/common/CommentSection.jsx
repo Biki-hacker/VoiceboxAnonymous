@@ -256,9 +256,16 @@ const CommentSection = ({
                     )}
                   </div>
                   <p className="mt-1 text-sm text-gray-800 dark:text-gray-200">
-                    {typeof (comment.text || comment.content) === 'string'
-                      ? (comment.text || comment.content)
-                      : '[Encrypted or invalid comment]'}
+                    {(() => {
+                      const commentText = comment.text || comment.content;
+                      if (typeof commentText === 'string' && commentText.trim()) {
+                        return commentText;
+                      } else if (commentText && typeof commentText === 'object' && commentText.isEncrypted) {
+                        return '[Encrypted comment]';
+                      } else {
+                        return '[Invalid comment]';
+                      }
+                    })()}
                   </p>
                   {/* Comment Reactions */}
                   <div className="mt-2 flex items-center space-x-2">

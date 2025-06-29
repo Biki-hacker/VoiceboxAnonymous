@@ -486,9 +486,24 @@ exports.commentOnPost = async (req, res) => {
     // Send WebSocket broadcast after the response is sent
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage && newComment) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      let decryptedCommentText = newComment.text;
+      
+      // Decrypt the comment text if it's encrypted
+      if (newComment.text && typeof newComment.text === 'object' && newComment.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(newComment.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = newComment.text; // Fallback to original
+        }
+      }
+      
       // Make sure we're not sending Mongoose-specific methods
       const commentToBroadcast = {
         ...newComment,
+        text: decryptedCommentText, // Use decrypted text
         author: {
           _id: req.user._id,
           name: req.user.name || 'Unknown User',
@@ -1118,11 +1133,31 @@ exports.editComment = async (req, res) => {
     // Broadcast the update to all connected clients
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      const commentObj = comment.toObject();
+      let decryptedCommentText = commentObj.text;
+      
+      // Decrypt the comment text if it's encrypted
+      if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(commentObj.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = commentObj.text; // Fallback to original
+        }
+      }
+      
+      const commentToBroadcast = {
+        ...commentObj,
+        text: decryptedCommentText // Use decrypted text
+      };
+      
       broadcastMessage({
         type: 'COMMENT_UPDATED',
         payload: {
           postId: post._id,
-          comment: comment.toObject(),
+          comment: commentToBroadcast,
           organizationId: post.orgId
         }
       });
