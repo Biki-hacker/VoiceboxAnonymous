@@ -305,20 +305,26 @@ const EmployeeDashboard = () => {
 
       switch (message.type) {
         case 'POST_CREATED':
-          if (!message.payload._id || !message.payload.createdAt) {
+          console.log('EmployeeDashboard: POST_CREATED message structure:', message.payload);
+          // Handle both message formats: direct payload or nested payload.post
+          const postData = message.payload.post || message.payload;
+          if (!postData?._id || !postData?.createdAt) {
             console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
             return;
           }
-          setPosts(prevPosts => [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+          setPosts(prevPosts => [postData, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           break;
         case 'POST_UPDATED':
-          if (!message.payload._id) {
+          console.log('EmployeeDashboard: POST_UPDATED message structure:', message.payload);
+          // Handle both message formats: direct payload or nested payload.post
+          const updatedPostData = message.payload.post || message.payload;
+          if (!updatedPostData?._id) {
             console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
             return;
           }
-          setPosts(prevPosts => prevPosts.map(p => (p._id === message.payload._id ? { 
+          setPosts(prevPosts => prevPosts.map(p => (p._id === updatedPostData._id ? { 
             ...p, 
-            ...message.payload,
+            ...updatedPostData,
             comments: p.comments || [] // Preserve existing decrypted comments
           } : p)).sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           break;
