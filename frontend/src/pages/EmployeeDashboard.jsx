@@ -203,11 +203,15 @@ const EmployeeDashboard = () => {
       const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
       
       switch (parsedMessage.type) {
-        case 'POST_CREATED':
-          if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
-            setPosts(prev => [parsedMessage.payload.post, ...prev]);
+        case 'POST_CREATED': {
+          // Support both formats: payload.post or payload directly
+          const postObj = parsedMessage.payload.post || parsedMessage.payload;
+          const orgId = parsedMessage.payload.organization || parsedMessage.payload.organizationId;
+          if (orgId === currentSelectedOrgId && postObj?._id) {
+            setPosts(prev => [postObj, ...prev]);
           }
           break;
+        }
         case 'POST_UPDATED':
           if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
             setPosts(prev => 
