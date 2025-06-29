@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
 import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
-import { decryptContent } from '../utils/crypto';
+import { decryptContent } from '../utils/crypto.js';
 import {
   UserCircleIcon,
   PencilSquareIcon,
@@ -1240,7 +1240,34 @@ const EmployeeDashboard = () => {
                         </div>
                       </div>
                       <div className="flex space-x-1">
-                        {/* Pin/unpin button removed for employees - only admins can pin/unpin */}
+                        {/* Pin/unpin button for admin only */}
+                        {localStorage.getItem('role') === 'admin' && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              try {
+                                const response = await api.post(`/posts/${post._id}/pin`);
+                                // Use the API response to update local state correctly
+                                const updatedPost = response.data.post;
+                                if (updatedPost) {
+                                  setPosts(prevPosts => 
+                                    prevPosts.map(p => 
+                                      p._id === post._id 
+                                        ? { ...p, isPinned: updatedPost.isPinned }
+                                        : p
+                                    )
+                                  );
+                                }
+                              } catch (err) {
+                                setError('Failed to pin/unpin post.');
+                              }
+                            }}
+                            className={`ml-2 text-yellow-600 hover:text-yellow-800 p-1 rounded-full ${post.isPinned ? 'bg-yellow-50' : ''}`}
+                            title={post.isPinned ? 'Unpin Post' : 'Pin Post'}
+                          >
+                            <PaperClipIcon className="h-5 w-5" />
+                          </button>
+                        )}
                         {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
                           <>
                             <button
