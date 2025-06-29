@@ -95,32 +95,6 @@ const MenuButton = ({ isOpen, toggle }) => (
   </motion.button>
 );
 
-// Loading Spinner Component
-const LoadingSpinner = () => (
-  <motion.div
-    initial={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.5 }}
-    className="fixed inset-0 bg-gradient-to-b from-[#040b1d] to-[#0a1224] flex items-center justify-center z-50"
-  >
-    <div className="flex flex-col items-center space-y-4">
-      <motion.div
-        animate={{ rotate: 360 }}
-        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-        className="w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full"
-      />
-      <motion.p
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ delay: 0.3 }}
-        className="text-blue-400 font-medium"
-      >
-        Loading Voicebox Anonymous...
-      </motion.p>
-    </div>
-  </motion.div>
-);
-
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -135,7 +109,6 @@ export default function Home() {
   const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [typedText, setTypedText] = useState("");
   const [contactStatus, setContactStatus] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const fullText = "Revolutionize Employee Feedback with Total Anonymity";
 
   // Handle smooth scrolling to sections
@@ -237,15 +210,6 @@ export default function Home() {
     return () => { document.body.style.overflow = 'unset'; };
   }, [isMenuOpen, isContactModalOpen]);
 
-  useEffect(() => {
-    // Simulate loading time and ensure all components are ready
-    const timer = setTimeout(() => {
-      setIsLoading(false);
-    }, 1000); // Show spinner for 1 seconds
-
-    return () => clearTimeout(timer);
-  }, []);
-
   const navLinks = [
     { name: "Features", href: "#features" },
     { name: "About", href: "#about" },
@@ -287,10 +251,6 @@ export default function Home() {
 
   return (
     <>
-      <AnimatePresence>
-        {isLoading && <LoadingSpinner />}
-      </AnimatePresence>
-      
       <div
         className="relative overflow-x-hidden min-h-screen text-white flex flex-col"
         style={{ background: "linear-gradient(to bottom, #040b1d, #0a1224)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
