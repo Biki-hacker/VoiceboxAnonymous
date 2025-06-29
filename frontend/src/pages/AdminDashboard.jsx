@@ -20,7 +20,7 @@ import {
     CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
     LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
     HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon,
-    FaceSmileIcon as EmojiHappyIcon
+    FaceSmileIcon as EmojiHappyIcon, PaperClipIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
@@ -122,6 +122,7 @@ const AdminDashboard = () => {
     // Post editing state
     const [showEditPostModal, setShowEditPostModal] = useState(false);
     const [postToEdit, setPostToEdit] = useState(null);
+    const [pinningPost, setPinningPost] = useState(null); // Track which post is being pinned/unpinned
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
     
@@ -160,6 +161,20 @@ const AdminDashboard = () => {
             seen.add(comment._id);
             return true;
         });
+    };
+
+    // Helper function to check if post has been edited (excluding pinning)
+    const isPostEdited = (post) => {
+        // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
+        if (post.updatedAt === post.createdAt) {
+            return false;
+        }
+        
+        // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
+        // We can't easily detect this on the frontend, so we'll use a different approach
+        // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
+        const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
+        return timeDiff > 60000; // More than 1 minute difference
     };
 
     // WebSocket message handler
@@ -588,12 +603,21 @@ const AdminDashboard = () => {
 
 
     // --- Memoized Data for Filters and Charts ---
-    const filteredPosts = useMemo(() => posts.filter(post => 
-        (selectedType === 'all' || post.postType === selectedType) && 
-        (selectedRegion === 'all' || post.region === selectedRegion) && 
-        (selectedDepartment === 'all' || post.department === selectedDepartment) &&
-        (searchQuery === '' || post.content.toLowerCase().includes(searchQuery.toLowerCase()))
-    ), [posts, selectedType, selectedRegion, selectedDepartment, searchQuery]);
+    const filteredPosts = useMemo(() => {
+        const filtered = posts.filter(post => 
+            (selectedType === 'all' || post.postType === selectedType) && 
+            (selectedRegion === 'all' || post.region === selectedRegion) && 
+            (selectedDepartment === 'all' || post.department === selectedDepartment) &&
+            (searchQuery === '' || post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+        );
+        
+        // Sort posts: pinned first, then by creation date (newest first)
+        return filtered.sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+    }, [posts, selectedType, selectedRegion, selectedDepartment, searchQuery]);
     const uniqueRegions = useMemo(() => [...new Set(posts.map(p => p.region).filter(Boolean))], [posts]);
     const uniqueDepartments = useMemo(() => [...new Set(posts.map(p => p.department).filter(Boolean))], [posts]);
     const typeOptions = [ { value: 'all', label: 'All Types' }, { value: 'feedback', label: 'Feedback' }, { value: 'complaint', label: 'Complaint' }, { value: 'suggestion', label: 'Suggestion' }, { value: 'public', label: 'Public' } ];
@@ -1384,6 +1408,12 @@ const AdminDashboard = () => {
                                                 >
                                                     <div className="flex justify-between items-start mb-1 sm:mb-2">
                                                         <div className="flex items-center gap-2">
+                                                            {/* Pinned tag */}
+                                                            {post.isPinned && (
+                                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mr-2">
+                                                                <PaperClipIcon className="h-4 w-4 mr-1 text-yellow-500" /> Pinned
+                                                              </span>
+                                                            )}
                                                             <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
                                                                 post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
                                                                 post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
@@ -1411,6 +1441,68 @@ const AdminDashboard = () => {
                                                               title="Edit Post"
                                                             >
                                                               <PencilSquareIcon className="h-4 w-4" />
+                                                            </button>
+                                                          )}
+                                                          {/* Pin/unpin button for admin only */}
+                                                          {localStorage.getItem('role') === 'admin' && (
+                                                            <button
+                                                              onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setPinningPost(post._id);
+                                                                
+                                                                try {
+                                                                  // Optimistic update - immediately show the change
+                                                                  setPosts(prevPosts => 
+                                                                    prevPosts.map(p => 
+                                                                      p._id === post._id 
+                                                                        ? { ...p, isPinned: !p.isPinned }
+                                                                        : p
+                                                                    )
+                                                                  );
+                                                                  
+                                                                  const response = await api.post(`/posts/${post._id}/pin`);
+                                                                  // Use the API response to update local state correctly
+                                                                  const updatedPost = response.data.post;
+                                                                  if (updatedPost) {
+                                                                    setPosts(prevPosts => 
+                                                                      prevPosts.map(p => 
+                                                                        p._id === post._id 
+                                                                          ? { ...p, isPinned: updatedPost.isPinned }
+                                                                          : p
+                                                                      )
+                                                                    );
+                                                                  }
+                                                                } catch (err) {
+                                                                  // Revert optimistic update on error
+                                                                  setPosts(prevPosts => 
+                                                                    prevPosts.map(p => 
+                                                                      p._id === post._id 
+                                                                        ? { ...p, isPinned: post.isPinned }
+                                                                        : p
+                                                                    )
+                                                                  );
+                                                                  setPostError('Failed to pin/unpin post.');
+                                                                  console.error('Error pinning/unpinning post:', err);
+                                                                } finally {
+                                                                  setPinningPost(null);
+                                                                }
+                                                              }}
+                                                              disabled={pinningPost === post._id}
+                                                              className={`text-gray-400 dark:text-slate-500 hover:text-yellow-600 dark:hover:text-yellow-500 p-1 rounded-full hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all duration-200 ${
+                                                                post.isPinned ? 'text-yellow-600 dark:text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : ''
+                                                              } ${
+                                                                pinningPost === post._id ? 'opacity-50 cursor-not-allowed' : ''
+                                                              }`}
+                                                              title={post.isPinned ? 'Unpin Post' : 'Pin Post'}
+                                                            >
+                                                              {pinningPost === post._id ? (
+                                                                <svg className="animate-spin h-4 w-4 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                </svg>
+                                                              ) : (
+                                                                <PaperClipIcon className="h-4 w-4" />
+                                                              )}
                                                             </button>
                                                           )}
                                                           {canDeletePost(post) && (
@@ -1514,7 +1606,7 @@ const AdminDashboard = () => {
                                                           </span>
                                                         )}
                                                         <span>|</span>
-                                                        <span>{new Date(post.createdAt).toLocaleString()}{post.updatedAt !== post.createdAt && ' (edited)'}</span>
+                                                        <span>{new Date(post.createdAt).toLocaleString()}{isPostEdited(post) && ' (edited)'}</span>
                                                         {post.region && (
                                                             <>
                                                                 <span className="hidden sm:inline">|</span>

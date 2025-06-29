@@ -831,6 +831,20 @@ const EmployeeDashboard = () => {
     setPostToEdit(null);
   };
 
+  // Helper function to check if post has been edited (excluding pinning)
+  const isPostEdited = (post) => {
+    // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
+    if (post.updatedAt === post.createdAt) {
+      return false;
+    }
+    
+    // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
+    // We can't easily detect this on the frontend, so we'll use a different approach
+    // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
+    const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
+    return timeDiff > 60000; // More than 1 minute difference
+  };
+
   const actions = [
     {
       title: "Create New Post",
@@ -925,7 +939,7 @@ const EmployeeDashboard = () => {
 
   // Filter posts based on selected filters
   const filteredPosts = useMemo(() => {
-    return posts.filter(post => {
+    const filtered = posts.filter(post => {
       // Filter by post type
       if (selectedPostType !== 'all' && post.postType !== selectedPostType) {
         return false;
@@ -947,6 +961,13 @@ const EmployeeDashboard = () => {
       }
       
       return true;
+    });
+
+    // Sort posts: pinned first, then by creation date (newest first)
+    return filtered.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
     });
   }, [posts, selectedPostType, selectedRegion, selectedDepartment, searchQuery]);
 
@@ -1006,8 +1027,7 @@ const EmployeeDashboard = () => {
                       placeholder="Search posts..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full h-11 pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white !bg-white dark:!bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      style={{ backgroundColor: theme === 'dark' ? '#334155' : '#ffffff' }}
+                      className="w-full h-11 pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg !bg-white dark:!bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     />
                     <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
                   </div>
@@ -1108,7 +1128,13 @@ const EmployeeDashboard = () => {
                   >
                     <div className="flex justify-between items-start mb-1 sm:mb-2">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
+                        {/* Pinned tag */}
+                        {post.isPinned && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mr-2">
+                            <PaperClipIcon className="h-4 w-4 mr-1 text-yellow-500" /> Pinned
+                          </span>
+                        )}
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium tracking-wide ${
                           post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
                           post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
                           post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
@@ -1133,30 +1159,60 @@ const EmployeeDashboard = () => {
                           })}
                         </div>
                       </div>
-                      {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
-                        <div className="flex space-x-1">
+                      <div className="flex space-x-1">
+                        {/* Pin/unpin button for admin only */}
+                        {localStorage.getItem('role') === 'admin' && (
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              handlePostEdit(post);
+                              try {
+                                const response = await api.post(`/posts/${post._id}/pin`);
+                                // Use the API response to update local state correctly
+                                const updatedPost = response.data.post;
+                                if (updatedPost) {
+                                  setPosts(prevPosts => 
+                                    prevPosts.map(p => 
+                                      p._id === post._id 
+                                        ? { ...p, isPinned: updatedPost.isPinned }
+                                        : p
+                                    )
+                                  );
+                                }
+                              } catch (err) {
+                                setError('Failed to pin/unpin post.');
+                              }
                             }}
-                            className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
-                            title="Edit Post"
+                            className={`ml-2 text-yellow-600 hover:text-yellow-800 p-1 rounded-full ${post.isPinned ? 'bg-yellow-50' : ''}`}
+                            title={post.isPinned ? 'Unpin Post' : 'Pin Post'}
                           >
-                            <PencilSquareIcon className="h-4 w-4" />
+                            <PaperClipIcon className="h-5 w-5" />
                           </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handlePostDelete(post._id);
-                            }}
-                            className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                            title="Delete Post"
-                          >
-                            <TrashIcon className="h-4 w-4" />
-                          </button>
-                        </div>
-                      )}
+                        )}
+                        {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePostEdit(post);
+                              }}
+                              className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              title="Edit Post"
+                            >
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePostDelete(post._id);
+                              }}
+                              className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Delete Post"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
                       {post.content}
@@ -1247,7 +1303,7 @@ const EmployeeDashboard = () => {
                         </span>
                       )}
                       <span className="text-gray-400 dark:text-slate-500">|</span>
-                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}{post.updatedAt !== post.createdAt && ' (edited)'}</span>
+                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}{isPostEdited(post) && ' (edited)'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
                       <span className="block sm:inline mt-1 sm:mt-0 text-gray-600 dark:text-slate-300">Region: {post.region || 'N/A'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>

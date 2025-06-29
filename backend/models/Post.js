@@ -66,6 +66,10 @@ const commentSchema = new mongoose.Schema({
   createdByRole: {
     type: String,
     required: true
+  },
+  isPinned: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 

@@ -14,7 +14,9 @@ const {
   reactToComment,
   editPost,
   deletePost,
-  getReactionStatus
+  getReactionStatus,
+  togglePostPin,
+  toggleCommentPin
 } = require('../controllers/postController');
 
 // Apply auth middleware to all routes
@@ -75,5 +77,16 @@ router.route('/:postId')
   ])
   .put(editPost)
   .delete(deletePost);
+
+// Pin/unpin a post (admin only)
+router.post('/:postId/pin', [
+  param('postId').isMongoId().withMessage('Invalid post ID')
+], togglePostPin);
+
+// Pin/unpin a comment (admin only)
+router.post('/:postId/comments/:commentId/pin', [
+  param('postId').isMongoId().withMessage('Invalid post ID'),
+  param('commentId').isMongoId().withMessage('Invalid comment ID')
+], toggleCommentPin);
 
 module.exports = router;

@@ -1178,3 +1178,187 @@ exports.editComment = async (req, res) => {
     res.status(500).json({ message: 'Error editing comment' });
   }
 };
+
+// Toggle post pinning - only admins can pin/unpin posts
+exports.togglePostPin = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Only admins can pin/unpin posts
+    if (userRole !== 'admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only administrators can pin/unpin posts' 
+      });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found' 
+      });
+    }
+
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, post.orgId.toString());
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        success: false,
+        message: message || 'Access denied' 
+      });
+    }
+
+    // If we're pinning this post, unpin all other posts in the organization first
+    if (!post.isPinned) {
+      await Post.updateMany(
+        { orgId: post.orgId, _id: { $ne: postId } },
+        { isPinned: false }
+      );
+    }
+
+    // Toggle the pin status
+    post.isPinned = !post.isPinned;
+    await post.save({ timestamps: false });
+
+    // Broadcast the update
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POST_UPDATED',
+        payload: {
+          ...post.toObject(),
+          organization: post.orgId
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: post.isPinned ? 'Post pinned successfully' : 'Post unpinned successfully',
+      post: post.toObject()
+    });
+
+  } catch (err) {
+    console.error('Toggle post pin error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error toggling post pin status' 
+    });
+  }
+};
+
+// Toggle comment pinning - only admins can pin/unpin comments
+exports.toggleCommentPin = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Only admins can pin/unpin comments
+    if (userRole !== 'admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only administrators can pin/unpin comments' 
+      });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found' 
+      });
+    }
+
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, post.orgId.toString());
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        success: false,
+        message: message || 'Access denied' 
+      });
+    }
+
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Comment not found' 
+      });
+    }
+
+    // If we're pinning this comment, unpin all other comments in this post first
+    if (!comment.isPinned) {
+      post.comments.forEach(c => {
+        if (c._id.toString() !== commentId) {
+          c.isPinned = false;
+        }
+      });
+    }
+
+    // Store the original updatedAt value to preserve it
+    const originalUpdatedAt = comment.updatedAt;
+
+    // Toggle the pin status
+    comment.isPinned = !comment.isPinned;
+    
+    // Explicitly set updatedAt back to its original value to prevent "(edited)" from showing
+    comment.updatedAt = originalUpdatedAt;
+    
+    await post.save({ timestamps: false });
+
+    // Broadcast the update
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      const commentObj = comment.toObject();
+      let decryptedCommentText = commentObj.text;
+      
+      if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(commentObj.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = commentObj.text;
+        }
+      }
+      
+      const commentToBroadcast = {
+        ...commentObj,
+        text: decryptedCommentText
+      };
+      
+      broadcastMessage({
+        type: 'COMMENT_UPDATED',
+        payload: {
+          postId: post._id,
+          comment: commentToBroadcast,
+          organizationId: post.orgId
+        }
+      });
+    }
+
+    // Decrypt the comment text for the response
+    const commentObj = comment.toObject();
+    if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+      commentObj.text = await decrypt(commentObj.text);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: comment.isPinned ? 'Comment pinned successfully' : 'Comment unpinned successfully',
+      comment: commentObj
+    });
+
+  } catch (err) {
+    console.error('Toggle comment pin error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error toggling comment pin status' 
+    });
+  }
+};
