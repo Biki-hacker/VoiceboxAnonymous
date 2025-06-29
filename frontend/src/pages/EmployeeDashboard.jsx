@@ -1,5 +1,5 @@
 //  src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -159,6 +159,9 @@ const EmployeeDashboard = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
 
+  // Add ref to track current organizationId for WebSocket
+  const organizationIdRef = useRef(organizationId);
+
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
     try {
@@ -272,7 +275,7 @@ const EmployeeDashboard = () => {
   }, [isEmailVerified, organizationId, viewMode]);
 
   // --- WebSocket Effect for Real-time Updates ---
-  const handleWebSocketMessage = (message) => {
+  const handleWebSocketMessage = useCallback((message) => {
     try {
       // message is already parsed by the hook
       console.log('WebSocket message received:', message);
@@ -293,7 +296,8 @@ const EmployeeDashboard = () => {
 
       // Check organization ID for all message types
       const orgId = message.payload.organizationId || message.payload.organization;
-      if (!orgId || orgId !== organizationId) {
+      const currentOrgId = organizationIdRef.current;
+      if (!orgId || orgId !== currentOrgId) {
         console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
         return;
       }
@@ -453,7 +457,7 @@ const EmployeeDashboard = () => {
     } catch (error) {
       console.error('EmployeeDashboard: Failed to parse WebSocket message or update state:', error);
     }
-  };
+  }, [setPosts]);
 
   const { sendMessage } = useWebSocket(
     WS_URL,
@@ -462,19 +466,35 @@ const EmployeeDashboard = () => {
       console.log('WebSocket connected');
       // Send authentication message if we have the required data
       const storedToken = localStorage.getItem('token');
-      if (storedToken && organizationId) {
+      const currentOrgId = organizationIdRef.current;
+      if (storedToken && currentOrgId) {
         return {
           type: 'AUTH',
           token: storedToken,
-          organizationId: organizationId,
+          organizationId: currentOrgId,
           role: 'employee'
         };
       }
       return null;
     },
-    (error) => { console.error('WebSocket error:', error); },
-    [organizationId]
+    (error) => { console.error('WebSocket error:', error); }
   );
+
+  // Update organizationIdRef when organizationId changes and re-authenticate
+  useEffect(() => {
+    organizationIdRef.current = organizationId;
+    
+    // Re-authenticate with WebSocket if organization changes
+    const storedToken = localStorage.getItem('token');
+    if (storedToken && organizationId) {
+      sendMessage({
+        type: 'AUTH',
+        token: storedToken,
+        organizationId: organizationId,
+        role: 'employee'
+      });
+    }
+  }, [organizationId, sendMessage]);
 
   // --- Fetch Posts ---
   const fetchPosts = async () => {
