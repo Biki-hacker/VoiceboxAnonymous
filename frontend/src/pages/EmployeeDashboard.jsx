@@ -6,7 +6,6 @@ import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
 import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
-import { decryptContent } from '../utils/crypto.js';
 import {
   UserCircleIcon,
   PencilSquareIcon,
@@ -152,7 +151,6 @@ const EmployeeDashboard = () => {
   // Post editing state
   const [showEditPostModal, setShowEditPostModal] = useState(false);
   const [postToEdit, setPostToEdit] = useState(null);
-  const [pinningPost, setPinningPost] = useState(null); // Track which post is being pinned/unpinned
   
   // Post filters
   const [selectedPostType, setSelectedPostType] = useState('all');
@@ -163,84 +161,6 @@ const EmployeeDashboard = () => {
 
   // Add ref to track current organizationId for WebSocket
   const organizationIdRef = useRef(organizationId);
-
-  // Helper function to safely render post content
-  const renderPostContent = (content) => {
-    // If content is a string, render it directly
-    if (typeof content === 'string') {
-      return content;
-    }
-    
-    // If content is an encrypted object, it should already be decrypted in state
-    if (content && typeof content === 'object' && content.isEncrypted) {
-      return '[Decrypting...]';
-    }
-    
-    // If content is any other object, convert to string
-    if (content && typeof content === 'object') {
-      return '[Content not available]';
-    }
-    
-    // Fallback for null/undefined
-    return content || '';
-  };
-
-  // Effect to decrypt posts when they are loaded
-  useEffect(() => {
-    const decryptPosts = async () => {
-      if (posts.length === 0) return;
-      
-      const decryptedPosts = await Promise.all(
-        posts.map(async (post) => {
-          let decryptedContent = post.content;
-          
-          // Decrypt post content if it's encrypted
-          if (post.content && typeof post.content === 'object' && post.content.isEncrypted) {
-            try {
-              decryptedContent = await decryptContent(post.content);
-            } catch (error) {
-              console.error('Error decrypting post content:', error);
-              decryptedContent = '[Error decrypting content]';
-            }
-          }
-          
-          // Decrypt comments if they exist
-          let decryptedComments = post.comments || [];
-          if (post.comments && post.comments.length > 0) {
-            decryptedComments = await Promise.all(
-              post.comments.map(async (comment) => {
-                let decryptedCommentText = comment.text;
-                
-                if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
-                  try {
-                    decryptedCommentText = await decryptContent(comment.text);
-                  } catch (error) {
-                    console.error('Error decrypting comment text:', error);
-                    decryptedCommentText = '[Error decrypting comment]';
-                  }
-                }
-                
-                return {
-                  ...comment,
-                  text: decryptedCommentText
-                };
-              })
-            );
-          }
-          
-          return {
-            ...post,
-            content: decryptedContent,
-            comments: decryptedComments
-          };
-        })
-      );
-      
-      setPosts(decryptedPosts);
-    };
-    
-    decryptPosts();
-  }, [posts.length]); // Only run when posts array length changes
 
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
@@ -1295,7 +1215,7 @@ const EmployeeDashboard = () => {
                       </div>
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                      {renderPostContent(post.content)}
+                      {post.content}
                     </p>
                     
                     {/* Media Display */}
