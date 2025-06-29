@@ -39,7 +39,8 @@ router.route('/:postId/reactions')
     param('postId').isMongoId().withMessage('Invalid post ID')
   ])
   .get(getReactionStatus)
-  .post(reactToPost);
+  .post(reactToPost)
+  .delete(reactToPost);
 
 // Comments
 router.route('/:postId/comments')
@@ -64,7 +65,8 @@ router.route('/:postId/comments/:commentId/reactions')
     param('commentId').isMongoId().withMessage('Invalid comment ID')
   ])
   .get(getReactionStatus)
-  .post(reactToComment);
+  .post(reactToComment)
+  .delete(reactToComment);
 
 // Update and delete posts
 router.route('/:postId')

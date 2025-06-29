@@ -400,7 +400,7 @@ const EmployeeDashboard = () => {
             console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
             return;
           }
-          const currentUserId = user?._id;
+          const currentUserId = localStorage.getItem('userId');
           const processedReactions = {};
           Object.entries(reactionsData).forEach(([reactionType, reaction]) => {
             if (!reaction) {
@@ -1106,6 +1106,26 @@ const EmployeeDashboard = () => {
                             type={type}
                             count={count || 0}
                             postId={post._id}
+                            onReactionUpdate={(reactionData) => {
+                              // Update the post's reactions locally
+                              setPosts(prevPosts => 
+                                prevPosts.map(p => {
+                                  if (p._id === post._id) {
+                                    return {
+                                      ...p,
+                                      reactions: {
+                                        ...p.reactions,
+                                        [reactionData.type]: {
+                                          count: reactionData.count || 0,
+                                          hasReacted: reactionData.isReacted || false
+                                        }
+                                      }
+                                    };
+                                  }
+                                  return p;
+                                })
+                              );
+                            }}
                           />
                         ))}
                       </div>

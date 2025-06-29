@@ -219,6 +219,25 @@ exports.reactToPost = async (req, res) => {
       return res.status(400).json({ message: 'Invalid reaction type' });
     }
 
+    // Check if user has any existing reaction
+    let existingReactionType = null;
+    for (const [reactionType, reaction] of Object.entries(post.reactions)) {
+      if (reaction.users.some(id => id.equals(userId))) {
+        existingReactionType = reactionType;
+        break;
+      }
+    }
+
+    // If user has an existing reaction and it's different from the new one, remove it first
+    if (existingReactionType && existingReactionType !== type) {
+      const existingReaction = post.reactions[existingReactionType];
+      const userIndex = existingReaction.users.findIndex(id => id.equals(userId));
+      if (userIndex !== -1) {
+        existingReaction.users.splice(userIndex, 1);
+        existingReaction.count = Math.max(0, existingReaction.count - 1);
+      }
+    }
+
     const reaction = post.reactions[type];
     const userIndex = reaction.users.findIndex(id => id.equals(userId));
 
@@ -265,6 +284,7 @@ exports.reactToPost = async (req, res) => {
             entityId: post._id.toString(),
             postId: post._id.toString(),
             reactions: reactionsObject,
+            reactionsSummary: reactionsObject, // Add this for frontend compatibility
             organizationId: post.orgId.toString(),
             updatedAt: new Date().toISOString()
           }
@@ -276,9 +296,11 @@ exports.reactToPost = async (req, res) => {
     }
 
     res.status(200).json({
+      success: true,
       type,
       count: reaction.count,
-      hasReacted: userIndex === -1  // If userIndex was -1, now they have reacted
+      hasReacted: userIndex === -1,  // If userIndex was -1, now they have reacted
+      message: userIndex === -1 ? 'Reaction added successfully' : 'Reaction removed successfully'
     });
   } catch (err) {
     await session.abortTransaction();
@@ -592,8 +614,60 @@ exports.reactToComment = async (req, res) => {
       comment.createdBy = comment.author.toString();
     }
     
-    // Use the comment's addReaction method
-    await comment.addReaction(userId, type);
+    // Initialize reactions if they don't exist
+    if (!comment.reactions) {
+      comment.reactions = new Map([
+        ['like', { count: 0, users: [] }],
+        ['love', { count: 0, users: [] }],
+        ['laugh', { count: 0, users: [] }],
+        ['angry', { count: 0, users: [] }]
+      ]);
+    }
+
+    // Check if user has any existing reaction on this comment
+    let existingReactionType = null;
+    for (const [reactionType, reaction] of comment.reactions.entries()) {
+      if (reaction.users.some(id => id.equals(userId))) {
+        existingReactionType = reactionType;
+        break;
+      }
+    }
+
+    // If user has an existing reaction and it's different from the new one, remove it first
+    if (existingReactionType && existingReactionType !== type) {
+      const existingReaction = comment.reactions.get(existingReactionType);
+      const userIndex = existingReaction.users.findIndex(id => id.equals(userId));
+      if (userIndex !== -1) {
+        existingReaction.users.splice(userIndex, 1);
+        existingReaction.count = Math.max(0, existingReaction.count - 1);
+        comment.reactions.set(existingReactionType, existingReaction);
+      }
+    }
+
+    // Now handle the new reaction
+    const reaction = comment.reactions.get(type);
+    if (!reaction) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Invalid reaction type' });
+    }
+
+    const userIndex = reaction.users.findIndex(id => id.equals(userId));
+
+    if (userIndex === -1) {
+      // Add reaction
+      reaction.users.push(userId);
+      reaction.count += 1;
+    } else {
+      // Remove reaction
+      reaction.users.splice(userIndex, 1);
+      reaction.count = Math.max(0, reaction.count - 1);
+    }
+
+    // Update the reactions map
+    comment.reactions.set(type, reaction);
+    
+    // Mark the reactions map as modified
+    comment.markModified('reactions');
     
     // Mark the comments array as modified
     post.markModified('comments');
@@ -610,19 +684,12 @@ exports.reactToComment = async (req, res) => {
         
         // Convert Mongoose document to plain object
         const reactionsObject = {};
-        Object.keys(comment.reactions || {}).forEach(key => {
-          const reaction = comment.reactions[key];
-          if (!reaction) {
-            console.warn(`Reaction '${key}' is undefined for comment ${comment._id}`);
-            reactionsObject[key] = { count: 0, users: [] };
-            return;
-          }
-          
+        for (const [key, reaction] of comment.reactions.entries()) {
           reactionsObject[key] = {
             count: reaction.count || 0,
             users: Array.isArray(reaction.users) ? reaction.users.map(id => id.toString()) : []
           };
-        });
+        }
         
         broadcastMessage({
           type: 'REACTION_UPDATED',
@@ -631,6 +698,7 @@ exports.reactToComment = async (req, res) => {
             entityId: comment._id.toString(),
             postId: post._id.toString(),
             reactions: reactionsObject,
+            reactionsSummary: reactionsObject, // Add this for frontend compatibility
             organizationId: post.orgId.toString(),
             updatedAt: new Date().toISOString()
           }
@@ -647,11 +715,9 @@ exports.reactToComment = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      reaction: {
-        type,
-        count: updatedReaction.count || 0,
-        hasReacted
-      },
+      type,
+      count: updatedReaction.count || 0,
+      hasReacted,
       message: hasReacted ? 'Reaction added successfully' : 'Reaction removed successfully'
     });
   } catch (err) {

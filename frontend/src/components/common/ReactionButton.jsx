@@ -33,20 +33,38 @@ const ReactionButton = ({
       try {
         setIsLoading(true);
         const response = await api.get(`/posts/${postId}${commentId ? `/comments/${commentId}` : ''}/reactions`);
-        const reactions = response.data.reactions || [];
-        const userReaction = reactions.find(r => r.type === type);
         
-        setIsReacted(!!userReaction);
-        setCurrentCount(reactions.length > 0 ? reactions[0].count : 0);
+        // Handle the backend response format
+        if (response.data && response.data.success && response.data.data) {
+          const reactions = response.data.data;
+          const reactionData = reactions[type];
+          
+          if (reactionData) {
+            setIsReacted(reactionData.hasReacted || false);
+            setCurrentCount(reactionData.count || 0);
+          } else {
+            setIsReacted(false);
+            setCurrentCount(0);
+          }
+        } else {
+          // Fallback for different response formats
+          setIsReacted(false);
+          setCurrentCount(count || 0);
+        }
       } catch (error) {
         console.error('Error fetching reaction status:', error);
+        // Fallback to props
+        setIsReacted(false);
+        setCurrentCount(count || 0);
       } finally {
         setIsLoading(false);
       }
     };
 
-    fetchReactionStatus();
-  }, [postId, commentId, type]);
+    if (postId) {
+      fetchReactionStatus();
+    }
+  }, [postId, commentId, type, count]);
 
   const handleReaction = async () => {
     if (isLoading) return;
@@ -58,27 +76,33 @@ const ReactionButton = ({
         ? `/posts/${postId}/comments/${commentId}/reactions`
         : `/posts/${postId}/reactions`;
       
-      if (isReacted) {
-        await api.delete(`${endpoint}?type=${type}`);
-      } else {
-        await api.post(endpoint, { type });
-      }
+      // Always use POST for toggling reactions (backend handles the toggle logic)
+      const response = await api.post(endpoint, { type });
       
-      setIsReacted(!isReacted);
-      setCurrentCount(prev => isReacted ? prev - 1 : prev + 1);
-      
-      // Notify parent component about the reaction update
-      if (onReactionUpdate) {
-        onReactionUpdate({
-          type,
-          postId,
-          commentId,
-          isReacted: !isReacted,
-          count: isReacted ? currentCount - 1 : currentCount + 1
-        });
+      // Update local state based on response
+      if (response.data) {
+        const newIsReacted = response.data.hasReacted !== undefined ? response.data.hasReacted : !isReacted;
+        const newCount = response.data.count !== undefined ? response.data.count : (isReacted ? currentCount - 1 : currentCount + 1);
+        
+        setIsReacted(newIsReacted);
+        setCurrentCount(newCount);
+        
+        // Notify parent component about the reaction update
+        if (onReactionUpdate) {
+          onReactionUpdate({
+            type,
+            postId,
+            commentId,
+            isReacted: newIsReacted,
+            count: newCount
+          });
+        }
       }
     } catch (error) {
       console.error('Error updating reaction:', error);
+      // Revert optimistic update on error
+      setIsReacted(isReacted);
+      setCurrentCount(currentCount);
     } finally {
       setIsLoading(false);
     }

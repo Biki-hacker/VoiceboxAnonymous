@@ -1413,6 +1413,26 @@ const AdminDashboard = () => {
                                                                     type={type}
                                                                     postId={post._id}
                                                                     count={count || 0}
+                                                                    onReactionUpdate={(reactionData) => {
+                                                                        // Update the post's reactions locally
+                                                                        setPosts(prevPosts => 
+                                                                            prevPosts.map(p => {
+                                                                                if (p._id === post._id) {
+                                                                                    return {
+                                                                                        ...p,
+                                                                                        reactions: {
+                                                                                            ...p.reactions,
+                                                                                            [reactionData.type]: {
+                                                                                                count: reactionData.count || 0,
+                                                                                                hasReacted: reactionData.isReacted || false
+                                                                                            }
+                                                                                        }
+                                                                                    };
+                                                                                }
+                                                                                return p;
+                                                                            })
+                                                                        );
+                                                                    }}
                                                                 />
                                                             ))}
                                                         </div>

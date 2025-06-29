@@ -116,22 +116,20 @@ const CommentSection = ({
     }
   };
 
-  const handleReactionUpdate = async (commentId, reactionType, newCount) => {
+  const handleReactionUpdate = async (reactionData) => {
     try {
-      await api.post(`/posts/${postId}/comments/${commentId}/reactions`, {
-        reactionType
-      });
+      const { type, postId, commentId, isReacted, count } = reactionData;
       
-      // Update the comment's reaction count
+      // Update the comment's reaction count locally
       setComments(prev => prev.map(comment => {
         if (comment._id === commentId) {
           return {
             ...comment,
             reactions: {
               ...comment.reactions,
-              [reactionType]: {
-                ...comment.reactions?.[reactionType],
-                count: newCount
+              [type]: {
+                count: count || 0,
+                hasReacted: isReacted || false
               }
             }
           };
