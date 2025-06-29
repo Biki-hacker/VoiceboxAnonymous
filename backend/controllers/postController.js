@@ -3,7 +3,7 @@ const Post = require('../models/Post');
 const Organization = require('../models/Organization');
 const mongoose = require('mongoose');
 const supabase = require('../utils/supabaseClient');
-const { encrypt, decrypt } = require('../utils/cryptoUtils');
+const { encrypt, decrypt, decryptContent } = require('../utils/cryptoUtils');
 
 exports.createPost = async (req, res) => {
   try {
@@ -39,12 +39,15 @@ exports.createPost = async (req, res) => {
 
     await newPost.save();
 
+    const { decryptContent } = require('../utils/cryptoUtils');
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
+      // Decrypt post content before broadcasting
+      const decryptedPost = await decryptContent(newPost.toObject());
       broadcastMessage({
         type: 'POST_CREATED',
         payload: {
-          ...newPost.toObject(),
+          ...decryptedPost,
           organization: newPost.orgId
         }
       });
@@ -1086,9 +1089,12 @@ exports.editPost = async (req, res) => {
     updates.updatedAt = new Date();
     const updatedPost = await Post.findByIdAndUpdate(postId, updates, { new: true });
 
+    const { decryptContent } = require('../utils/cryptoUtils');
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage && updatedPost) {
-      const broadcastPayload = { ...updatedPost.toObject(), organization: updatedPost.orgId };
+      // Decrypt post content before broadcasting
+      const decryptedPost = await decryptContent(updatedPost.toObject());
+      const broadcastPayload = { ...decryptedPost, organization: updatedPost.orgId };
       broadcastMessage({
         type: 'POST_UPDATED',
         payload: broadcastPayload
@@ -1226,10 +1232,12 @@ exports.togglePostPin = async (req, res) => {
     // Broadcast the update
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
+      const { decryptContent } = require('../utils/cryptoUtils');
+      const decryptedPost = await decryptContent(post.toObject());
       broadcastMessage({
         type: 'POST_UPDATED',
         payload: {
-          ...post.toObject(),
+          ...decryptedPost,
           organization: post.orgId
         }
       });

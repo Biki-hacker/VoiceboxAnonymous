@@ -187,25 +187,37 @@ const AdminDashboard = () => {
             const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
             
             switch (parsedMessage.type) {
-                case 'POST_CREATED':
-                    if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
-                        setPosts(prev => [parsedMessage.payload.post, ...prev]);
+                case 'POST_CREATED': {
+                    // Support both formats: payload.post or payload directly
+                    const postObj = parsedMessage.payload.post || parsedMessage.payload;
+                    if (
+                        parsedMessage.payload.organization === currentSelectedOrgId &&
+                        postObj?._id
+                    ) {
+                        setPosts(prev => [postObj, ...prev]);
                     }
                     break;
-                case 'POST_UPDATED':
-                    if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
-                        setPosts(prev => 
-                            prev.map(p => 
-                                p?._id === parsedMessage.payload.post._id 
+                }
+                case 'POST_UPDATED': {
+                    // Support both formats: payload.post or payload directly
+                    const postObj = parsedMessage.payload.post || parsedMessage.payload;
+                    if (
+                        parsedMessage.payload.organization === currentSelectedOrgId &&
+                        postObj?._id
+                    ) {
+                        setPosts(prev =>
+                            prev.map(p =>
+                                p?._id === postObj._id
                                     ? {
-                                        ...parsedMessage.payload.post,
-                                        comments: deduplicateComments(p.comments || []) // Preserve existing decrypted comments
+                                        ...postObj,
+                                        comments: deduplicateComments(p.comments || [])
                                     }
                                     : p
-                            ).filter(Boolean) // Remove any undefined posts
+                            ).filter(Boolean)
                         );
                     }
                     break;
+                }
                 case 'POST_DELETED':
                     if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
                         setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
@@ -1524,7 +1536,7 @@ const AdminDashboard = () => {
                                                         </div>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                                                        {post.content}
+                                                        {typeof post.content === 'string' ? post.content : '[Encrypted or invalid content]'}
                                                     </p>
                                                     
                                                     {/* Media Display */}

@@ -220,20 +220,30 @@ const EmployeeDashboard = () => {
           }
           break;
         }
-        case 'POST_UPDATED':
-          if (parsedMessage.payload?.organization === currentSelectedOrgId && parsedMessage.payload?.post?._id) {
-            setPosts(prev => 
-              prev.map(p => 
-                p?._id === parsedMessage.payload.post._id 
+        case 'POST_UPDATED': {
+          const postObj = parsedMessage.payload.post || parsedMessage.payload;
+          const orgId = (parsedMessage.payload.organization || parsedMessage.payload.organizationId)?.toString();
+          const currentOrgId = currentSelectedOrgId?.toString();
+          if (
+            orgId === currentOrgId &&
+            postObj?._id &&
+            typeof postObj.content === 'string'
+          ) {
+            setPosts(prev =>
+              prev.map(p =>
+                p?._id === postObj._id
                   ? {
-                      ...parsedMessage.payload.post,
-                      comments: deduplicateComments(p.comments || []) // Preserve existing decrypted comments
+                      ...postObj,
+                      comments: deduplicateComments(p.comments || [])
                     }
                   : p
-              ).filter(Boolean) // Remove any undefined posts
+              ).filter(Boolean)
             );
+          } else {
+            console.warn('POST_UPDATED received with encrypted or invalid content or orgId mismatch:', postObj, orgId, currentOrgId);
           }
           break;
+        }
         case 'POST_DELETED':
           if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
             setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
