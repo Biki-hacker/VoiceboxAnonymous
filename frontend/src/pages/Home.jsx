@@ -95,6 +95,32 @@ const MenuButton = ({ isOpen, toggle }) => (
   </motion.button>
 );
 
+// Loading Spinner Component
+const LoadingSpinner = () => (
+  <motion.div
+    initial={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.5 }}
+    className="fixed inset-0 bg-gradient-to-b from-[#040b1d] to-[#0a1224] flex items-center justify-center z-50"
+  >
+    <div className="flex flex-col items-center space-y-4">
+      <motion.div
+        animate={{ rotate: 360 }}
+        transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
+        className="w-12 h-12 border-4 border-blue-400 border-t-transparent rounded-full"
+      />
+      <motion.p
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 0.3 }}
+        className="text-blue-400 font-medium"
+      >
+        Loading Voicebox Anonymous...
+      </motion.p>
+    </div>
+  </motion.div>
+);
+
 export default function Home() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -106,9 +132,10 @@ export default function Home() {
   const [glowIntensity, setGlowIntensity] = useState(0);
   const [hoverOffset, setHoverOffset] = useState({ x: 0, y: 0 });
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isContactModalOpen, setIsContactModalOpen] = useState(false); // New state for contact modal
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
   const [typedText, setTypedText] = useState("");
-  const [contactStatus, setContactStatus] = useState(""); // For success/error messages after send
+  const [contactStatus, setContactStatus] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
   const fullText = "Revolutionize Employee Feedback with Total Anonymity";
 
   // Handle smooth scrolling to sections
@@ -210,6 +237,15 @@ export default function Home() {
     return () => { document.body.style.overflow = 'unset'; };
   }, [isMenuOpen, isContactModalOpen]);
 
+  useEffect(() => {
+    // Simulate loading time and ensure all components are ready
+    const timer = setTimeout(() => {
+      setIsLoading(false);
+    }, 1000); // Show spinner for 1 seconds
+
+    return () => clearTimeout(timer);
+  }, []);
+
   const navLinks = [
     { name: "Features", href: "#features" },
     { name: "About", href: "#about" },
@@ -249,155 +285,160 @@ export default function Home() {
     }
   };
 
-
   return (
-    <div
-      className="relative overflow-x-hidden min-h-screen text-white flex flex-col"
-      style={{ background: "linear-gradient(to bottom, #040b1d, #0a1224)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
-      itemScope
-      itemType="https://schema.org/WebApplication"
-    >
-      {/* Structured Data */}
-      <Helmet>
-        <script type="application/ld+json">
-          {JSON.stringify(structuredData)}
-        </script>
-        <meta name="application-name" content="Voicebox Anonymous" />
-        <meta name="apple-mobile-web-app-title" content="Voicebox" />
-        <meta name="theme-color" content="#0B1122" />
-      </Helmet>
-      <Sparkles data={sparkleData} hoverOffset={hoverOffset} />
-      <motion.div
-        className="fixed pointer-events-none z-20 mix-blend-screen"
-        style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
-        animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
-        transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
-      >
-        <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
-        <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
-      </motion.div>
-
-      <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
-        <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
-          <div className="text-xl font-extrabold tracking-widest flex items-center relative">
-            <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-3">
-              <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
-            </motion.div>
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-500 relative">Voicebox Anonymous<div className="absolute bottom-0 left-0 w-0 h-px bg-blue-400 group-hover:w-full transition-all duration-300" /></span>
-          </div>
-        </Link>
-        
-        {/* Desktop Navigation */}
-        <div className="hidden md:flex items-center space-x-8">
-          {navLinks.map((link, idx) => (
-            <a 
-              key={idx}
-              href={link.href}
-              onClick={(e) => link.href.startsWith('#') && scrollToSection(e, link.href.substring(1))}
-              className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium cursor-pointer"
-            >
-              <AnimatedText text={link.name} el="span" size="sm" />
-            </a>
-          ))}
-          <button 
-            onClick={openContactModal}
-            className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium"
-          >
-            <AnimatedText text="Contact" el="span" size="sm" />
-          </button>
-          <Link 
-            to="/signin" 
-            className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2.5 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
-          >
-            Sign In
-          </Link>
-        </div>
-        
-        {/* Mobile Menu Button */}
-        <div className="md:hidden z-50">
-          <MenuButton isOpen={isMenuOpen} toggle={toggleMenu} />
-        </div>
-      </nav>
-
+    <>
       <AnimatePresence>
-        {isMenuOpen && (
-          <>
-            <motion.div
-              initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
-              transition={{ type: "tween", duration: 0.4, ease: "easeInOut" }}
-              className="fixed top-0 right-0 bottom-0 w-4/5 max-w-sm bg-[#080F1E] z-40 shadow-2xl flex flex-col"
-            >
-              <div className="flex flex-col h-full p-8 pt-16">
-                <div className="mb-10 w-full">
-                  <Link to="/signin" className="w-full block" onClick={toggleMenu}>
-                    <motion.button whileHover={{ scale: 1.05, boxShadow: "0 0 15px rgba(33, 150, 243, 0.5)"}} whileTap={{ scale: 0.95 }} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-3.5 rounded-lg text-white font-medium text-base">Sign In</motion.button>
-                  </Link>
-                </div>
-                <div className="flex flex-col space-y-6">
-                  {navLinks.map((link, idx) => ( 
-                    <div key={idx} className="overflow-hidden"> 
-                      <a 
-                        href={link.href}
-                        onClick={(e) => {
-                          if (link.href.startsWith('#')) {
-                            scrollToSection(e, link.href.substring(1));
-                          } else {
-                            toggleMenu();
-                          }
-                        }}
-                        className="block text-gray-200 hover:text-blue-400 text-lg"
-                      >
-                        <AnimatedText text={link.name} el="span" size="base" />
-                      </a> 
-                    </div>
-                  ))}
-                  {/* Add Contact to menu, opening modal */}
-                   <div className="overflow-hidden">
-                      <button onClick={() => { toggleMenu(); openContactModal();}} className="block text-gray-200 hover:text-blue-400 text-lg text-left w-full">
-                        <AnimatedText text="Contact" el="span" size="base" />
-                      </button>
-                    </div>
-                </div>
-              </div>
-            </motion.div>
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-30" onClick={toggleMenu} />
-          </>
-        )}
+        {isLoading && <LoadingSpinner />}
       </AnimatePresence>
+      
+      <div
+        className="relative overflow-x-hidden min-h-screen text-white flex flex-col"
+        style={{ background: "linear-gradient(to bottom, #040b1d, #0a1224)", backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" }}
+        itemScope
+        itemType="https://schema.org/WebApplication"
+      >
+        {/* Structured Data */}
+        <Helmet>
+          <script type="application/ld+json">
+            {JSON.stringify(structuredData)}
+          </script>
+          <meta name="application-name" content="Voicebox Anonymous" />
+          <meta name="apple-mobile-web-app-title" content="Voicebox" />
+          <meta name="theme-color" content="#0B1122" />
+        </Helmet>
+        <Sparkles data={sparkleData} hoverOffset={hoverOffset} />
+        <motion.div
+          className="fixed pointer-events-none z-20 mix-blend-screen"
+          style={{ left: cursorPos.x, top: cursorPos.y, transform: "translate(-50%, -50%)", opacity: glowIntensity * 0.6 }}
+          animate={{ background: ["radial-gradient(circle, rgba(135,206,250,0.4) 0%, rgba(135,206,250,0) 60%)", "radial-gradient(circle, rgba(33,150,243,0.4) 0%, rgba(33,150,243,0) 60%)"], scale: [1, 1.2, 1] }}
+          transition={{ duration: 1.5, repeat: Infinity, repeatType: "mirror" }}
+        >
+          <div className="w-24 h-24 blur-[40px] rounded-full bg-blue-300/40" />
+          <div className="w-16 h-16 blur-[30px] rounded-full bg-blue-400/40 absolute inset-0 m-auto" />
+        </motion.div>
 
-      <HeroSection ref={heroRef} controls={controls} typedText={typedText} />
-
-      <FeaturesSection />
-
-      {/* Testimonials Section */}
-      <section className="px-6 md:px-16 lg:px-24 pt-8 pb-0 relative z-20">
-        <div className="max-w-7xl mx-auto">
-          <motion.h2 
-            initial={{ opacity: 0, y: 30 }} 
-            whileInView={{ opacity: 1, y: 0 }} 
-            viewport={{ once: true, amount: 0.2 }} 
-            transition={{ duration: 0.7, delay: 0.1 }} 
-            className="text-3xl md:text-4xl font-bold mb-2 md:mb-4 text-center text-white"
-          >
-            What Our Users Say
-          </motion.h2>
-          <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-12">
-            <TestimonialOrbit />
+        <nav className="flex justify-between items-center px-6 md:px-12 py-6 z-30 relative">
+          <Link to="/" className="flex items-center group" onClick={() => isMenuOpen && toggleMenu()}>
+            <div className="text-xl font-extrabold tracking-widest flex items-center relative">
+              <motion.div initial={{ opacity: 0, scale: 0.8 }} animate={{ opacity: 1, scale: 1 }} transition={{ duration: 0.8 }} className="mr-3">
+                <img src={vblogo} alt="VoiceBox Logo" width="32" height="32" />
+              </motion.div>
+              <span className="bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-blue-500 relative">Voicebox Anonymous<div className="absolute bottom-0 left-0 w-0 h-px bg-blue-400 group-hover:w-full transition-all duration-300" /></span>
+            </div>
+          </Link>
+          
+          {/* Desktop Navigation */}
+          <div className="hidden md:flex items-center space-x-8">
+            {navLinks.map((link, idx) => (
+              <a 
+                key={idx}
+                href={link.href}
+                onClick={(e) => link.href.startsWith('#') && scrollToSection(e, link.href.substring(1))}
+                className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium cursor-pointer"
+              >
+                <AnimatedText text={link.name} el="span" size="sm" />
+              </a>
+            ))}
+            <button 
+              onClick={openContactModal}
+              className="text-gray-300 hover:text-blue-400 transition-colors duration-200 font-medium"
+            >
+              <AnimatedText text="Contact" el="span" size="sm" />
+            </button>
+            <Link 
+              to="/signin" 
+              className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-2.5 rounded-lg text-white font-medium hover:opacity-90 transition-opacity"
+            >
+              Sign In
+            </Link>
           </div>
-        </div>
-      </section>
+          
+          {/* Mobile Menu Button */}
+          <div className="md:hidden z-50">
+            <MenuButton isOpen={isMenuOpen} toggle={toggleMenu} />
+          </div>
+        </nav>
 
-      <AboutSection />
+        <AnimatePresence>
+          {isMenuOpen && (
+            <>
+              <motion.div
+                initial={{ x: "100%" }} animate={{ x: 0 }} exit={{ x: "100%" }}
+                transition={{ type: "tween", duration: 0.4, ease: "easeInOut" }}
+                className="fixed top-0 right-0 bottom-0 w-4/5 max-w-sm bg-[#080F1E] z-40 shadow-2xl flex flex-col"
+              >
+                <div className="flex flex-col h-full p-8 pt-16">
+                  <div className="mb-10 w-full">
+                    <Link to="/signin" className="w-full block" onClick={toggleMenu}>
+                      <motion.button whileHover={{ scale: 1.05, boxShadow: "0 0 15px rgba(33, 150, 243, 0.5)"}} whileTap={{ scale: 0.95 }} className="w-full bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-3.5 rounded-lg text-white font-medium text-base">Sign In</motion.button>
+                    </Link>
+                  </div>
+                  <div className="flex flex-col space-y-6">
+                    {navLinks.map((link, idx) => ( 
+                      <div key={idx} className="overflow-hidden"> 
+                        <a 
+                          href={link.href}
+                          onClick={(e) => {
+                            if (link.href.startsWith('#')) {
+                              scrollToSection(e, link.href.substring(1));
+                            } else {
+                              toggleMenu();
+                            }
+                          }}
+                          className="block text-gray-200 hover:text-blue-400 text-lg"
+                        >
+                          <AnimatedText text={link.name} el="span" size="base" />
+                        </a> 
+                      </div>
+                    ))}
+                    {/* Add Contact to menu, opening modal */}
+                     <div className="overflow-hidden">
+                        <button onClick={() => { toggleMenu(); openContactModal();}} className="block text-gray-200 hover:text-blue-400 text-lg text-left w-full">
+                          <AnimatedText text="Contact" el="span" size="base" />
+                        </button>
+                      </div>
+                  </div>
+                </div>
+              </motion.div>
+              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }} className="fixed inset-0 bg-black bg-opacity-50 backdrop-blur-sm z-30" onClick={toggleMenu} />
+            </>
+          )}
+        </AnimatePresence>
 
-      <ContactSection
-        isContactModalOpen={isContactModalOpen}
-        openContactModal={openContactModal}
-        closeContactModal={closeContactModal}
-        handleContactFormSubmit={handleContactFormSubmit}
-        contactStatus={contactStatus}
-      />
+        <HeroSection ref={heroRef} controls={controls} typedText={typedText} />
 
-      <Footer />
-    </div>
+        <FeaturesSection />
+
+        {/* Testimonials Section */}
+        <section className="px-6 md:px-16 lg:px-24 pt-8 pb-0 relative z-20">
+          <div className="max-w-7xl mx-auto">
+            <motion.h2 
+              initial={{ opacity: 0, y: 30 }} 
+              whileInView={{ opacity: 1, y: 0 }} 
+              viewport={{ once: true, amount: 0.2 }} 
+              transition={{ duration: 0.7, delay: 0.1 }} 
+              className="text-3xl md:text-4xl font-bold mb-2 md:mb-4 text-center text-white"
+            >
+              What Our Users Say
+            </motion.h2>
+            <div className="relative h-[600px] md:h-[700px] lg:h-[800px] -mb-12">
+              <TestimonialOrbit />
+            </div>
+          </div>
+        </section>
+
+        <AboutSection />
+
+        <ContactSection
+          isContactModalOpen={isContactModalOpen}
+          openContactModal={openContactModal}
+          closeContactModal={closeContactModal}
+          handleContactFormSubmit={handleContactFormSubmit}
+          contactStatus={contactStatus}
+        />
+
+        <Footer />
+      </div>
+    </>
   );
 }
