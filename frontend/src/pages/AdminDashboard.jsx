@@ -1074,6 +1074,13 @@ const AdminDashboard = () => {
     // Logo component for the sidebar
     const Logo = BuildingOffice2Icon;
 
+    // Pagination state for posts
+    const [currentPage, setCurrentPage] = useState(1);
+    const POSTS_PER_PAGE = 20;
+    const totalPages = useMemo(() => Math.ceil(filteredPosts.length / POSTS_PER_PAGE), [filteredPosts.length]);
+    const paginatedPosts = useMemo(() => filteredPosts.slice((currentPage - 1) * POSTS_PER_PAGE, currentPage * POSTS_PER_PAGE), [filteredPosts, currentPage]);
+    useEffect(() => { setCurrentPage(1); }, [selectedType, selectedRegion, selectedDepartment, searchQuery, posts]);
+
     // --- Main Render ---
     return (
         <>
@@ -1442,7 +1449,7 @@ const AdminDashboard = () => {
                                         <NothingToShow message={posts.length === 0 ? "No posts found for this organization." : "No posts match the current filters."} />
                                     ) : (
                                         <div className="space-y-4">
-                                            {filteredPosts.filter(post => post && post._id).map((post, i) => (
+                                            {paginatedPosts.filter(post => post && post._id).map((post, i) => (
                                                 <motion.div 
                                                     key={post._id} 
                                                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
@@ -1739,6 +1746,32 @@ const AdminDashboard = () => {
                                                     </div>
                                                 </motion.div>
                                             ))}
+                                            {/* Pagination controls for posts */}
+                                            <div className="flex justify-center items-center gap-2 mt-6">
+                                                <button
+                                                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                                    disabled={currentPage === 1}
+                                                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                                                >
+                                                    &lt;
+                                                </button>
+                                                {Array.from({ length: Math.ceil(filteredPosts.length / POSTS_PER_PAGE), }, (_, idx) => idx + 1).map((page) => (
+                                                    <button
+                                                        key={page}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={`px-3 py-1 rounded ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200'} font-medium mx-0.5`}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                ))}
+                                                <button
+                                                    onClick={() => setCurrentPage((prev) => Math.min(Math.ceil(filteredPosts.length / POSTS_PER_PAGE), prev + 1))}
+                                                    disabled={currentPage === Math.ceil(filteredPosts.length / POSTS_PER_PAGE)}
+                                                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                                                >
+                                                    &gt;
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </DashboardCard>

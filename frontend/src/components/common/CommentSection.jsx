@@ -37,10 +37,17 @@ const CommentSection = ({
   const [pinError, setPinError] = useState(null);
   const commentInputRef = useRef(null);
   const { user } = useAuth();
+  // Pagination state for comments
+  const [visibleCount, setVisibleCount] = useState(5);
 
   // Update local comments when initialComments prop changes
   useEffect(() => {
     setComments(initialComments);
+  }, [initialComments]);
+
+  // Reset visibleCount if comments change (e.g., new post, new comment)
+  useEffect(() => {
+    setVisibleCount(5);
   }, [initialComments]);
 
   const handleSubmitComment = async (e) => {
@@ -251,7 +258,7 @@ const CommentSection = ({
         )}
         
         <AnimatePresence>
-          {Array.isArray(sortedComments) && sortedComments.map((comment) => (
+          {Array.isArray(sortedComments) && sortedComments.slice(0, visibleCount).map((comment) => (
             <motion.div
               key={comment._id}
               initial={{ opacity: 0, y: 10 }}
@@ -430,6 +437,17 @@ const CommentSection = ({
         {(!Array.isArray(sortedComments) || sortedComments.length === 0) && (
           <div className="text-center py-4 text-sm text-gray-500 dark:text-gray-400">
             No comments yet. Be the first to comment!
+          </div>
+        )}
+        {/* Load more button for comments */}
+        {Array.isArray(sortedComments) && visibleCount < sortedComments.length && (
+          <div className="flex justify-center mt-2">
+            <button
+              onClick={() => setVisibleCount((prev) => Math.min(prev + 5, sortedComments.length))}
+              className="px-4 py-1.5 text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-800 transition-colors"
+            >
+              Load more comments...
+            </button>
           </div>
         )}
       </div>

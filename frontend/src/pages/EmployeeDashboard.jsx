@@ -163,6 +163,10 @@ const EmployeeDashboard = () => {
   // Add ref to track current organizationId for WebSocket
   const organizationIdRef = useRef(organizationId);
 
+  // Pagination state for posts
+  const [currentPage, setCurrentPage] = useState(1);
+  const POSTS_PER_PAGE = 20;
+
   // Helper function to deduplicate comments by ID
   const deduplicateComments = (comments) => {
     if (!Array.isArray(comments)) return [];
@@ -959,6 +963,12 @@ const EmployeeDashboard = () => {
     });
   }, [posts, selectedPostType, selectedRegion, selectedDepartment, searchQuery]);
 
+  // Pagination logic for posts
+  const totalPages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE);
+  const paginatedPosts = useMemo(() => filteredPosts.slice((currentPage - 1) * POSTS_PER_PAGE, currentPage * POSTS_PER_PAGE), [filteredPosts, currentPage]);
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [selectedPostType, selectedRegion, selectedDepartment, searchQuery, posts]);
+
   const renderContent = () => {
     switch (viewMode) {
       case 'create':
@@ -1099,14 +1109,7 @@ const EmployeeDashboard = () => {
               <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
             ) : (
               <div className="space-y-4">
-                {posts.length === 0 ? (
-                  <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
-                ) : (
-                  <p className="text-sm text-gray-500 dark:text-slate-400">
-                    Showing {filteredPosts.length} of {posts.length} posts
-                  </p>
-                )}
-                {filteredPosts.map((post) => (
+                {paginatedPosts.map((post) => (
                   <motion.div
                     key={post._id}
                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
@@ -1360,6 +1363,32 @@ const EmployeeDashboard = () => {
                     </div>
                   </motion.div>
                 ))}
+                {/* Pagination controls for posts */}
+                <div className="flex justify-center items-center gap-2 mt-6">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                  >
+                    &lt;
+                  </button>
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 rounded ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200'} font-medium mx-0.5`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                  >
+                    &gt;
+                  </button>
+                </div>
               </div>
             )}
           </motion.div>
