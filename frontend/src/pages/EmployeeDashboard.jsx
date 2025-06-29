@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
 import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
+import { decryptContent } from '../utils/crypto';
 import {
   UserCircleIcon,
   PencilSquareIcon,
@@ -151,6 +152,7 @@ const EmployeeDashboard = () => {
   // Post editing state
   const [showEditPostModal, setShowEditPostModal] = useState(false);
   const [postToEdit, setPostToEdit] = useState(null);
+  const [pinningPost, setPinningPost] = useState(null); // Track which post is being pinned/unpinned
   
   // Post filters
   const [selectedPostType, setSelectedPostType] = useState('all');
@@ -169,9 +171,9 @@ const EmployeeDashboard = () => {
       return content;
     }
     
-    // If content is an encrypted object, show a placeholder
+    // If content is an encrypted object, it should already be decrypted in state
     if (content && typeof content === 'object' && content.isEncrypted) {
-      return '[Encrypted content - please refresh to decrypt]';
+      return '[Decrypting...]';
     }
     
     // If content is any other object, convert to string
@@ -182,6 +184,63 @@ const EmployeeDashboard = () => {
     // Fallback for null/undefined
     return content || '';
   };
+
+  // Effect to decrypt posts when they are loaded
+  useEffect(() => {
+    const decryptPosts = async () => {
+      if (posts.length === 0) return;
+      
+      const decryptedPosts = await Promise.all(
+        posts.map(async (post) => {
+          let decryptedContent = post.content;
+          
+          // Decrypt post content if it's encrypted
+          if (post.content && typeof post.content === 'object' && post.content.isEncrypted) {
+            try {
+              decryptedContent = await decryptContent(post.content);
+            } catch (error) {
+              console.error('Error decrypting post content:', error);
+              decryptedContent = '[Error decrypting content]';
+            }
+          }
+          
+          // Decrypt comments if they exist
+          let decryptedComments = post.comments || [];
+          if (post.comments && post.comments.length > 0) {
+            decryptedComments = await Promise.all(
+              post.comments.map(async (comment) => {
+                let decryptedCommentText = comment.text;
+                
+                if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+                  try {
+                    decryptedCommentText = await decryptContent(comment.text);
+                  } catch (error) {
+                    console.error('Error decrypting comment text:', error);
+                    decryptedCommentText = '[Error decrypting comment]';
+                  }
+                }
+                
+                return {
+                  ...comment,
+                  text: decryptedCommentText
+                };
+              })
+            );
+          }
+          
+          return {
+            ...post,
+            content: decryptedContent,
+            comments: decryptedComments
+          };
+        })
+      );
+      
+      setPosts(decryptedPosts);
+    };
+    
+    decryptPosts();
+  }, [posts.length]); // Only run when posts array length changes
 
   // --- Fetch Organization Details ---
   const fetchOrganizationDetails = async (orgId) => {
@@ -1181,34 +1240,7 @@ const EmployeeDashboard = () => {
                         </div>
                       </div>
                       <div className="flex space-x-1">
-                        {/* Pin/unpin button for admin only */}
-                        {localStorage.getItem('role') === 'admin' && (
-                          <button
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              try {
-                                const response = await api.post(`/posts/${post._id}/pin`);
-                                // Use the API response to update local state correctly
-                                const updatedPost = response.data.post;
-                                if (updatedPost) {
-                                  setPosts(prevPosts => 
-                                    prevPosts.map(p => 
-                                      p._id === post._id 
-                                        ? { ...p, isPinned: updatedPost.isPinned }
-                                        : p
-                                    )
-                                  );
-                                }
-                              } catch (err) {
-                                setError('Failed to pin/unpin post.');
-                              }
-                            }}
-                            className={`ml-2 text-yellow-600 hover:text-yellow-800 p-1 rounded-full ${post.isPinned ? 'bg-yellow-50' : ''}`}
-                            title={post.isPinned ? 'Unpin Post' : 'Pin Post'}
-                          >
-                            <PaperClipIcon className="h-5 w-5" />
-                          </button>
-                        )}
+                        {/* Pin/unpin button removed for employees - only admins can pin/unpin */}
                         {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
                           <>
                             <button
