@@ -17,7 +17,8 @@ import {
     UserCircleIcon, UserGroupIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon,
     ExclamationTriangleIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    ClipboardDocumentIcon, PaperClipIcon
+    ClipboardDocumentIcon, PaperClipIcon,
+    ArrowPathIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
@@ -1336,7 +1337,42 @@ const AdminDashboard = () => {
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
                                     <div className="mb-6">
-                                        <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Posts Overview</h3>
+                                        <div className="flex items-center gap-2 mb-2 justify-between">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Posts Overview</h3>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!selectedOrg) return;
+                                                    setLoading(prev => ({ ...prev, orgDetails: true }));
+                                                    setError(prev => ({ ...prev, page: null }));
+                                                    try {
+                                                        const [postsRes, statsRes] = await Promise.all([
+                                                            api.get(`/posts/org/${selectedOrg._id}`),
+                                                            api.get(`/posts/stats/${selectedOrg._id}`)
+                                                        ]);
+                                                        if (Array.isArray(postsRes?.data)) {
+                                                            const sortedPosts = [...postsRes.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                                                            setPosts(sortedPosts);
+                                                        } else {
+                                                            setPosts([]);
+                                                        }
+                                                        setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
+                                                    } catch (err) {
+                                                        setError(prev => ({ ...prev, page: 'Failed to refresh posts. Please try again.' }));
+                                                    } finally {
+                                                        setLoading(prev => ({ ...prev, orgDetails: false }));
+                                                    }
+                                                }}
+                                                disabled={loading.orgDetails}
+                                                className="h-10 min-w-[110px] px-3 flex items-center justify-center rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                                                title="Refresh Posts"
+                                            >
+                                                {loading.orgDetails ? (
+                                                    <span className="flex items-center"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>Refreshing...</span>
+                                                ) : (
+                                                    <span className="flex items-center"><ArrowPathIcon className="h-5 w-5 mr-2" />Refresh</span>
+                                                )}
+                                            </button>
+                                        </div>
                                         <div className="flex flex-col gap-y-2">
                                             {/* Row 1: Search (full width) */}
                                             <div className="w-full">
