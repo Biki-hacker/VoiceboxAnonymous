@@ -2,7 +2,6 @@ import React, { useEffect, useRef, useState, useMemo } from "react";
 import { motion, useAnimation, useInView, AnimatePresence } from "framer-motion";
 import { Link, useSearchParams, useNavigate } from "react-router-dom";
 import { Helmet } from 'react-helmet';
-import threadsLogo from '../assets/threads-seeklogo.svg';
 import AnimatedText from "../components/home/AnimatedText";
 import TestimonialOrbit from "../components/home/TestimonialOrbit";
 import HeroSection from "../components/home/HeroSection";

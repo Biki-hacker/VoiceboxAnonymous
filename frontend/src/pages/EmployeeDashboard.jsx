@@ -1,45 +1,28 @@
 //  src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Dialog, Transition, Listbox } from '@headlessui/react';
-import { Fragment } from 'react';
 import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
 import {
   UserCircleIcon,
-  SunIcon,
-  MoonIcon,
-  ArrowLeftOnRectangleIcon,
   PencilSquareIcon,
   EyeIcon,
   CheckBadgeIcon,
   BuildingOfficeIcon,
-  HandThumbUpIcon as ThumbUpIcon,
-  HeartIcon,
-  CheckIcon as CheckIconOutline,
-  FaceSmileIcon as EmojiHappyIcon,
-  FaceFrownIcon as EmojiSadIcon,
-  XCircleIcon,
-  ChatBubbleLeftIcon,
   TrashIcon,
-  XMarkIcon,
   PaperClipIcon,
-  PaperAirplaneIcon,
   Bars3Icon,
   ExclamationTriangleIcon,
   TagIcon,
   MapPinIcon,
   BuildingLibraryIcon,
-  HomeIcon,
-  DocumentTextIcon,
-  NoSymbolIcon,
   MagnifyingGlassIcon,
   ArrowPathIcon
 } from '@heroicons/react/24/outline';
-import { ArrowsPointingOutIcon, HandThumbUpIcon as HandThumbUpIconSolid, HeartIcon as HeartIconSolid } from '@heroicons/react/24/solid';
+import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
@@ -49,11 +32,8 @@ import PostEditModal from '../components/PostEditModal';
 import useTheme from '../hooks/useTheme';
 import useWebSocket from '../hooks/useWebSocket';
 import CustomSelect from '../components/common/CustomSelect';
-import ThemeToggle from '../components/common/ThemeToggle';
 import CommentSection from '../components/common/CommentSection';
 import ReactionButton from '../components/common/ReactionButton';
-import Modal from '../components/common/Modal';
-
 // --- Organization Access Modal Component ---
 const OrgAccessModal = ({ isOpen, onClose }) => {
   if (!isOpen) return null;

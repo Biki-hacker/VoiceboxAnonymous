@@ -1,5 +1,5 @@
 // src/pages/AdminDashboard.jsx
-import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
@@ -12,15 +12,12 @@ import {
 } from 'chart.js';
 import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
-    BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
-    UserCircleIcon, UserGroupIcon, ChevronDownIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
-    TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
-    CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
-    LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon, ClipboardDocumentIcon,
-    FaceSmileIcon as EmojiHappyIcon, PaperClipIcon
+    BuildingOffice2Icon, CreditCardIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
+    UserCircleIcon, UserGroupIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
+    TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon,
+    ExclamationTriangleIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
+    ClipboardDocumentIcon, PaperClipIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
@@ -31,7 +28,6 @@ import useTheme from '../hooks/useTheme';
 import useWebSocket from '../hooks/useWebSocket';
 import Modal from '../components/common/Modal';
 import CustomSelect from '../components/common/CustomSelect';
-import ThemeToggle from '../components/common/ThemeToggle';
 import CommentSection from '../components/common/CommentSection';
 import ReactionButton from '../components/common/ReactionButton';
 

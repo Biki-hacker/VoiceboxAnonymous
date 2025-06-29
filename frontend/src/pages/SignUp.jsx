@@ -4,7 +4,7 @@ import { supabase } from '../supabaseClient';
 import { api } from '../utils/axios';
 import { useNavigate, Link, useLocation } from 'react-router-dom';
 import { Listbox, Transition } from '@headlessui/react';
-import { FaGoogle, FaGithub, FaEye, FaEyeSlash } from 'react-icons/fa';
+import { FaGithub, FaEye, FaEyeSlash } from 'react-icons/fa';
 import { HiCheck, HiSelector } from 'react-icons/hi';
 import { motion } from 'framer-motion';
 
