@@ -305,18 +305,18 @@ const Polling = ({
       <Modal isOpen={showCreateModal || showEditModal} onClose={() => { setShowCreateModal(false); setShowEditModal(false); }} title={editingPoll ? 'Edit Poll' : 'Create Poll'}>
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Poll Question</label>
+            <label className="block text-sm font-medium mb-1 text-gray-900 dark:text-white">Poll Question</label>
             <input type="text" className="w-full border rounded p-2 bg-white dark:bg-slate-700 text-gray-900 dark:text-white" value={question} onChange={e => setQuestion(e.target.value)} maxLength={200} />
           </div>
           <div>
-            <label className="block text-sm font-medium mb-1">Options (2-5)</label>
+            <label className="block text-sm font-medium mb-1 text-gray-900 dark:text-white">Options (2-5)</label>
             {options.map((opt, idx) => (
               <div key={idx} className="flex items-center gap-2 mb-2">
                 <input type="text" className="flex-1 border rounded p-2 bg-white dark:bg-slate-700 text-gray-900 dark:text-white" value={opt} onChange={e => handleOptionChange(idx, e.target.value)} maxLength={100} />
                 {options.length > 2 && <button onClick={() => handleRemoveOption(idx)} className="p-1 text-red-500"><TrashIcon className="h-4 w-4" /></button>}
               </div>
             ))}
-            {options.length < MAX_OPTIONS && <button onClick={handleAddOption} className="mt-2 px-2 py-1 bg-gray-200 dark:bg-slate-700 rounded text-xs">Add Option</button>}
+            {options.length < MAX_OPTIONS && <button onClick={handleAddOption} className="mt-2 px-2 py-1 bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-200 rounded text-xs">Add Option</button>}
           </div>
           {error && <div className="text-xs text-red-500">{error}</div>}
           <div className="flex justify-end gap-2">
@@ -329,7 +329,7 @@ const Polling = ({
       <Modal isOpen={!!showStopModal} onClose={() => setShowStopModal(false)} title="Stop Poll?">
         <div className="py-4">
           <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500 mx-auto mb-2" />
-          <div className="text-center mb-4">Are you sure you want to stop this poll? This action cannot be undone.</div>
+          <div className="text-center mb-4 text-gray-900 dark:text-white">Are you sure you want to stop this poll? This action cannot be undone.</div>
           <div className="flex justify-end gap-2">
             <button onClick={() => setShowStopModal(false)} className="px-4 py-2 rounded bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-white">Cancel</button>
             <button onClick={() => handleStopPoll(showStopModal)} disabled={isSubmitting} className="px-4 py-2 rounded bg-yellow-600 text-white hover:bg-yellow-700 disabled:opacity-50">{isSubmitting ? 'Stopping...' : 'Stop Poll'}</button>
