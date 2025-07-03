@@ -74,13 +74,4 @@ EMAIL_PASS=your-email-password
 - `start` – Start the server
 - `lint` – Run ESLint
 
-## Contributing
-
-1. Fork the repository and create a new branch for your feature or bugfix.
-2. Follow the existing code style and conventions.
-3. Write clear commit messages and update documentation as needed.
-4. Submit a pull request for review.
-
-## License
-
-This project is licensed under the MIT License. 
+© Souvik Dhara 

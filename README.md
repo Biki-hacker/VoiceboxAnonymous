@@ -23,10 +23,13 @@ To set up and run the project, please refer to the dedicated README files in eac
 
 Each README provides detailed instructions for installation, configuration, and environment variable management specific to that part of the project.
 
-## Contributing
+## Tech Stack
+- React
+- Vite
+- Tailwind CSS
+- Node.js
+- MongoDB
+- WebSocket
+- E2EE (End-to-End Encryption)
 
-We welcome contributions from the community! Please read the contributing guidelines in each subproject and ensure you follow best practices for code quality, documentation, and testing.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details. 
+© Souvik Dhara 
