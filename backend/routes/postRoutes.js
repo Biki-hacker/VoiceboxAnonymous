@@ -16,7 +16,13 @@ const {
   deletePost,
   getReactionStatus,
   togglePostPin,
-  toggleCommentPin
+  toggleCommentPin,
+  // Poll controllers
+  createPoll,
+  editPoll,
+  deletePoll,
+  votePoll,
+  stopPoll
 } = require('../controllers/postController');
 
 // Apply auth middleware to all routes
@@ -88,5 +94,12 @@ router.post('/:postId/comments/:commentId/pin', [
   param('postId').isMongoId().withMessage('Invalid post ID'),
   param('commentId').isMongoId().withMessage('Invalid comment ID')
 ], toggleCommentPin);
+
+// --- Poll routes ---
+router.post('/polls', createPoll); // Create poll (admin)
+router.put('/polls/:pollId', editPoll); // Edit poll (admin)
+router.delete('/polls/:pollId', deletePoll); // Delete poll (admin)
+router.post('/polls/:pollId/vote', votePoll); // Vote (employee)
+router.post('/polls/:pollId/stop', stopPoll); // Stop poll (admin)
 
 module.exports = router;

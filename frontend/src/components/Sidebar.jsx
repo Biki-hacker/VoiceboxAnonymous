@@ -148,26 +148,29 @@ const Sidebar = ({
       </Transition.Root>
 
       {/* Desktop Sidebar */}
-      <aside className="hidden md:flex w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
+      <aside className="hidden md:flex w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 flex-shrink-0 shadow-sm">
         <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
           {Logo && <Logo className="h-7 w-7 md:h-8" />}
         </div>
 
-        <nav className="flex-1 flex flex-col space-y-5 items-center overflow-y-auto py-4">
-          {sidebarNavItems.map((item) => (
-            <button
-              key={item.name}
-              onClick={item.action}
-              title={item.name}
-              className={`p-3 rounded-lg transition-colors duration-150 ${
-                item.current 
-                  ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' 
-                  : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'
-              }`}
-            >
-              <item.icon className="h-6 w-6" />
-            </button>
-          ))}
+        <nav className="flex-1 flex flex-col items-center justify-between py-4 w-full">
+          <div className="flex flex-col items-center w-full gap-4 flex-grow">
+            {sidebarNavItems.map((item, idx) => (
+              <button
+                key={item.name}
+                onClick={item.action}
+                title={item.name}
+                className={`p-3 rounded-lg w-full flex items-center justify-center transition-colors duration-150 ${
+                  item.current 
+                    ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' 
+                    : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'
+                }`}
+                style={{ minHeight: 48 }}
+              >
+                <item.icon className="h-6 w-6" />
+              </button>
+            ))}
+          </div>
         </nav>
 
         <div className="mt-auto flex flex-col items-center space-y-5">

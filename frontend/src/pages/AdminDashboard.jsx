@@ -18,11 +18,12 @@ import {
     TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon,
     ExclamationTriangleIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
     ClipboardDocumentIcon, PaperClipIcon,
-    ArrowPathIcon
+    ArrowPathIcon, ChartBarIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
 import PostEditModal from '../components/PostEditModal';
+import Polling from '../components/Polling';
 
 // Import common components and hooks
 import useTheme from '../hooks/useTheme';
@@ -1069,6 +1070,7 @@ const AdminDashboard = () => {
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
         { name: 'Subscriptions', icon: CreditCardIcon, action: () => navigate('/subscriptions'), current: window.location.pathname === '/subscriptions' },
         { name: 'Co-admin Orgs', icon: UserGroupIcon, action: handleOpenCoAdminOrgsModal, current: isCoAdminOrgsModalOpen },
+        { name: 'Polls', icon: ChartBarIcon, action: () => setViewMode('polls'), current: viewMode === 'polls' },
     ];
 
     // Logo component for the sidebar
@@ -1133,7 +1135,9 @@ const AdminDashboard = () => {
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
-                    {viewMode === 'createPost' && selectedOrg ? (
+                    {viewMode === 'polls' ? (
+                        <Polling userRole="admin" orgId={selectedOrg?._id} onBack={() => setViewMode('dashboard')} />
+                    ) : viewMode === 'createPost' && selectedOrg ? (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -2051,6 +2055,145 @@ const AdminDashboard = () => {
             post={postToEdit}
             onPostUpdated={handlePostUpdated}
         />
+        <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">
+  {loading.orgList ? (
+    <div className="text-center py-10">
+      <p className="text-gray-600 dark:text-slate-400">Loading organizations...</p>
+    </div>
+  ) : organizations.length === 0 ? (
+    <NothingToShow message="No organizations to manage. Add one first." />
+  ) : (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p>
+      <ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">
+        {organizations.map((org) => (
+          <li
+            key={org._id}
+            className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${
+              selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between space-x-3">
+              <div className="flex-1 min-w-0">
+                <button
+                  onClick={() => {
+                    selectOrganization(org);
+                    setIsManageOrgModalOpen(false);
+                  }}
+                  className="text-left w-full group"
+                >
+                  <p
+                    className={`text-sm font-medium truncate ${
+                      selectedOrg?._id === org._id
+                        ? 'text-blue-700 dark:text-blue-400'
+                        : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'
+                    }`}
+                  >
+                    {org.name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                    ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}
+                  </p>
+                </button>
+              </div>
+              <button
+                onClick={() => initiateDeleteOrganization(org)}
+                disabled={loading.deleteOrg?.[org._id]}
+                className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50"
+                title="Delete Organization"
+              >
+                {loading.deleteOrg?.[org._id] ? (
+                  <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <TrashIcon className="h-4 w-4" />
+                )}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+  <div className="mt-6 flex justify-end">
+    <button
+      type="button"
+      onClick={() => setIsManageOrgModalOpen(false)}
+      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800"
+    >
+      Close
+    </button>
+  </div>
+</Modal>
+        <Modal
+          isOpen={isDeleteConfirmModalOpen}
+          onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }}
+          title={`Delete ${orgToDelete?.name || 'Organization'}`}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700 dark:text-slate-300">
+              This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.
+            </p>
+            <div>
+              <label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center">
+                Type organization name
+              </label>
+              <input
+                type="text"
+                id="orgNameConfirmDel"
+                value={deleteOrgNameConfirm}
+                onChange={(e) => setDeleteOrgNameConfirm(e.target.value)}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                placeholder={orgToDelete?.name || ''}
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+              />
+            </div>
+            <div>
+              <label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center">
+                Your Password
+              </label>
+              <input
+                type="password"
+                id="passwordConfirmDel"
+                value={deletePasswordConfirm}
+                onChange={(e) => setDeletePasswordConfirm(e.target.value)}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                placeholder="Enter your account password"
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+              />
+            </div>
+            {error.modal && (
+              <p className="text-sm text-red-600 dark:text-red-400 flex items-center">
+                <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}
+              </p>
+            )}
+            <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5">
+              <button
+                type="button"
+                onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }}
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDeleteOrg}
+                disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[140px]"
+              >
+                {loading.deleteOrg?.[orgToDelete?._id] ? (
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : 'Confirm Delete'}
+              </button>
+            </div>
+          </div>
+        </Modal>
         </>
     );
 };

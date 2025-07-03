@@ -1370,3 +1370,159 @@ exports.toggleCommentPin = async (req, res) => {
     });
   }
 };
+
+// --- Poll Controllers ---
+// Create a poll (admin only)
+exports.createPoll = async (req, res) => {
+  try {
+    const { orgId, pollQuestion, pollOptions } = req.body;
+    if (!orgId || !pollQuestion || !Array.isArray(pollOptions) || pollOptions.length < 2 || pollOptions.length > 5) {
+      return res.status(400).json({ message: 'Invalid poll data' });
+    }
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can create polls' });
+    }
+    // Encrypt handled by model pre-save
+    const newPoll = new Post({
+      orgId,
+      isPoll: true,
+      pollQuestion,
+      pollOptions: pollOptions.map(opt => ({ text: opt, voteCount: 0 })),
+      pollStatus: 'active',
+      pollVotes: [],
+      author: req.user._id,
+      createdByRole: req.user.role
+    });
+    await newPoll.save();
+    await newPoll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_CREATED',
+        payload: { ...newPoll.toObject(), organization: newPoll.orgId }
+      });
+    }
+    res.status(201).json(newPoll);
+  } catch (err) {
+    console.error('Create poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Edit a poll (admin only, only if active)
+exports.editPoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { pollQuestion, pollOptions } = req.body;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can edit polls' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Cannot edit a stopped poll' });
+    if (pollQuestion) poll.pollQuestion = pollQuestion;
+    if (pollOptions && Array.isArray(pollOptions) && pollOptions.length >= 2 && pollOptions.length <= 5) {
+      poll.pollOptions = pollOptions.map(opt => ({ text: opt, voteCount: 0 }));
+      poll.pollVotes = [];
+    }
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_UPDATED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Edit poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Delete a poll (admin only)
+exports.deletePoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can delete polls' });
+    await Post.findByIdAndDelete(pollId);
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_DELETED',
+        payload: { pollId, organization: poll.orgId }
+      });
+    }
+    res.status(200).json({ message: 'Poll deleted' });
+  } catch (err) {
+    console.error('Delete poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Vote in a poll (employee only, one vote per user)
+exports.votePoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { optionId } = req.body;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Poll is not active' });
+    // Only employees can vote (not admin)
+    if (req.user.role !== 'employee') return res.status(403).json({ message: 'Only employees can vote' });
+    // Check if user already voted
+    if (poll.pollVotes.some(v => v.user.toString() === req.user._id.toString())) {
+      return res.status(400).json({ message: 'You have already voted' });
+    }
+    // Find option
+    const option = poll.pollOptions.find(opt => opt._id.toString() === optionId);
+    if (!option) return res.status(400).json({ message: 'Invalid option' });
+    option.voteCount += 1;
+    poll.pollVotes.push({ user: req.user._id, optionId });
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_VOTED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Vote poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Stop a poll (admin only, cannot be restarted)
+exports.stopPoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can stop polls' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Poll already stopped' });
+    poll.pollStatus = 'stopped';
+    poll.pollStoppedAt = new Date();
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_STOPPED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Stop poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};

@@ -123,6 +123,35 @@ commentSchema.methods.addReaction = async function(userId, reactionType) {
   return this;
 };
 
+// Poll option sub-schema
+const pollOptionSchema = new mongoose.Schema({
+  _id: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: () => new mongoose.Types.ObjectId()
+  },
+  text: {
+    type: mongoose.Schema.Types.Mixed, // encrypted string
+    required: true
+  },
+  voteCount: {
+    type: Number,
+    default: 0
+  }
+}, { _id: false });
+
+// Poll vote sub-schema
+const pollVoteSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  optionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  }
+}, { _id: false });
+
 // Main Post schema
 const postSchema = new mongoose.Schema(
   {
@@ -178,6 +207,30 @@ const postSchema = new mongoose.Schema(
     isEdited: {
       type: Boolean,
       default: false
+    },
+    // Poll fields
+    isPoll: {
+      type: Boolean,
+      default: false
+    },
+    pollQuestion: {
+      type: mongoose.Schema.Types.Mixed // encrypted string
+    },
+    pollOptions: {
+      type: [pollOptionSchema],
+      default: undefined // only present if isPoll is true
+    },
+    pollStatus: {
+      type: String,
+      enum: ['active', 'stopped'],
+      default: 'active'
+    },
+    pollVotes: {
+      type: [pollVoteSchema],
+      default: undefined // only present if isPoll is true
+    },
+    pollStoppedAt: {
+      type: Date
     }
   },
   { timestamps: true }
@@ -185,6 +238,29 @@ const postSchema = new mongoose.Schema(
 
 // Add pre-save middleware to encrypt post content
 postSchema.pre('save', encryptContent);
+
+// Add pre-save middleware to encrypt poll question and options
+postSchema.pre('save', async function(next) {
+  // Encrypt poll question
+  if (this.isPoll && this.isModified('pollQuestion') && this.pollQuestion && typeof this.pollQuestion === 'string') {
+    try {
+      const { encrypt } = require('../utils/cryptoUtils');
+      this.pollQuestion = await encrypt(this.pollQuestion);
+    } catch (error) {
+      return next(error);
+    }
+  }
+  // Encrypt poll options
+  if (this.isPoll && Array.isArray(this.pollOptions)) {
+    const { encrypt } = require('../utils/cryptoUtils');
+    for (let i = 0; i < this.pollOptions.length; i++) {
+      if (this.pollOptions[i].text && typeof this.pollOptions[i].text === 'string') {
+        this.pollOptions[i].text = await encrypt(this.pollOptions[i].text);
+      }
+    }
+  }
+  next();
+});
 
 // Add post-find middleware to decrypt content
 postSchema.post('find', async function(docs) {
@@ -225,6 +301,24 @@ postSchema.methods.decryptContent = async function() {
     }
   }
   
+  return this;
+};
+
+// Add instance method to decrypt poll question and options
+postSchema.methods.decryptPoll = async function() {
+  const { decrypt } = require('../utils/cryptoUtils');
+  if (this.isPoll) {
+    if (this.pollQuestion && typeof this.pollQuestion === 'object' && this.pollQuestion.isEncrypted) {
+      this.pollQuestion = await decrypt(this.pollQuestion);
+    }
+    if (Array.isArray(this.pollOptions)) {
+      for (let i = 0; i < this.pollOptions.length; i++) {
+        if (this.pollOptions[i].text && typeof this.pollOptions[i].text === 'object' && this.pollOptions[i].text.isEncrypted) {
+          this.pollOptions[i].text = await decrypt(this.pollOptions[i].text);
+        }
+      }
+    }
+  }
   return this;
 };
 

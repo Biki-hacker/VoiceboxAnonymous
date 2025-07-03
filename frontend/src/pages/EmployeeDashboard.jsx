@@ -20,13 +20,15 @@ import {
   MapPinIcon,
   BuildingLibraryIcon,
   MagnifyingGlassIcon,
-  ArrowPathIcon
+  ArrowPathIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
 import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
 import PostEditModal from '../components/PostEditModal';
+import Polling from '../components/Polling';
 
 // Import common components and hooks
 import useTheme from '../hooks/useTheme';
@@ -879,6 +881,15 @@ const EmployeeDashboard = () => {
         : "text-gray-500 dark:text-gray-400"
     },
     {
+      title: "Polls",
+      description: "Participate in organization polls. Your vote is anonymous.",
+      buttonText: "Go to Polls",
+      onClick: isEmailVerified ? () => setViewMode('polls') : () => setShowOrgAccessModal(true),
+      icon: ChartBarIcon,
+      bgColorClass: "bg-yellow-50 dark:bg-yellow-900/30",
+      accentColorClass: "text-yellow-600 dark:text-yellow-400"
+    },
+    {
       title: "Organization Verification",
       description: "Re-verify or update your organizational details if you've changed roles or departments.",
       buttonText: "Verify Details",
@@ -915,6 +926,13 @@ const EmployeeDashboard = () => {
           }
         : () => setShowOrgAccessModal(true),
       current: viewMode === 'view',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'Polls',
+      icon: ChartBarIcon,
+      action: isEmailVerified ? () => setViewMode('polls') : () => setShowOrgAccessModal(true),
+      current: viewMode === 'polls',
       disabled: !isEmailVerified
     },
     { 
@@ -1392,6 +1410,11 @@ const EmployeeDashboard = () => {
               </div>
             )}
           </motion.div>
+        );
+
+      case 'polls':
+        return (
+          <Polling userRole="employee" orgId={organizationId} onBack={() => setViewMode('dashboard')} />
         );
 
       default:
