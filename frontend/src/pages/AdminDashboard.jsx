@@ -614,12 +614,14 @@ const AdminDashboard = () => {
 
     // --- Memoized Data for Filters and Charts ---
     const filteredPosts = useMemo(() => {
-        const filtered = posts.filter(post => 
+        const filtered = posts
+          .filter(post => post.postType !== 'poll') // Exclude polls
+          .filter(post => 
             (selectedType === 'all' || post.postType === selectedType) && 
             (selectedRegion === 'all' || post.region === selectedRegion) && 
             (selectedDepartment === 'all' || post.department === selectedDepartment) &&
             (searchQuery === '' || post.content.toLowerCase().includes(searchQuery.toLowerCase()))
-        );
+          );
         
         // Sort posts: pinned first, then by creation date (newest first)
         return filtered.sort((a, b) => {
@@ -1437,11 +1439,7 @@ const AdminDashboard = () => {
                                             </div>
                                         </div>
                                     </div>
-                                    {posts.length > 0 && (
-                                        <p className="text-sm text-gray-500 dark:text-slate-400 mb-4">
-                                            Showing {filteredPosts.length} of {posts.length} posts
-                                        </p>
-                                    )}
+                                    <div className="mb-8" />
                                     {loading.orgDetails ? (
                                         <div className="text-center py-10">
                                             <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

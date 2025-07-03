@@ -18,6 +18,7 @@ const {
   togglePostPin,
   toggleCommentPin,
   // Poll controllers
+  getPollsByOrg,
   createPoll,
   editPoll,
   deletePoll,
@@ -96,6 +97,7 @@ router.post('/:postId/comments/:commentId/pin', [
 ], toggleCommentPin);
 
 // --- Poll routes ---
+router.get('/polls/org/:orgId', getPollsByOrg); // Get all polls for org
 router.post('/polls', createPoll); // Create poll (admin)
 router.put('/polls/:pollId', editPoll); // Edit poll (admin)
 router.delete('/polls/:pollId', deletePoll); // Delete poll (admin)

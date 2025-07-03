@@ -1,22 +1,20 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Modal from './common/Modal';
 import { ExclamationTriangleIcon, PlusIcon, TrashIcon, PencilSquareIcon, StopIcon, PlayIcon, ChartBarIcon, ArrowLeftOnRectangleIcon } from '@heroicons/react/24/outline';
 import useTheme from '../hooks/useTheme';
+import { api } from '../api/axios';
+import useWebSocket from '../hooks/useWebSocket';
+import DeletionConfirmation from './DeletionConfirmation';
 // import { encrypt } from '../utils/crypto'; // Uncomment if encryption util exists
 
 const MAX_OPTIONS = 5;
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000';
 
 const Polling = ({
   userRole, // 'admin' or 'employee'
   orgId,
-  ws, // WebSocket instance or sendMessage function
-  polls, // List of polls (optional, for list view)
-  onPollCreated, // callback
-  onPollUpdated, // callback
-  onPollDeleted, // callback
-  onVote, // callback
-  onBack, // callback for back to dashboard
+  onBack,
   ...props
 }) => {
   const [theme] = useTheme();
@@ -24,14 +22,89 @@ const Polling = ({
   const [showEditModal, setShowEditModal] = useState(false);
   const [showStopModal, setShowStopModal] = useState(false);
   const [editingPoll, setEditingPoll] = useState(null);
-  const [activePoll, setActivePoll] = useState(null); // The poll being voted on or shown
   const [question, setQuestion] = useState('');
   const [options, setOptions] = useState(['', '']);
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [selectedOption, setSelectedOption] = useState(null);
+  const [selectedOptions, setSelectedOptions] = useState({}); // pollId -> optionId
   const [voteError, setVoteError] = useState('');
-  const [results, setResults] = useState(null); // Live results
+  const [polls, setPolls] = useState([]);
+  const [pollsToShow, setPollsToShow] = useState(5);
+  const orgIdRef = useRef(orgId);
+  const [pollToDelete, setPollToDelete] = useState(null);
+  const [isDeletingPoll, setIsDeletingPoll] = useState(false);
+
+  useEffect(() => { orgIdRef.current = orgId; }, [orgId]);
+
+  // Reset pollsToShow when polls change
+  useEffect(() => {
+    setPollsToShow(5);
+  }, [polls.length]);
+
+  // --- Fetch Polls ---
+  const fetchPolls = useCallback(async () => {
+    if (!orgId) return;
+    try {
+      const res = await api.get(`/posts/polls/org/${orgId}`);
+      setPolls(res.data || []);
+    } catch (err) {
+      setError('Failed to fetch polls.');
+    }
+  }, [orgId]);
+
+  useEffect(() => { fetchPolls(); }, [fetchPolls]);
+
+  // --- WebSocket Message Handler ---
+  const handleWsMessage = useCallback((msg) => {
+    if (!msg || typeof msg !== 'object') return;
+    switch (msg.type) {
+      case 'POLL_CREATED':
+      case 'POLL_UPDATED':
+      case 'POLL_VOTED':
+      case 'POLL_STOPPED': {
+        if (msg.payload && msg.payload.organization === orgIdRef.current) {
+          setPolls((prev) => {
+            const idx = prev.findIndex(p => p._id === msg.payload._id);
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = msg.payload;
+              return updated;
+            } else {
+              return [msg.payload, ...prev];
+            }
+          });
+        }
+        break;
+      }
+      case 'POLL_DELETED': {
+        if (msg.payload && msg.payload.organization === orgIdRef.current) {
+          setPolls((prev) => prev.filter(p => p._id !== msg.payload.pollId));
+        }
+        break;
+      }
+      default:
+        break;
+    }
+  }, []);
+
+  // --- WebSocket Hook ---
+  const { sendMessage } = useWebSocket(
+    WS_URL,
+    handleWsMessage,
+    useCallback((event) => {
+      // On open, send authentication message if orgId and userRole are present
+      if (orgId && userRole && event?.target?.readyState === WebSocket.OPEN) {
+        event.target.send(JSON.stringify({
+          type: 'AUTH',
+          organizationId: orgId,
+          role: userRole,
+          token: localStorage.getItem('token')
+        }));
+      }
+    }, [orgId, userRole]),
+    undefined,
+    undefined
+  );
 
   // --- Handlers for Admin ---
   const openCreateModal = () => {
@@ -44,7 +117,7 @@ const Polling = ({
   const openEditModal = (poll) => {
     setEditingPoll(poll);
     setQuestion(poll.pollQuestion || '');
-    setOptions(poll.pollOptions ? poll.pollOptions.map(opt => opt.text || '') : ['', '']);
+    setOptions(poll.pollOptions ? poll.pollOptions.map(opt => typeof opt.text === 'string' ? opt.text : (opt.text?.content || '')) : ['', '']);
     setShowEditModal(true);
     setError('');
   };
@@ -61,41 +134,49 @@ const Polling = ({
     setIsSubmitting(true);
     setError('');
     try {
-      // Encrypt question/options here if needed
-      // const encryptedQuestion = await encrypt(question);
-      // const encryptedOptions = await Promise.all(options.map(opt => encrypt(opt)));
       const payload = {
         orgId,
         pollQuestion: question,
         pollOptions: options,
+        postType: 'poll',
+        content: '[poll]',
       };
       if (editingPoll) {
-        // Edit
-        // await api.put(`/polls/${editingPoll._id}`, payload);
-        if (onPollUpdated) onPollUpdated(payload);
+        await api.put(`/posts/polls/${editingPoll._id}`, payload);
       } else {
-        // Create
-        // await api.post('/polls', payload);
-        if (onPollCreated) onPollCreated(payload);
+        await api.post('/posts/polls', payload);
       }
       setShowCreateModal(false);
       setShowEditModal(false);
+      fetchPolls();
     } catch (err) {
       setError('Failed to save poll.');
     } finally {
       setIsSubmitting(false);
     }
   };
-  const handleDeletePoll = async (poll) => {
-    // await api.delete(`/polls/${poll._id}`);
-    if (onPollDeleted) onPollDeleted(poll);
+  const handleDeletePoll = (poll) => {
+    setPollToDelete(poll);
+  };
+  const confirmDeletePoll = async () => {
+    if (!pollToDelete) return;
+    setIsDeletingPoll(true);
+    try {
+      await api.delete(`/posts/polls/${pollToDelete._id}`);
+      setPollToDelete(null);
+      fetchPolls();
+    } catch (err) {
+      setError('Failed to delete poll.');
+    } finally {
+      setIsDeletingPoll(false);
+    }
   };
   const handleStopPoll = async (poll) => {
     setIsSubmitting(true);
     try {
-      // await api.post(`/polls/${poll._id}/stop`);
-      if (onPollUpdated) onPollUpdated({ ...poll, pollStatus: 'stopped' });
+      await api.post(`/posts/polls/${poll._id}/stop`);
       setShowStopModal(false);
+      fetchPolls();
     } catch (err) {
       setError('Failed to stop poll.');
     } finally {
@@ -108,24 +189,15 @@ const Polling = ({
     setIsSubmitting(true);
     setVoteError('');
     try {
-      // await api.post(`/polls/${poll._id}/vote`, { optionId });
-      setSelectedOption(optionId);
-      if (onVote) onVote({ pollId: poll._id, optionId });
+      await api.post(`/posts/polls/${poll._id}/vote`, { optionId });
+      setSelectedOptions(prev => ({ ...prev, [poll._id]: optionId }));
+      fetchPolls();
     } catch (err) {
       setVoteError('Failed to vote.');
     } finally {
       setIsSubmitting(false);
     }
   };
-
-  // --- Live Results (WebSocket) ---
-  useEffect(() => {
-    // Listen for poll updates via ws, update results
-    // ws.on('POLL_UPDATED', ...)
-    // ws.on('POLL_VOTED', ...)
-    // ws.on('POLL_STOPPED', ...)
-    // setResults(...)
-  }, [ws]);
 
   // --- UI ---
   const pollCard = (poll) => (
@@ -137,10 +209,14 @@ const Polling = ({
     >
       <div className="flex items-center justify-between mb-2">
         <div className="font-semibold text-gray-900 dark:text-slate-100">{poll.pollQuestion}</div>
-        {userRole === 'admin' && poll.pollStatus === 'active' && (
+        {userRole === 'admin' && (
           <div className="flex gap-2">
-            <button onClick={() => openEditModal(poll)} className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><PencilSquareIcon className="h-5 w-5" /></button>
-            <button onClick={() => setShowStopModal(poll)} className="p-1 text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded"><StopIcon className="h-5 w-5" /></button>
+            {poll.pollStatus === 'active' && (
+              <>
+                <button onClick={() => openEditModal(poll)} className="p-1 text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded"><PencilSquareIcon className="h-5 w-5" /></button>
+                <button onClick={() => setShowStopModal(poll)} className="p-1 text-yellow-500 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 rounded"><StopIcon className="h-5 w-5" /></button>
+              </>
+            )}
             <button onClick={() => handleDeletePoll(poll)} className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded"><TrashIcon className="h-5 w-5" /></button>
           </div>
         )}
@@ -150,19 +226,30 @@ const Polling = ({
           <div key={opt._id || idx} className="flex items-center gap-2">
             {userRole === 'employee' && poll.pollStatus === 'active' ? (
               <button
-                disabled={isSubmitting || selectedOption === opt._id}
+                disabled={isSubmitting || selectedOptions[poll._id] === opt._id || poll.pollVotes?.some(v => v.user === (window.userId || ''))}
                 onClick={() => handleVote(poll, opt._id)}
-                className={`flex-1 px-3 py-2 rounded border ${selectedOption === opt._id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white'} transition`}
+                className={`flex-1 px-3 py-2 rounded border ${selectedOptions[poll._id] === opt._id ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white'} transition`}
               >
-                {opt.text}
+                {typeof opt.text === 'string' ? opt.text : (opt.text?.content || '')}
               </button>
             ) : (
-              <div className="flex-1 px-3 py-2 rounded bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">{opt.text}</div>
+              <div className="flex-1 px-3 py-2 rounded bg-gray-100 dark:bg-slate-700 text-gray-900 dark:text-white">{typeof opt.text === 'string' ? opt.text : (opt.text?.content || '')}</div>
             )}
-            {/* Show percentage if stopped or voted */}
-            {(poll.pollStatus === 'stopped' || selectedOption) && (
-              <div className="w-20 text-right text-xs text-gray-500 dark:text-slate-400">
+            {/* Show voting stats for admin always, for employees if stopped or voted */}
+            {(userRole === 'admin' || poll.pollStatus === 'stopped' || selectedOptions[poll._id]) && (
+              <div className="w-28 text-right text-xs text-gray-500 dark:text-slate-400">
                 {opt.voteCount} votes
+                {Array.isArray(poll.pollOptions) && poll.pollOptions.length > 0 && (
+                  <span className="ml-1">
+                    (
+                    {Math.round(
+                      (opt.voteCount /
+                        (poll.pollOptions.reduce((sum, o) => sum + (o.voteCount || 0), 0) || 1)) *
+                        100
+                    ) || 0}
+                    %)
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -196,7 +283,21 @@ const Polling = ({
       </div>
       {/* List of polls */}
       <div>
-        {polls && polls.length > 0 ? polls.map(pollCard) : (
+        {polls && polls.length > 0 ? (
+          <>
+            {polls.slice(0, pollsToShow).map(pollCard)}
+            {pollsToShow < polls.length && (
+              <div className="flex justify-center mt-4">
+                <button
+                  onClick={() => setPollsToShow(pollsToShow + 5)}
+                  className="px-4 py-2 rounded bg-blue-600 text-white hover:bg-blue-700 transition"
+                >
+                  Load more...
+                </button>
+              </div>
+            )}
+          </>
+        ) : (
           <div className="text-gray-500 dark:text-slate-400 text-center py-8">No polls found.</div>
         )}
       </div>
@@ -235,6 +336,17 @@ const Polling = ({
           </div>
         </div>
       </Modal>
+      <DeletionConfirmation
+        isOpen={!!pollToDelete}
+        onClose={() => setPollToDelete(null)}
+        title="Delete Poll"
+        itemType="poll"
+        itemPreview={typeof pollToDelete?.pollQuestion === 'string' ? pollToDelete.pollQuestion : (pollToDelete?.pollQuestion?.content || '')}
+        isDeleting={isDeletingPoll}
+        onConfirm={confirmDeletePoll}
+        confirmButtonText="Delete"
+        cancelButtonText="Cancel"
+      />
     </div>
   );
 };

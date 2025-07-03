@@ -949,29 +949,27 @@ const EmployeeDashboard = () => {
 
   // Filter posts based on selected filters
   const filteredPosts = useMemo(() => {
-    const filtered = posts.filter(post => {
-      // Filter by post type
-      if (selectedPostType !== 'all' && post.postType !== selectedPostType) {
-        return false;
-      }
-      
-      // Filter by region
-      if (selectedRegion !== 'all' && post.region !== selectedRegion) {
-        return false;
-      }
-      
-      // Filter by department
-      if (selectedDepartment !== 'all' && post.department !== selectedDepartment) {
-        return false;
-      }
-      
-      // Filter by search query
-      if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
-        return false;
-      }
-      
-      return true;
-    });
+    const filtered = posts
+      .filter(post => post.postType !== 'poll') // Exclude polls
+      .filter(post => {
+        // Filter by post type
+        if (selectedPostType !== 'all' && post.postType !== selectedPostType) {
+          return false;
+        }
+        // Filter by region
+        if (selectedRegion !== 'all' && post.region !== selectedRegion) {
+          return false;
+        }
+        // Filter by department
+        if (selectedDepartment !== 'all' && post.department !== selectedDepartment) {
+          return false;
+        }
+        // Filter by search query
+        if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
+        return true;
+      });
 
     // Sort posts: pinned first, then by creation date (newest first)
     return filtered.sort((a, b) => {

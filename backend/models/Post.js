@@ -163,12 +163,12 @@ const postSchema = new mongoose.Schema(
     },
     postType: {
       type: String,
-      enum: ['feedback', 'complaint', 'suggestion', 'public'],
+      enum: ['feedback', 'complaint', 'suggestion', 'public', 'poll'],
       required: true
     },
     content: {
       type: mongoose.Schema.Types.Mixed,
-      required: true
+      required: function() { return !this.isPoll; }
     },
     mediaUrls: {
       type: [String],

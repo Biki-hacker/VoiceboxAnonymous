@@ -1372,6 +1372,26 @@ exports.toggleCommentPin = async (req, res) => {
 };
 
 // --- Poll Controllers ---
+// Get all polls for an organization
+exports.getPollsByOrg = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    // Only allow access if user is admin or employee in org (reuse checkOrgAccess)
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
+    }
+    const polls = await Post.find({ orgId, isPoll: true }).sort({ createdAt: -1 });
+    for (let poll of polls) {
+      await poll.decryptPoll();
+    }
+    res.status(200).json(polls);
+  } catch (err) {
+    console.error('Get polls by org error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
 // Create a poll (admin only)
 exports.createPoll = async (req, res) => {
   try {
@@ -1391,7 +1411,8 @@ exports.createPoll = async (req, res) => {
       pollStatus: 'active',
       pollVotes: [],
       author: req.user._id,
-      createdByRole: req.user.role
+      createdByRole: req.user.role,
+      postType: 'poll' // Ensure postType is set for polls
     });
     await newPoll.save();
     await newPoll.decryptPoll();
@@ -1464,7 +1485,7 @@ exports.deletePoll = async (req, res) => {
   }
 };
 
-// Vote in a poll (employee only, one vote per user)
+// Vote in a poll (employee only, allow changing vote)
 exports.votePoll = async (req, res) => {
   try {
     const { pollId } = req.params;
@@ -1474,15 +1495,23 @@ exports.votePoll = async (req, res) => {
     if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Poll is not active' });
     // Only employees can vote (not admin)
     if (req.user.role !== 'employee') return res.status(403).json({ message: 'Only employees can vote' });
-    // Check if user already voted
-    if (poll.pollVotes.some(v => v.user.toString() === req.user._id.toString())) {
-      return res.status(400).json({ message: 'You have already voted' });
-    }
     // Find option
     const option = poll.pollOptions.find(opt => opt._id.toString() === optionId);
     if (!option) return res.status(400).json({ message: 'Invalid option' });
+    // Check if user already voted
+    const existingVote = poll.pollVotes.find(v => v.user.toString() === req.user._id.toString());
+    if (existingVote) {
+      // Decrement voteCount for previous option
+      const prevOption = poll.pollOptions.find(opt => opt._id.toString() === existingVote.optionId.toString());
+      if (prevOption && prevOption.voteCount > 0) prevOption.voteCount -= 1;
+      // Update vote to new option
+      existingVote.optionId = optionId;
+    } else {
+      // New vote
+      poll.pollVotes.push({ user: req.user._id, optionId });
+    }
+    // Increment voteCount for new option
     option.voteCount += 1;
-    poll.pollVotes.push({ user: req.user._id, optionId });
     await poll.save();
     await poll.decryptPoll();
     // WebSocket broadcast
