@@ -986,6 +986,9 @@ const AdminDashboard = () => {
     const [loadingCoAdminOrgs, setLoadingCoAdminOrgs] = useState(false);
     const [selectedCoAdminOrg, setSelectedCoAdminOrg] = useState(null);
     
+    // Add state for no organizations modal
+    const [showNoOrgsModal, setShowNoOrgsModal] = useState(false);
+    
     // Handler for opening Co-admin Orgs modal
     const handleOpenCoAdminOrgsModal = async () => {
         setIsCoAdminOrgsModalOpen(true);
@@ -1067,12 +1070,34 @@ const AdminDashboard = () => {
 
     // --- Sidebar Items ---
     const sidebarNavItems = [
-        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
+        { 
+            name: 'Create Post', 
+            icon: PencilSquareIcon, 
+            action: () => {
+                if (organizations.length === 0) {
+                    setShowNoOrgsModal(true);
+                } else {
+                    setViewMode('createPost');
+                }
+            }, 
+            current: viewMode === 'createPost'
+        },
         { name: 'Add Organization', icon: PlusIcon, action: handleOpenAddOrgModal, current: isAddOrgModalOpen },
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
         { name: 'Subscriptions', icon: CreditCardIcon, action: () => navigate('/subscriptions'), current: window.location.pathname === '/subscriptions' },
         { name: 'Co-admin Orgs', icon: UserGroupIcon, action: handleOpenCoAdminOrgsModal, current: isCoAdminOrgsModalOpen },
-        { name: 'Polls', icon: ChartBarIcon, action: () => setViewMode('polls'), current: viewMode === 'polls' },
+        { 
+            name: 'Polls', 
+            icon: ChartBarIcon, 
+            action: () => {
+                if (organizations.length === 0) {
+                    setShowNoOrgsModal(true);
+                } else {
+                    setViewMode('polls');
+                }
+            }, 
+            current: viewMode === 'polls'
+        },
     ];
 
     // Logo component for the sidebar
@@ -2191,6 +2216,47 @@ const AdminDashboard = () => {
               </button>
             </div>
           </div>
+        </Modal>
+
+        {/* No Organizations Selected Modal */}
+        <Modal
+            isOpen={showNoOrgsModal}
+            onClose={() => setShowNoOrgsModal(false)}
+            title="No Organizations Selected"
+        >
+            <div className="text-center py-6 px-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                    <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500 dark:text-yellow-400" aria-hidden="true" />
+                </div>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-slate-100">
+                    No Organizations Available
+                </h3>
+                <div className="mt-3">
+                    <p className="text-sm text-gray-600 dark:text-slate-300">
+                        You need to add at least one organization before you can create posts or manage polls.
+                    </p>
+                </div>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setShowNoOrgsModal(false);
+                            handleOpenAddOrgModal();
+                        }}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        <PlusIcon className="-ml-1 mr-2 h-4 w-4" />
+                        Add Organization
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowNoOrgsModal(false)}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
         </Modal>
         </>
     );

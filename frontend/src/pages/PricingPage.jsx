@@ -93,9 +93,9 @@ const PricingPage = () => {
       price: '₹0',
       period: '/month',
       features: [
-        '1 Organization',
-        '1 Admin',
-        'Up to 25 employees',
+        'Up to 2 organizations',
+        'Up to 1 Admin per organization',
+        'Up to 25 employees per organization',
         'Up to 250 posts & 500 comments per month',
         'Media upload limit: 10 MB per file',
         'Upto 50 polls per month',
@@ -109,7 +109,7 @@ const PricingPage = () => {
       price: '₹599',
       period: '/month',
       features: [
-        'Up to 2 organizations',
+        'Up to 5 organizations',
         'Up to 5 admins per organization',
         'Up to 100 employees per organization',
         'Up to 600 posts & 1200 comments per organization per month',
@@ -125,7 +125,7 @@ const PricingPage = () => {
       price: '₹2,499',
       period: '/month',
       features: [
-        'Up to 5 organizations',
+        'Up to 10 organizations',
         'Up to 10 admins per organization',
         'Unlimited posts and comments',
         'Up to 500 employees per organization',
