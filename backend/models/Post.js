@@ -1,5 +1,6 @@
 // models/Post.js
 const mongoose = require('mongoose');
+const { encryptContent } = require('../utils/cryptoUtils');
 
 // Sub-schema for reactions including user tracking
 const reactionDetailSchema = new mongoose.Schema({
@@ -36,9 +37,8 @@ const commentSchema = new mongoose.Schema({
     default: () => new mongoose.Types.ObjectId()
   },
   text: {
-    type: String,
-    required: true,
-    trim: true
+    type: mongoose.Schema.Types.Mixed,
+    required: true
   },
   createdAt: {
     type: Date,
@@ -66,11 +66,17 @@ const commentSchema = new mongoose.Schema({
   createdByRole: {
     type: String,
     required: true
+  },
+  isPinned: {
+    type: Boolean,
+    default: false
   }
 }, { timestamps: true });
 
 // Add pre-save middleware to initialize reactions
 commentSchema.pre('save', initializeReactions);
+// Add pre-save middleware to encrypt comment text
+commentSchema.pre('save', encryptContent);
 
 // Add a method to safely add a reaction to a comment
 commentSchema.methods.addReaction = async function(userId, reactionType) {
@@ -117,22 +123,52 @@ commentSchema.methods.addReaction = async function(userId, reactionType) {
   return this;
 };
 
+// Poll option sub-schema
+const pollOptionSchema = new mongoose.Schema({
+  _id: {
+    type: mongoose.Schema.Types.ObjectId,
+    default: () => new mongoose.Types.ObjectId()
+  },
+  text: {
+    type: mongoose.Schema.Types.Mixed, // encrypted string
+    required: true
+  },
+  voteCount: {
+    type: Number,
+    default: 0
+  }
+}, { _id: false });
+
+// Poll vote sub-schema
+const pollVoteSchema = new mongoose.Schema({
+  user: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  },
+  optionId: {
+    type: mongoose.Schema.Types.ObjectId,
+    required: true
+  }
+}, { _id: false });
+
 // Main Post schema
 const postSchema = new mongoose.Schema(
   {
     orgId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Organization',
-      required: true
+      required: true,
+      index: true
     },
     postType: {
       type: String,
-      enum: ['feedback', 'complaint', 'suggestion', 'public'],
+      enum: ['feedback', 'complaint', 'suggestion', 'public', 'poll'],
       required: true
     },
     content: {
-      type: String,
-      required: true
+      type: mongoose.Schema.Types.Mixed,
+      required: function() { return !this.isPoll; }
     },
     mediaUrls: {
       type: [String],
@@ -144,18 +180,6 @@ const postSchema = new mongoose.Schema(
     department: {
       type: String
     },
-    isAnonymous: {
-      type: Boolean,
-      default: true
-    },
-    // Updated reactions schema to include user tracking
-    reactions: {
-      like: reactionDetailSchema,
-      love: reactionDetailSchema,
-      laugh: reactionDetailSchema,
-      angry: reactionDetailSchema
-    },
-    comments: [commentSchema],
     author: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -164,15 +188,138 @@ const postSchema = new mongoose.Schema(
     createdByRole: {
       type: String,
       required: true
+    },
+    isAnonymous: {
+      type: Boolean,
+      default: true
+    },
+    comments: [commentSchema],
+    reactions: {
+      like: reactionDetailSchema,
+      love: reactionDetailSchema,
+      laugh: reactionDetailSchema,
+      angry: reactionDetailSchema
+    },
+    isPinned: {
+      type: Boolean,
+      default: false
+    },
+    isEdited: {
+      type: Boolean,
+      default: false
+    },
+    // Poll fields
+    isPoll: {
+      type: Boolean,
+      default: false
+    },
+    pollQuestion: {
+      type: mongoose.Schema.Types.Mixed // encrypted string
+    },
+    pollOptions: {
+      type: [pollOptionSchema],
+      default: undefined // only present if isPoll is true
+    },
+    pollStatus: {
+      type: String,
+      enum: ['active', 'stopped'],
+      default: 'active'
+    },
+    pollVotes: {
+      type: [pollVoteSchema],
+      default: undefined // only present if isPoll is true
+    },
+    pollStoppedAt: {
+      type: Date
     }
   },
-  { timestamps: true } // Adds createdAt and updatedAt
+  { timestamps: true }
 );
 
-// Middleware to handle removing the post from referenced documents if needed (optional)
-// postSchema.pre('remove', async function(next) {
-//   // Example: Remove post references from users or organizations if any
-//   next();
-// });
+// Add pre-save middleware to encrypt post content
+postSchema.pre('save', encryptContent);
+
+// Add pre-save middleware to encrypt poll question and options
+postSchema.pre('save', async function(next) {
+  // Encrypt poll question
+  if (this.isPoll && this.isModified('pollQuestion') && this.pollQuestion && typeof this.pollQuestion === 'string') {
+    try {
+      const { encrypt } = require('../utils/cryptoUtils');
+      this.pollQuestion = await encrypt(this.pollQuestion);
+    } catch (error) {
+      return next(error);
+    }
+  }
+  // Encrypt poll options
+  if (this.isPoll && Array.isArray(this.pollOptions)) {
+    const { encrypt } = require('../utils/cryptoUtils');
+    for (let i = 0; i < this.pollOptions.length; i++) {
+      if (this.pollOptions[i].text && typeof this.pollOptions[i].text === 'string') {
+        this.pollOptions[i].text = await encrypt(this.pollOptions[i].text);
+      }
+    }
+  }
+  next();
+});
+
+// Add post-find middleware to decrypt content
+postSchema.post('find', async function(docs) {
+  if (Array.isArray(docs)) {
+    for (let doc of docs) {
+      if (doc && typeof doc.decryptContent === 'function') {
+        await doc.decryptContent();
+      }
+    }
+  } else if (docs && typeof docs.decryptContent === 'function') {
+    await docs.decryptContent();
+  }
+  return docs;
+});
+
+postSchema.post('findOne', async function(doc) {
+  if (doc && typeof doc.decryptContent === 'function') {
+    await doc.decryptContent();
+  }
+  return doc;
+});
+
+// Add instance method to decrypt content
+postSchema.methods.decryptContent = async function() {
+  const { decrypt } = require('../utils/cryptoUtils');
+  
+  // Decrypt post content
+  if (this.content && typeof this.content === 'object' && this.content.isEncrypted) {
+    this.content = await decrypt(this.content);
+  }
+  
+  // Decrypt comments (fix: use 'text' instead of 'content')
+  if (this.comments && Array.isArray(this.comments)) {
+    for (let comment of this.comments) {
+      if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+        comment.text = await decrypt(comment.text);
+      }
+    }
+  }
+  
+  return this;
+};
+
+// Add instance method to decrypt poll question and options
+postSchema.methods.decryptPoll = async function() {
+  const { decrypt } = require('../utils/cryptoUtils');
+  if (this.isPoll) {
+    if (this.pollQuestion && typeof this.pollQuestion === 'object' && this.pollQuestion.isEncrypted) {
+      this.pollQuestion = await decrypt(this.pollQuestion);
+    }
+    if (Array.isArray(this.pollOptions)) {
+      for (let i = 0; i < this.pollOptions.length; i++) {
+        if (this.pollOptions[i].text && typeof this.pollOptions[i].text === 'object' && this.pollOptions[i].text.isEncrypted) {
+          this.pollOptions[i].text = await decrypt(this.pollOptions[i].text);
+        }
+      }
+    }
+  }
+  return this;
+};
 
 module.exports = mongoose.model('Post', postSchema);

@@ -3,10 +3,16 @@ const Post = require('../models/Post');
 const Organization = require('../models/Organization');
 const mongoose = require('mongoose');
 const supabase = require('../utils/supabaseClient');
+const { encrypt, decrypt, decryptContent } = require('../utils/cryptoUtils');
 
 exports.createPost = async (req, res) => {
   try {
-    const { orgId, postType, content, mediaUrls, region, department, isAnonymous } = req.body;
+    let { orgId, postType, content, mediaUrls, region, department, isAnonymous } = req.body;
+    
+    // Encrypt the content before saving
+    if (content && typeof content === 'string') {
+      content = await encrypt(content);
+    }
 
     if (!orgId || !postType || !content) {
       return res.status(400).json({ message: "Missing required fields" });
@@ -33,12 +39,15 @@ exports.createPost = async (req, res) => {
 
     await newPost.save();
 
+    const { decryptContent } = require('../utils/cryptoUtils');
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
+      // Decrypt post content before broadcasting
+      const decryptedPost = await decryptContent(newPost.toObject());
       broadcastMessage({
         type: 'POST_CREATED',
         payload: {
-          ...newPost.toObject(),
+          ...decryptedPost,
           organization: newPost.orgId
         }
       });
@@ -56,17 +65,10 @@ exports.getPostsByOrg = async (req, res) => {
     const { orgId } = req.params;
     const { postId } = req.query;
     
-    // For admin users, check if they created this organization
-    if (req.user.role === 'admin') {
-      const organization = await Organization.findById(orgId);
-      if (!organization || organization.adminEmail !== req.user.email) {
-        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
-      }
-    } else {
-      // For employees, check if this is their verified organization
-      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
-        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
-      }
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
     }
 
     // If postId is provided, return just that post
@@ -220,6 +222,25 @@ exports.reactToPost = async (req, res) => {
       return res.status(400).json({ message: 'Invalid reaction type' });
     }
 
+    // Check if user has any existing reaction
+    let existingReactionType = null;
+    for (const [reactionType, reaction] of Object.entries(post.reactions)) {
+      if (reaction.users.some(id => id.equals(userId))) {
+        existingReactionType = reactionType;
+        break;
+      }
+    }
+
+    // If user has an existing reaction and it's different from the new one, remove it first
+    if (existingReactionType && existingReactionType !== type) {
+      const existingReaction = post.reactions[existingReactionType];
+      const userIndex = existingReaction.users.findIndex(id => id.equals(userId));
+      if (userIndex !== -1) {
+        existingReaction.users.splice(userIndex, 1);
+        existingReaction.count = Math.max(0, existingReaction.count - 1);
+      }
+    }
+
     const reaction = post.reactions[type];
     const userIndex = reaction.users.findIndex(id => id.equals(userId));
 
@@ -266,6 +287,7 @@ exports.reactToPost = async (req, res) => {
             entityId: post._id.toString(),
             postId: post._id.toString(),
             reactions: reactionsObject,
+            reactionsSummary: reactionsObject, // Add this for frontend compatibility
             organizationId: post.orgId.toString(),
             updatedAt: new Date().toISOString()
           }
@@ -277,9 +299,11 @@ exports.reactToPost = async (req, res) => {
     }
 
     res.status(200).json({
+      success: true,
       type,
       count: reaction.count,
-      hasReacted: userIndex === -1  // If userIndex was -1, now they have reacted
+      hasReacted: userIndex === -1,  // If userIndex was -1, now they have reacted
+      message: userIndex === -1 ? 'Reaction added successfully' : 'Reaction removed successfully'
     });
   } catch (err) {
     await session.abortTransaction();
@@ -326,9 +350,15 @@ exports.commentOnPost = async (req, res) => {
     }
 
     // Create new comment
+    const { text } = req.body;
+    let encryptedText = text;
+    if (text && typeof text === 'string') {
+      encryptedText = await encrypt(text);
+    }
+
     const newComment = {
       _id: new mongoose.Types.ObjectId(),
-      text: req.body.text.trim(),
+      text: encryptedText,
       author: req.user._id, // User's ID as the comment author
       createdByRole: req.user.role || 'user', // Default to 'user' if role not specified
       createdAt: new Date(),
@@ -363,6 +393,23 @@ exports.commentOnPost = async (req, res) => {
       
       if (!populatedPost) {
         throw new Error('Failed to retrieve the updated post');
+      }
+
+      // Manually decrypt content since we're using .lean()
+      const { decrypt } = require('../utils/cryptoUtils');
+      
+      // Decrypt post content
+      if (populatedPost.content && typeof populatedPost.content === 'object' && populatedPost.content.isEncrypted) {
+        populatedPost.content = await decrypt(populatedPost.content);
+      }
+      
+      // Decrypt comments
+      if (populatedPost.comments && Array.isArray(populatedPost.comments)) {
+        for (let comment of populatedPost.comments) {
+          if (comment.text && typeof comment.text === 'object' && comment.text.isEncrypted) {
+            comment.text = await decrypt(comment.text);
+          }
+        }
       }
 
       // Ensure we have comments array
@@ -442,9 +489,24 @@ exports.commentOnPost = async (req, res) => {
     // Send WebSocket broadcast after the response is sent
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage && newComment) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      let decryptedCommentText = newComment.text;
+      
+      // Decrypt the comment text if it's encrypted
+      if (newComment.text && typeof newComment.text === 'object' && newComment.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(newComment.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = newComment.text; // Fallback to original
+        }
+      }
+      
       // Make sure we're not sending Mongoose-specific methods
       const commentToBroadcast = {
         ...newComment,
+        text: decryptedCommentText, // Use decrypted text
         author: {
           _id: req.user._id,
           name: req.user.name || 'Unknown User',
@@ -570,8 +632,60 @@ exports.reactToComment = async (req, res) => {
       comment.createdBy = comment.author.toString();
     }
     
-    // Use the comment's addReaction method
-    await comment.addReaction(userId, type);
+    // Initialize reactions if they don't exist
+    if (!comment.reactions) {
+      comment.reactions = new Map([
+        ['like', { count: 0, users: [] }],
+        ['love', { count: 0, users: [] }],
+        ['laugh', { count: 0, users: [] }],
+        ['angry', { count: 0, users: [] }]
+      ]);
+    }
+
+    // Check if user has any existing reaction on this comment
+    let existingReactionType = null;
+    for (const [reactionType, reaction] of comment.reactions.entries()) {
+      if (reaction.users.some(id => id.equals(userId))) {
+        existingReactionType = reactionType;
+        break;
+      }
+    }
+
+    // If user has an existing reaction and it's different from the new one, remove it first
+    if (existingReactionType && existingReactionType !== type) {
+      const existingReaction = comment.reactions.get(existingReactionType);
+      const userIndex = existingReaction.users.findIndex(id => id.equals(userId));
+      if (userIndex !== -1) {
+        existingReaction.users.splice(userIndex, 1);
+        existingReaction.count = Math.max(0, existingReaction.count - 1);
+        comment.reactions.set(existingReactionType, existingReaction);
+      }
+    }
+
+    // Now handle the new reaction
+    const reaction = comment.reactions.get(type);
+    if (!reaction) {
+      await session.abortTransaction();
+      return res.status(400).json({ message: 'Invalid reaction type' });
+    }
+
+    const userIndex = reaction.users.findIndex(id => id.equals(userId));
+
+    if (userIndex === -1) {
+      // Add reaction
+      reaction.users.push(userId);
+      reaction.count += 1;
+    } else {
+      // Remove reaction
+      reaction.users.splice(userIndex, 1);
+      reaction.count = Math.max(0, reaction.count - 1);
+    }
+
+    // Update the reactions map
+    comment.reactions.set(type, reaction);
+    
+    // Mark the reactions map as modified
+    comment.markModified('reactions');
     
     // Mark the comments array as modified
     post.markModified('comments');
@@ -588,19 +702,12 @@ exports.reactToComment = async (req, res) => {
         
         // Convert Mongoose document to plain object
         const reactionsObject = {};
-        Object.keys(comment.reactions || {}).forEach(key => {
-          const reaction = comment.reactions[key];
-          if (!reaction) {
-            console.warn(`Reaction '${key}' is undefined for comment ${comment._id}`);
-            reactionsObject[key] = { count: 0, users: [] };
-            return;
-          }
-          
+        for (const [key, reaction] of comment.reactions.entries()) {
           reactionsObject[key] = {
             count: reaction.count || 0,
             users: Array.isArray(reaction.users) ? reaction.users.map(id => id.toString()) : []
           };
-        });
+        }
         
         broadcastMessage({
           type: 'REACTION_UPDATED',
@@ -609,6 +716,7 @@ exports.reactToComment = async (req, res) => {
             entityId: comment._id.toString(),
             postId: post._id.toString(),
             reactions: reactionsObject,
+            reactionsSummary: reactionsObject, // Add this for frontend compatibility
             organizationId: post.orgId.toString(),
             updatedAt: new Date().toISOString()
           }
@@ -625,11 +733,9 @@ exports.reactToComment = async (req, res) => {
     
     res.status(200).json({
       success: true,
-      reaction: {
-        type,
-        count: updatedReaction.count || 0,
-        hasReacted
-      },
+      type,
+      count: updatedReaction.count || 0,
+      hasReacted,
       message: hasReacted ? 'Reaction added successfully' : 'Reaction removed successfully'
     });
   } catch (err) {
@@ -762,21 +868,179 @@ exports.deletePost = async (req, res) => {
   }
 };
 
+// Helper function to check organization access
+const checkOrgAccess = async (req, orgId) => {
+  try {
+    console.log('=== checkOrgAccess called ===');
+    console.log('Request user:', {
+      id: req.user?._id,
+      email: req.user?.email,
+      role: req.user?.role,
+      organizationId: req.user?.organizationId
+    });
+    console.log('Checking access for orgId:', orgId);
+
+    // For admin and co-admin users, check if they have access to this organization
+    if (req.user?.role === 'admin' || req.user?.role === 'co-admin') {
+      console.log('User is admin/co-admin, checking organization access');
+      
+      const organization = await Organization.findById(orgId).lean();
+      
+      if (!organization) {
+        console.error(`Organization not found: ${orgId}`);
+        return { hasAccess: false, message: 'Organization not found' };
+      }
+      
+      console.log('Organization found:', {
+        _id: organization._id,
+        name: organization.name,
+        adminEmail: organization.adminEmail,
+        coAdminEmails: organization.coAdminEmails,
+        coAdminEmails: organization.coAdminEmails // Check both spellings
+      });
+      
+      // Normalize emails for comparison
+      const userEmail = req.user.email?.toLowerCase().trim();
+      const adminEmail = organization.adminEmail?.toLowerCase().trim();
+      
+      if (!userEmail) {
+        console.error('No user email found in request');
+        return { hasAccess: false, message: 'User email not found' };
+      }
+      
+      // Handle both coAdminEmails and coAdminEmails (typo in field name)
+      const coAdminEmails = [];
+      
+      // Helper function to safely process email strings
+      const processEmail = (email) => {
+        // If email is an object with an email property, use that
+        if (email && typeof email === 'object' && 'email' in email) {
+          const processed = String(email.email || '').toLowerCase().trim();
+          console.log(`Processed email object:`, email, '->', processed);
+          return processed;
+        }
+        // If it's already a string
+        if (typeof email === 'string') {
+          const processed = email.toLowerCase().trim();
+          console.log(`Processed email string: ${email} -> ${processed}`);
+          return processed;
+        }
+        // Fallback for any other case
+        const processed = String(email || '').toLowerCase().trim();
+        console.log(`Processed fallback email:`, email, '->', processed);
+        return processed;
+      };
+      
+      // Check both possible field names for co-admin emails
+      if (Array.isArray(organization.coAdminEmails)) {
+        console.log('Found coAdminEmails:', organization.coAdminEmails);
+        coAdminEmails.push(...organization.coAdminEmails
+          .filter(email => {
+            const valid = email != null;
+            if (!valid) console.log('Filtered out null/undefined email');
+            return valid;
+          })
+          .map(email => {
+            const processed = processEmail(email);
+            console.log(`Processed co-admin email: ${email} -> ${processed}`);
+            return processed;
+          })
+          .filter(email => {
+            const valid = !!email;
+            if (!valid) console.log('Filtered out empty email after processing');
+            return valid;
+          })
+        );
+      }
+      
+      // Check for the other possible field name (in case of typo)
+      if (Array.isArray(organization.coAdminEmails)) {
+        console.log('Found coAdminEmails (alt spelling):', organization.coAdminEmails);
+        coAdminEmails.push(...organization.coAdminEmails
+          .filter(email => {
+            const valid = email != null;
+            if (!valid) console.log('Filtered out null/undefined email (alt)');
+            return valid;
+          })
+          .map(email => {
+            const processed = processEmail(email);
+            console.log(`Processed co-admin email (alt): ${email} -> ${processed}`);
+            return processed;
+          })
+          .filter(email => {
+            const valid = !!email;
+            if (!valid) console.log('Filtered out empty email after processing (alt)');
+            return valid;
+          })
+        );
+      }
+      
+      // Remove duplicates and empty values
+      const uniqueCoAdminEmails = [...new Set(coAdminEmails)].filter(Boolean);
+      
+      // Check if user is either the admin or a co-admin of this organization
+      const isAdmin = adminEmail === userEmail;
+      const isCoAdmin = uniqueCoAdminEmails.includes(userEmail);
+      
+      console.log('Access check results:', {
+        userEmail,
+        isAdmin,
+        isCoAdmin,
+        adminEmail,
+        coAdminEmails: uniqueCoAdminEmails,
+        userRole: req.user.role,
+        orgId: organization._id,
+        organizationFields: Object.keys(organization)
+      });
+      
+      if (!isAdmin && !isCoAdmin) {
+        console.error('Access denied - User is neither admin nor co-admin', {
+          userEmail,
+          adminEmail,
+          isAdmin,
+          isCoAdmin,
+          coAdminEmails: uniqueCoAdminEmails
+        });
+        return { hasAccess: false, message: 'Access denied: Not authorized to access this organization' };
+      }
+      
+      // If user is a co-admin, elevate to admin role for this request
+      if (isCoAdmin && !isAdmin) {
+        console.log(`Elevating co-admin ${userEmail} to admin role for org ${orgId}`);
+        req.user.role = 'admin';
+        req.user.isCoAdmin = true; // Add flag to indicate this is a co-admin
+      }
+      
+      console.log('Access granted to organization');
+      return { hasAccess: true, organization };
+    } 
+    
+    // For regular employees, check if this is their verified organization
+    console.log('User is not an admin/co-admin, checking organization membership');
+    if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
+      console.error(`User ${req.user._id} is not a member of org ${orgId}`, {
+        userOrgId: req.user.organizationId,
+        requestedOrgId: orgId
+      });
+      return { hasAccess: false, message: 'Access denied: Not a member of this organization' };
+    }
+    
+    console.log('Access granted - Regular user is a member of the organization');
+    return { hasAccess: true };
+  } catch (error) {
+    console.error('Error in checkOrgAccess:', error);
+    return { hasAccess: false, message: 'Error checking organization access' };
+  }
+};
+
 exports.getPostStats = async (req, res) => {
   try {
     const { orgId } = req.params;
 
-    // For admin users, check if they created this organization
-    if (req.user.role === 'admin') {
-      const organization = await Organization.findById(orgId);
-      if (!organization || organization.adminEmail !== req.user.email) {
-        return res.status(403).json({ message: 'Access denied: Not authorized to view this organization' });
-      }
-    } else {
-      // For employees, check if this is their verified organization
-      if (!req.user.organizationId || req.user.organizationId.toString() !== orgId.toString()) {
-        return res.status(403).json({ message: 'Access denied: Not a member of this organization' });
-      }
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
     }
 
     const stats = await Post.aggregate([
@@ -825,9 +1089,12 @@ exports.editPost = async (req, res) => {
     updates.updatedAt = new Date();
     const updatedPost = await Post.findByIdAndUpdate(postId, updates, { new: true });
 
+    const { decryptContent } = require('../utils/cryptoUtils');
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage && updatedPost) {
-      const broadcastPayload = { ...updatedPost.toObject(), organization: updatedPost.orgId };
+      // Decrypt post content before broadcasting
+      const decryptedPost = await decryptContent(updatedPost.toObject());
+      const broadcastPayload = { ...decryptedPost, organization: updatedPost.orgId };
       broadcastMessage({
         type: 'POST_UPDATED',
         payload: broadcastPayload
@@ -837,7 +1104,7 @@ exports.editPost = async (req, res) => {
     res.status(200).json(updatedPost);
   } catch (err) {
     console.error('Edit post error:', err);
-    res.status(500).json({ message: 'Error editing post' });
+    res.status(500).json({ message: 'Error updating post' });
   }
 };
 
@@ -861,25 +1128,430 @@ exports.editComment = async (req, res) => {
       return res.status(403).json({ message: 'Unauthorized to edit this comment' });
     }
 
-    comment.text = text;
+    // Encrypt the comment text before saving
+    if (text && typeof text === 'string') {
+      comment.text = await encrypt(text);
+    }
+
     comment.updatedAt = new Date();
     await post.save();
 
+    // Broadcast the update to all connected clients
     const broadcastMessage = req.app.get('broadcastMessage');
     if (broadcastMessage) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      const commentObj = comment.toObject();
+      let decryptedCommentText = commentObj.text;
+      
+      // Decrypt the comment text if it's encrypted
+      if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(commentObj.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = commentObj.text; // Fallback to original
+        }
+      }
+      
+      const commentToBroadcast = {
+        ...commentObj,
+        text: decryptedCommentText // Use decrypted text
+      };
+      
       broadcastMessage({
         type: 'COMMENT_UPDATED',
         payload: {
           postId: post._id,
-          comment: comment.toObject(),
+          comment: commentToBroadcast,
           organizationId: post.orgId
         }
       });
     }
 
-    res.status(200).json(post);
+    // Decrypt the comment text for the response
+    const commentObj = comment.toObject();
+    if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+      commentObj.text = await decrypt(commentObj.text);
+    }
+    res.status(200).json({ 
+      message: 'Comment updated successfully', 
+      post: post.toObject(), 
+      comment: commentObj 
+    });
   } catch (err) {
     console.error('Edit comment error:', err);
     res.status(500).json({ message: 'Error editing comment' });
+  }
+};
+
+// Toggle post pinning - only admins can pin/unpin posts
+exports.togglePostPin = async (req, res) => {
+  try {
+    const { postId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Only admins can pin/unpin posts
+    if (userRole !== 'admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only administrators can pin/unpin posts' 
+      });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found' 
+      });
+    }
+
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, post.orgId.toString());
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        success: false,
+        message: message || 'Access denied' 
+      });
+    }
+
+    // If we're pinning this post, unpin all other posts in the organization first
+    if (!post.isPinned) {
+      await Post.updateMany(
+        { orgId: post.orgId, _id: { $ne: postId } },
+        { isPinned: false }
+      );
+    }
+
+    // Toggle the pin status
+    post.isPinned = !post.isPinned;
+    await post.save({ timestamps: false });
+
+    // Broadcast the update
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      const { decryptContent } = require('../utils/cryptoUtils');
+      const decryptedPost = await decryptContent(post.toObject());
+      broadcastMessage({
+        type: 'POST_UPDATED',
+        payload: {
+          ...decryptedPost,
+          organization: post.orgId
+        }
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: post.isPinned ? 'Post pinned successfully' : 'Post unpinned successfully',
+      post: post.toObject()
+    });
+
+  } catch (err) {
+    console.error('Toggle post pin error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error toggling post pin status' 
+    });
+  }
+};
+
+// Toggle comment pinning - only admins can pin/unpin comments
+exports.toggleCommentPin = async (req, res) => {
+  try {
+    const { postId, commentId } = req.params;
+    const userId = req.user._id;
+    const userRole = req.user.role;
+
+    // Only admins can pin/unpin comments
+    if (userRole !== 'admin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'Only administrators can pin/unpin comments' 
+      });
+    }
+
+    const post = await Post.findById(postId);
+    if (!post) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Post not found' 
+      });
+    }
+
+    // Check organization access
+    const { hasAccess, message } = await checkOrgAccess(req, post.orgId.toString());
+    if (!hasAccess) {
+      return res.status(403).json({ 
+        success: false,
+        message: message || 'Access denied' 
+      });
+    }
+
+    const comment = post.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({ 
+        success: false,
+        message: 'Comment not found' 
+      });
+    }
+
+    // If we're pinning this comment, unpin all other comments in this post first
+    if (!comment.isPinned) {
+      post.comments.forEach(c => {
+        if (c._id.toString() !== commentId) {
+          c.isPinned = false;
+        }
+      });
+    }
+
+    // Store the original updatedAt value to preserve it
+    const originalUpdatedAt = comment.updatedAt;
+
+    // Toggle the pin status
+    comment.isPinned = !comment.isPinned;
+    
+    // Explicitly set updatedAt back to its original value to prevent "(edited)" from showing
+    comment.updatedAt = originalUpdatedAt;
+    
+    await post.save({ timestamps: false });
+
+    // Broadcast the update
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      // Decrypt the comment text before broadcasting
+      const { decrypt } = require('../utils/cryptoUtils');
+      const commentObj = comment.toObject();
+      let decryptedCommentText = commentObj.text;
+      
+      if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+        try {
+          decryptedCommentText = await decrypt(commentObj.text);
+        } catch (decryptError) {
+          console.error('Error decrypting comment for WebSocket broadcast:', decryptError);
+          decryptedCommentText = commentObj.text;
+        }
+      }
+      
+      const commentToBroadcast = {
+        ...commentObj,
+        text: decryptedCommentText
+      };
+      
+      broadcastMessage({
+        type: 'COMMENT_UPDATED',
+        payload: {
+          postId: post._id,
+          comment: commentToBroadcast,
+          organizationId: post.orgId
+        }
+      });
+    }
+
+    // Decrypt the comment text for the response
+    const commentObj = comment.toObject();
+    if (commentObj.text && typeof commentObj.text === 'object' && commentObj.text.isEncrypted) {
+      commentObj.text = await decrypt(commentObj.text);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: comment.isPinned ? 'Comment pinned successfully' : 'Comment unpinned successfully',
+      comment: commentObj
+    });
+
+  } catch (err) {
+    console.error('Toggle comment pin error:', err);
+    res.status(500).json({ 
+      success: false,
+      message: 'Error toggling comment pin status' 
+    });
+  }
+};
+
+// --- Poll Controllers ---
+// Get all polls for an organization
+exports.getPollsByOrg = async (req, res) => {
+  try {
+    const { orgId } = req.params;
+    // Only allow access if user is admin or employee in org (reuse checkOrgAccess)
+    const { hasAccess, message } = await checkOrgAccess(req, orgId);
+    if (!hasAccess) {
+      return res.status(403).json({ message: message || 'Access denied' });
+    }
+    const polls = await Post.find({ orgId, isPoll: true }).sort({ createdAt: -1 });
+    for (let poll of polls) {
+      await poll.decryptPoll();
+    }
+    res.status(200).json(polls);
+  } catch (err) {
+    console.error('Get polls by org error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Create a poll (admin only)
+exports.createPoll = async (req, res) => {
+  try {
+    const { orgId, pollQuestion, pollOptions } = req.body;
+    if (!orgId || !pollQuestion || !Array.isArray(pollOptions) || pollOptions.length < 2 || pollOptions.length > 5) {
+      return res.status(400).json({ message: 'Invalid poll data' });
+    }
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only admins can create polls' });
+    }
+    // Encrypt handled by model pre-save
+    const newPoll = new Post({
+      orgId,
+      isPoll: true,
+      pollQuestion,
+      pollOptions: pollOptions.map(opt => ({ text: opt, voteCount: 0 })),
+      pollStatus: 'active',
+      pollVotes: [],
+      author: req.user._id,
+      createdByRole: req.user.role,
+      postType: 'poll' // Ensure postType is set for polls
+    });
+    await newPoll.save();
+    await newPoll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_CREATED',
+        payload: { ...newPoll.toObject(), organization: newPoll.orgId }
+      });
+    }
+    res.status(201).json(newPoll);
+  } catch (err) {
+    console.error('Create poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Edit a poll (admin only, only if active)
+exports.editPoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { pollQuestion, pollOptions } = req.body;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can edit polls' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Cannot edit a stopped poll' });
+    if (pollQuestion) poll.pollQuestion = pollQuestion;
+    if (pollOptions && Array.isArray(pollOptions) && pollOptions.length >= 2 && pollOptions.length <= 5) {
+      poll.pollOptions = pollOptions.map(opt => ({ text: opt, voteCount: 0 }));
+      poll.pollVotes = [];
+    }
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_UPDATED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Edit poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Delete a poll (admin only)
+exports.deletePoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can delete polls' });
+    await Post.findByIdAndDelete(pollId);
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_DELETED',
+        payload: { pollId, organization: poll.orgId }
+      });
+    }
+    res.status(200).json({ message: 'Poll deleted' });
+  } catch (err) {
+    console.error('Delete poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Vote in a poll (employee only, allow changing vote)
+exports.votePoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const { optionId } = req.body;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Poll is not active' });
+    // Only employees can vote (not admin)
+    if (req.user.role !== 'employee') return res.status(403).json({ message: 'Only employees can vote' });
+    // Find option
+    const option = poll.pollOptions.find(opt => opt._id.toString() === optionId);
+    if (!option) return res.status(400).json({ message: 'Invalid option' });
+    // Check if user already voted
+    const existingVote = poll.pollVotes.find(v => v.user.toString() === req.user._id.toString());
+    if (existingVote) {
+      // Decrement voteCount for previous option
+      const prevOption = poll.pollOptions.find(opt => opt._id.toString() === existingVote.optionId.toString());
+      if (prevOption && prevOption.voteCount > 0) prevOption.voteCount -= 1;
+      // Update vote to new option
+      existingVote.optionId = optionId;
+    } else {
+      // New vote
+      poll.pollVotes.push({ user: req.user._id, optionId });
+    }
+    // Increment voteCount for new option
+    option.voteCount += 1;
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_VOTED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Vote poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+};
+
+// Stop a poll (admin only, cannot be restarted)
+exports.stopPoll = async (req, res) => {
+  try {
+    const { pollId } = req.params;
+    const poll = await Post.findById(pollId);
+    if (!poll || !poll.isPoll) return res.status(404).json({ message: 'Poll not found' });
+    if (req.user.role !== 'admin') return res.status(403).json({ message: 'Only admins can stop polls' });
+    if (poll.pollStatus !== 'active') return res.status(400).json({ message: 'Poll already stopped' });
+    poll.pollStatus = 'stopped';
+    poll.pollStoppedAt = new Date();
+    await poll.save();
+    await poll.decryptPoll();
+    // WebSocket broadcast
+    const broadcastMessage = req.app.get('broadcastMessage');
+    if (broadcastMessage) {
+      broadcastMessage({
+        type: 'POLL_STOPPED',
+        payload: { ...poll.toObject(), organization: poll.orgId }
+      });
+    }
+    res.status(200).json(poll);
+  } catch (err) {
+    console.error('Stop poll error:', err);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 };

@@ -4,26 +4,28 @@ const { v4: uuidv4 } = require('uuid');
 // Email validation regex
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
-/**
- * Middleware to validate employee emails
- */
-const validateEmployeeEmails = (req, res, next) => {
-  const { emails } = req.body;
-  
+// Common function to validate email array
+const validateEmailArray = (emails, maxEmails, type = 'employee') => {
   if (!emails || !Array.isArray(emails)) {
-    return res.status(400).json({ 
-      success: false,
-      message: 'Emails must be provided as an array',
-      code: 'INVALID_INPUT'
-    });
+    return {
+      valid: false,
+      error: {
+        success: false,
+        message: `Emails must be provided as an array`,
+        code: 'INVALID_INPUT'
+      }
+    };
   }
 
-  if (emails.length > 25) {
-    return res.status(400).json({ 
-      success: false,
-      message: 'Maximum 25 employee emails allowed per organization',
-      code: 'EMAIL_LIMIT_EXCEEDED'
-    });
+  if (emails.length > maxEmails) {
+    return {
+      valid: false,
+      error: {
+        success: false,
+        message: `Maximum ${maxEmails} ${type} emails allowed per organization`,
+        code: 'EMAIL_LIMIT_EXCEEDED'
+      }
+    };
   }
 
   // Validate and deduplicate emails
@@ -33,11 +35,10 @@ const validateEmployeeEmails = (req, res, next) => {
   
   for (const email of emails) {
     try {
-      console.log('Processing email input:', { raw: email, type: typeof email });
+      console.log(`Processing ${type} email input:`, { raw: email, type: typeof email });
       
       // Ensure we have a string and trim whitespace
       const emailStr = String(email).trim();
-      console.log('After string conversion and trim:', emailStr);
       
       // Validate the email format (case-insensitive check)
       if (!EMAIL_REGEX.test(emailStr)) {
@@ -48,7 +49,6 @@ const validateEmployeeEmails = (req, res, next) => {
       
       // Normalize for duplicate checking (case-insensitive)
       const normalized = emailStr.toLowerCase();
-      console.log('Normalized for comparison:', normalized);
       
       // Check for duplicates case-insensitively but preserve original format
       if (!seenEmails.has(normalized)) {
@@ -60,28 +60,64 @@ const validateEmployeeEmails = (req, res, next) => {
           isVerified: false,
           addedAt: new Date()
         };
-        console.log('Adding email entry:', JSON.stringify(emailEntry, null, 2));
         validatedEmails.push(emailEntry);
       } else {
-        console.log('Skipping duplicate email (case-insensitive):', emailStr);
+        console.log(`Skipping duplicate ${type} email (case-insensitive):`, emailStr);
       }
     } catch (error) {
-      console.error('Error processing email:', email, error);
+      console.error(`Error processing ${type} email:`, email, error);
       invalidEmails.push(String(email));
     }
   }
   
   if (invalidEmails.length > 0) {
-    return res.status(400).json({ 
-      success: false,
-      message: 'One or more email addresses are invalid',
-      code: 'INVALID_EMAILS',
-      invalidEmails
-    });
+    return {
+      valid: false,
+      error: {
+        success: false,
+        message: 'One or more email addresses are invalid',
+        code: 'INVALID_EMAILS',
+        invalidEmails
+      }
+    };
+  }
+  
+  return { valid: true, validatedEmails };
+};
+
+/**
+ * Middleware to validate co-admin emails
+ */
+const validateCoAdminEmails = (req, res, next) => {
+  const { emails } = req.body;
+  
+  // Validate email array with max 5 co-admin emails
+  const result = validateEmailArray(emails, 5, 'co-admin');
+  
+  if (!result.valid) {
+    return res.status(400).json(result.error);
   }
   
   // Attach the processed emails to the request for use in the route handler
-  req.validatedEmails = validatedEmails;
+  req.validatedEmails = result.validatedEmails;
+  next();
+};
+
+/**
+ * Middleware to validate employee emails
+ */
+const validateEmployeeEmails = (req, res, next) => {
+  const { emails } = req.body;
+  
+  // Validate email array with max 25 employee emails
+  const result = validateEmailArray(emails, 25, 'employee');
+  
+  if (!result.valid) {
+    return res.status(400).json(result.error);
+  }
+  
+  // Attach the processed emails to the request for use in the route handler
+  req.validatedEmails = result.validatedEmails;
   next();
 };
 
@@ -139,6 +175,7 @@ const handleValidationErrors = (req, res, next) => {
 
 module.exports = {
   validateEmployeeEmails,
+  validateCoAdminEmails,
   validateOrgId,
   validateEmailParam,
   handleValidationErrors,

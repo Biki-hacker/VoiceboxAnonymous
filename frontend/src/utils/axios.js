@@ -1,11 +1,23 @@
 import axios from 'axios';
 import { supabase } from '../supabaseClient';
 
+// Create a function to get the base URL
+const getBaseUrl = () => {
+  // In development, use the full URL to avoid CORS issues
+  if (import.meta.env.MODE === 'development') {
+    return 'http://localhost:5000/api';
+  }
+  // In production, use the full backend URL
+  return 'https://voiceboxanonymous.onrender.com/api';
+};
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL,
+  baseURL: getBaseUrl(),
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  withCredentials: true, // Important for sending cookies
+  timeout: 60000, // 60 seconds timeout
 });
 
 // Request interceptor

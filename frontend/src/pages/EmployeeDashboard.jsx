@@ -1,534 +1,72 @@
-// src/pages/EmployeeDashboard.jsx
-import React, { useEffect, useState, useRef } from 'react';
+//  src/pages/EmployeeDashboard.jsx
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { Helmet } from 'react-helmet';
-import { Dialog, Transition } from '@headlessui/react';
-import { Fragment } from 'react';
-import { api } from '../api/axios';
+import { api } from '../utils/axios';
 import { uploadMedia } from '../utils/uploadMedia';
-import { hasReacted, toggleReaction } from '../utils/reactions';
 import {
   UserCircleIcon,
-  SunIcon,
-  MoonIcon,
-  ArrowLeftOnRectangleIcon,
   PencilSquareIcon,
   EyeIcon,
   CheckBadgeIcon,
   BuildingOfficeIcon,
-  HandThumbUpIcon as ThumbUpIcon,
-  HeartIcon,
-  FaceSmileIcon as EmojiHappyIcon,
-  FaceFrownIcon as EmojiSadIcon,
-  XCircleIcon,
-  ChatBubbleLeftIcon,
   TrashIcon,
-  XMarkIcon,
   PaperClipIcon,
-  PaperAirplaneIcon,
   Bars3Icon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  TagIcon,
+  MapPinIcon,
+  BuildingLibraryIcon,
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
+  ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { ArrowsPointingOutIcon } from '@heroicons/react/24/solid';
+import Sidebar from '../components/Sidebar';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
+import PostEditModal from '../components/PostEditModal';
+import Polling from '../components/Polling';
 
-// --- Theme Hook ---
-const useTheme = () => {
-  const [theme, setThemeState] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) return savedTheme;
-    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-      return 'dark';
-    }
-    return 'light';
-  });
+// Import common components and hooks
+import useTheme from '../hooks/useTheme';
+import useWebSocket from '../hooks/useWebSocket';
+import CustomSelect from '../components/common/CustomSelect';
+import CommentSection from '../components/common/CommentSection';
+import ReactionButton from '../components/common/ReactionButton';
 
-  useEffect(() => {
-    const root = document.documentElement;
-    if (theme === 'dark') {
-      root.classList.add('dark');
-    } else {
-      root.classList.remove('dark');
-    }
-    localStorage.setItem('theme', theme);
-  }, [theme]);
-
-  const setTheme = (newTheme) => {
-    if (newTheme === 'light' || newTheme === 'dark') {
-      setThemeState(newTheme);
-    }
-  };
-
-  const toggleTheme = () => {
-    setTheme(theme === 'light' ? 'dark' : 'light');
-  };
-
-  return [theme, toggleTheme];
-};
-
-// --- Theme Toggle Button ---
-const ThemeToggle = ({ theme, toggleTheme }) => (
-  <button
-    onClick={toggleTheme}
-    className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200"
-    aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-  >
-    <AnimatePresence initial={false} mode="wait">
-      <motion.div
-        key={theme === 'dark' ? 'moon' : 'sun'}
-        initial={{ y: -20, opacity: 0, rotate: -90 }}
-        animate={{ y: 0, opacity: 1, rotate: 0 }}
-        exit={{ y: 20, opacity: 0, rotate: 90 }}
-        transition={{ duration: 0.2 }}
-      >
-        {theme === 'dark' ? <SunIcon className="h-6 w-6 text-yellow-400" /> : <MoonIcon className="h-6 w-6 text-blue-500" />}
-      </motion.div>
-    </AnimatePresence>
-  </button>
-);
-
-// --- Reaction Button Component ---
-const ReactionButton = ({ type, count, postId, commentId = null }) => {
-  const [isReacted, setIsReacted] = useState(false);
-  const [currentCount, setCurrentCount] = useState(count);
-  const [isLoading, setIsLoading] = useState(false);
-
-  // Fetch reaction status on mount and when postId/commentId/type changes
-  useEffect(() => {
-    const fetchReactionStatus = async () => {
-      try {
-        const storedToken = localStorage.getItem('token');
-        const endpoint = commentId 
-          ? `/posts/${postId}/comments/${commentId}/reactions`
-          : `/posts/${postId}/reactions`;
-
-        const response = await api.get(endpoint, {
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          }
-        });
-
-        // Update local state with server data
-        if (response.data?.success && response.data?.data) {
-          const reactionData = response.data.data[type];
-          if (reactionData) {
-            setIsReacted(reactionData.hasReacted);
-            setCurrentCount(reactionData.count);
-          }
-        }
-      } catch (error) {
-        console.error('Error fetching reaction status:', error);
-      }
-    };
-
-    fetchReactionStatus();
-  }, [postId, commentId, type]);
-
-  const handleReaction = async () => {
-    if (isLoading) return;
-    
-    const wasReacted = isReacted;
-    const newIsReacted = !wasReacted;
-    
-    // Optimistic UI updates
-    setIsLoading(true);
-    setIsReacted(newIsReacted);
-    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
-    
-    try {
-      const storedToken = localStorage.getItem('token');
-      const endpoint = commentId 
-        ? `/posts/${postId}/comments/${commentId}/reactions`
-        : `/posts/${postId}/reactions`;
-
-      const response = await api.post(
-        endpoint, 
-        { type },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
-      
-      // Update with server response
-      if (response.data?.success && response.data?.reaction) {
-        setIsReacted(response.data.reaction.hasReacted);
-        setCurrentCount(response.data.reaction.count);
-        
-        // Update local storage to persist the reaction state
-        toggleReaction(commentId || postId, type);
-      }
-    } catch (error) {
-      console.error('Error updating reaction:', error);
-      // Revert optimistic updates on error
-      setIsReacted(wasReacted);
-      setCurrentCount(count);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getIcon = () => {
-    const baseClasses = "h-5 w-5";
-    switch(type) {
-      case 'like': 
-        return <ThumbUpIcon className={`${baseClasses} text-gray-700 dark:text-slate-200`} />;
-      case 'love': 
-        return <HeartIcon className={`${baseClasses} text-red-500 dark:text-red-400`} />;
-      case 'laugh': 
-        return <EmojiHappyIcon className={`${baseClasses} text-yellow-500 dark:text-yellow-400`} />;
-      case 'angry': 
-        return <XCircleIcon className={`${baseClasses} text-orange-500 dark:text-orange-400`} />;
-      default: 
-        return <ThumbUpIcon className={`${baseClasses} text-gray-700 dark:text-slate-200`} />;
-    }
-  };
-
-  return (
-    <button
-      onClick={handleReaction}
-      className={`flex items-center gap-1 px-2 py-1 rounded-full ${
-        isReacted ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-gray-100 dark:bg-slate-700'
-      }`}
-      title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
-    >
-      {getIcon()}
-      <span className="text-sm text-gray-800 dark:text-slate-200">{currentCount}</span>
-    </button>
-  );
-};
-
-// --- Comment Section Component ---
-const CommentSection = ({ postId, comments: initialComments = [], onCommentAdded }) => {
-  const [newComment, setNewComment] = useState('');
-  const [localComments, setLocalComments] = useState(initialComments || []);
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [commentToDelete, setCommentToDelete] = useState(null);
-
-  // Update local comments when initialComments prop changes
-  useEffect(() => {
-    setLocalComments(initialComments || []);
-  }, [initialComments]);
-
-  // Function to fetch the post with its comments
-  const fetchPostWithComments = async () => {
-    const storedToken = localStorage.getItem('token');
-    const orgId = localStorage.getItem('orgId');
-    
-    if (!storedToken || !orgId) {
-      console.error('Authentication token or organization ID not found');
-      return;
-    }
-    
-    if (!postId) {
-      console.error('No post ID provided');
-      return;
-    }
-    
-    console.log('Fetching post with comments. Post ID:', postId, 'Org ID:', orgId);
-    
-    try {
-      // Get the specific post with comments and author info populated
-      const response = await api.get(`/posts/${orgId}?postId=${postId}`);
-      
-      console.log('Received post data:', response.data);
-      
-      if (!response.data) {
-        console.error('No data received from server');
-        return;
-      }
-      
-      const post = response.data;
-      
-      if (!post) {
-        console.error('Post not found');
-        return;
-      }
-      
-      // Process comments to ensure they have proper author info
-      const updatedComments = Array.isArray(post.comments)
-        ? post.comments.map(comment => ({
-            ...comment,
-            // Ensure we have author info and default to empty object if not available
-            author: comment.author || { _id: comment.author, role: 'user' },
-            // For backward compatibility, check createdByRole first, then fall back to author.role
-            createdByRole: comment.createdByRole || (comment.author?.role || 'user')
-          }))
-        : [];
-      
-      console.log('Updated comments with author info:', updatedComments);
-      setLocalComments(updatedComments);
-      
-      if (onCommentAdded) {
-        onCommentAdded(updatedComments);
-      }
-    } catch (error) {
-      console.error('Error fetching post with comments:', error);
-      setError('Failed to fetch post. Please try again.');
-    }
-  };
-
-  const handleCommentSubmit = async () => {
-    const commentText = newComment.trim();
-    if (!commentText || isSubmitting) return;
-    
-    setIsSubmitting(true);
-    setError(null);
-    
-    // Clear input immediately for better UX
-    setNewComment('');
-
-    try {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found');
-      }
-      
-      console.log('Posting comment to post:', postId);
-      const response = await api.post(
-        `/posts/${postId}/comments`,
-        { 
-          text: commentText  // Only send the text, let backend handle the rest
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${storedToken}`
-          }
-        }
-      );
-      
-      console.log('Comment posted successfully, response:', response.data);
-      
-      // If the response includes the updated post with comments, use that
-      if (response.data && response.data.post && response.data.post.comments) {
-        const updatedComments = response.data.post.comments.map(comment => ({
-          ...comment,
-          // Ensure we have the author info
-          author: comment.author || {
-            _id: 'unknown',
-            name: 'Unknown User',
-            email: 'unknown@example.com',
-            role: comment.createdByRole || 'user'
-          },
-          // Ensure we have a createdByRole
-          createdByRole: comment.createdByRole || 'user'
-        }));
-        
-        setLocalComments(updatedComments);
-        if (onCommentAdded) {
-          onCommentAdded(updatedComments);
-        }
-      } else {
-        // Fallback to fetching the updated comments from the backend
-        await fetchPostWithComments();
-      }
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-      const errorMessage = error.response?.data?.message || error.message || 'Failed to post comment';
-      console.error('Error details:', errorMessage);
-      setError(errorMessage);
-      // Restore the comment text so user can try again
-      setNewComment(commentText);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteClick = (commentId) => {
-    setCommentToDelete(commentId);
-    setShowDeleteDialog(true);
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteDialog(false);
-    setCommentToDelete(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!commentToDelete || isLoading) return;
-    
-    setIsLoading(true);
-    setShowDeleteDialog(false);
-    
-    try {
-      const storedToken = localStorage.getItem('token');
-      await api.delete(
-        `/posts/${postId}/comments/${commentToDelete}`,
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
-      
-      // Optimistic update
-      const updatedComments = localComments.filter(c => c._id !== commentToDelete);
-      setLocalComments(updatedComments);
-      setError(null);
-      
-      // Notify parent component about the deleted comment
-      if (onCommentAdded) {
-        onCommentAdded(updatedComments);
-      }
-      
-      // Comment deleted successfully, no need to show a message
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-      setError(error.response?.data?.message || 'Failed to delete comment');
-      // Error already handled by error state
-    } finally {
-      setIsLoading(false);
-      setCommentToDelete(null);
-    }
-  };
+// --- Organization Access Modal Component ---
+const OrgAccessModal = ({ isOpen, onClose }) => {
+  if (!isOpen) return null;
   
-  // For backward compatibility
-  const handleCommentDelete = handleDeleteClick;
-  
-  const renderDeleteButton = (commentId) => {
-    return (
-      <button
-        onClick={(e) => {
-          e.stopPropagation();
-          handleDeleteClick(commentId);
-        }}
-        className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-        disabled={isLoading}
-        title="Delete comment"
-      >
-        <TrashIcon className="h-4 w-4" />
-      </button>
-    );
-  };
-
   return (
-    <div className="mt-4 space-y-4">
-      {/* Delete Confirmation Dialog */}
-      <DeletionConfirmation
-        isOpen={showDeleteDialog}
-        onClose={handleCancelDelete}
-        title="Delete Comment"
-        itemType="comment"
-        itemPreview={commentToDelete ? localComments.find(c => c._id === commentToDelete)?.text : ''}
-        isDeleting={isLoading}
-        onConfirm={handleConfirmDelete}
-        confirmButtonText={isLoading ? 'Deleting...' : 'Delete'}
-      />
-      {error && (
-        <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
-          {error}
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-slate-800 rounded-lg shadow-xl max-w-md w-full p-6">
+        <div className="flex items-center mb-4">
+          <ExclamationTriangleIcon className="h-6 w-6 text-yellow-500 mr-2" />
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white">Access Restricted</h3>
         </div>
-      )}
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
-          placeholder="Write a comment..."
-          disabled={isSubmitting}
-          className="flex-1 p-2 rounded bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white disabled:opacity-50"
-        />
-        <button
-          onClick={handleCommentSubmit}
-          disabled={!newComment.trim() || isSubmitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-        >
-          {isSubmitting ? (
-            <>
-              <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-              </svg>
-              Posting...
-            </>
-          ) : (
-            'Post'
-          )}
-        </button>
+        <div className="mt-2">
+          <p className="text-sm text-gray-600 dark:text-gray-300">
+            Probably the admin edited the employee email list or deleted the organization.
+            Please contact your organization administrator for assistance.
+          </p>
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+            Re-verify the organization access if anything changed.
+          </p>
+        </div>
+        <div className="mt-6 flex justify-end">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:bg-blue-600 dark:hover:bg-blue-700"
+          >
+            Close
+          </button>
+        </div>
       </div>
-
-      {localComments.map(comment => {
-        const currentUserId = localStorage.getItem('userId');
-        const currentUserRole = localStorage.getItem('role') || 'user';
-        
-        // Get the author ID from various possible locations in the comment object
-        let authorId = '';
-        // Check if author is an object with _id
-        if (comment.author && typeof comment.author === 'object' && comment.author._id) {
-          authorId = comment.author._id.toString().trim();
-        } 
-        // Check if author is a direct ID string
-        else if (typeof comment.author === 'string') {
-          authorId = comment.author.trim();
-        }
-        // Fallback to other possible ID fields
-        else if (comment.createdBy) {
-          authorId = comment.createdBy.toString().trim();
-        } else if (comment.authorId) {
-          authorId = comment.authorId.toString().trim();
-        }
-        
-        // Check if the current user is the author (compare string values)
-        const normalizedCurrentUserId = currentUserId ? currentUserId.toString().trim() : '';
-        const isAuthor = authorId && normalizedCurrentUserId && 
-                        authorId === normalizedCurrentUserId;
-        
-        // Check if user is admin (either from role or comment's createdByRole)
-        const isAdmin = currentUserRole === 'admin' || 
-                       comment.createdByRole === 'admin' || 
-                       (comment.author && comment.author.role === 'admin');
-        
-        return (
-          <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium dark:text-white">
-                  {comment.author?.name || <span className="text-gray-800 dark:text-slate-200">Anonymous</span>}
-                </span>
-                <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
-                  isAdmin 
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                }`}>
-                  {isAdmin ? 'Admin' : 'User'}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-slate-400">
-                  {new Date(comment.createdAt).toLocaleDateString()}
-                </span>
-              </div>
-              {isAuthor && (
-                renderDeleteButton(comment._id)
-              )}
-            </div>
-            
-            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
-            
-            {/* Use the same ReactionButton component as posts */}
-            <div className="flex gap-2">
-              {['like', 'love', 'laugh', 'angry'].map((type) => (
-                <ReactionButton
-                  key={type}
-                  type={type}
-                  postId={postId}
-                  commentId={comment._id}
-                  count={comment.reactions?.[type]?.count || 0}
-                />
-              ))}
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 };
@@ -569,97 +107,18 @@ const ActionCard = ({
   </motion.div>
 );
 
-// --- Media Viewer Modal Component ---
-const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
-  const modalRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Close modal when clicking outside the content
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
-
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (e) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  // Toggle fullscreen
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.log);
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
-          aria-label="Close media viewer"
-        >
-          <XCircleIcon className="h-8 w-8" />
-        </button>
-        {/* Fullscreen button removed as per user request */}
-        
-        <div 
-          ref={modalRef} 
-          className="relative max-w-full max-h-full flex items-center justify-center"
-        >
-          {mediaType === 'image' ? (
-            <img
-              src={mediaUrl}
-              alt="Full size media"
-              className="max-w-full max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <video
-              src={mediaUrl}
-              className="max-w-full max-h-[90vh]"
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+// --- Import MediaViewer Component ---
+import MediaViewer from '../components/MediaViewer';
 
 // --- Main Dashboard Component ---
 const EmployeeDashboard = () => {
   const navigate = useNavigate();
+  const { logout } = useAuth();
   const [theme, toggleTheme] = useTheme();
   const [employeeEmail, setEmployeeEmail] = useState("");
   const [organizationId, setOrganizationId] = useState("");
+  const [organizationName, setOrganizationName] = useState("");
+  const [isEmailVerified, setIsEmailVerified] = useState(true); // Track if email is verified in organization
   const [viewMode, setViewMode] = useState('dashboard');
   const [posts, setPosts] = useState([]);
   const [selectedPost, setSelectedPost] = useState(null);
@@ -690,8 +149,286 @@ const EmployeeDashboard = () => {
   const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
   const [postToDelete, setPostToDelete] = useState(null);
   const [isDeletingPost, setIsDeletingPost] = useState(false);
-  const ws = useRef(null); // WebSocket reference
+  const [showOrgAccessModal, setShowOrgAccessModal] = useState(false);
+  
+  // Post editing state
+  const [showEditPostModal, setShowEditPostModal] = useState(false);
+  const [postToEdit, setPostToEdit] = useState(null);
+  
+  // Post filters
+  const [selectedPostType, setSelectedPostType] = useState('all');
+  const [selectedRegion, setSelectedRegion] = useState('all');
+  const [selectedDepartment, setSelectedDepartment] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
+
+  // Add ref to track current organizationId for WebSocket
+  const organizationIdRef = useRef(organizationId);
+
+  // Pagination state for posts
+  const [currentPage, setCurrentPage] = useState(1);
+  const POSTS_PER_PAGE = 20;
+
+  // Helper function to deduplicate comments by ID
+  const deduplicateComments = (comments) => {
+    if (!Array.isArray(comments)) return [];
+    const seen = new Set();
+    return comments.filter(comment => {
+      if (!comment || !comment._id) return false;
+      if (seen.has(comment._id)) return false;
+      seen.add(comment._id);
+      return true;
+    });
+  };
+
+  // Helper function to check if post has been edited (excluding pinning)
+  const isPostEdited = (post) => {
+    // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
+    if (post.updatedAt === post.createdAt) {
+      return false;
+    }
+    
+    // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
+    // We can't easily detect this on the frontend, so we'll use a different approach
+    // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
+    const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
+    return timeDiff > 60000; // More than 1 minute difference
+  };
+
+  // --- WebSocket Effect for Real-time Updates ---
+  const handleWebSocketMessage = useCallback((message) => {
+    console.log('EmployeeDashboard: WebSocket message received:', message);
+    const currentSelectedOrgId = organizationIdRef.current;
+    
+    if (!currentSelectedOrgId) {
+      console.log('EmployeeDashboard: No organization selected, ignoring WebSocket message.');
+      return;
+    }
+
+    try {
+      const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
+      
+      switch (parsedMessage.type) {
+        case 'POST_CREATED': {
+          // Support both formats: payload.post or payload directly
+          const postObj = parsedMessage.payload.post || parsedMessage.payload;
+          const orgId = parsedMessage.payload.organization || parsedMessage.payload.organizationId;
+          // Only add if content is a string (decrypted)
+          if (
+            orgId === currentSelectedOrgId &&
+            postObj?._id &&
+            typeof postObj.content === 'string'
+          ) {
+            setPosts(prev => [postObj, ...prev]);
+          } else {
+            // Optionally log or handle encrypted content
+            console.warn('POST_CREATED received with encrypted or invalid content:', postObj);
+          }
+          break;
+        }
+        case 'POST_UPDATED': {
+          const postObj = parsedMessage.payload.post || parsedMessage.payload;
+          const orgId = (parsedMessage.payload.organization || parsedMessage.payload.organizationId)?.toString();
+          const currentOrgId = currentSelectedOrgId?.toString();
+          if (
+            orgId === currentOrgId &&
+            postObj?._id &&
+            typeof postObj.content === 'string'
+          ) {
+            setPosts(prev =>
+              prev.map(p =>
+                p?._id === postObj._id
+                  ? {
+                      ...postObj,
+                      comments: deduplicateComments(p.comments || [])
+                    }
+                  : p
+              ).filter(Boolean)
+            );
+          } else {
+            console.warn('POST_UPDATED received with encrypted or invalid content or orgId mismatch:', postObj, orgId, currentOrgId);
+          }
+          break;
+        }
+        case 'POST_DELETED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
+            setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
+          }
+          break;
+        case 'COMMENT_CREATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: deduplicateComments([...(p.comments || []), parsedMessage.payload.comment])
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'COMMENT_UPDATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: p.comments?.map(c => {
+                        if (c?._id === parsedMessage.payload.comment._id) {
+                          // Only update if the comment text is different or if we're updating other fields
+                          const currentText = typeof c.text === 'string' ? c.text : (c.content || '');
+                          const newText = typeof parsedMessage.payload.comment.text === 'string' 
+                            ? parsedMessage.payload.comment.text 
+                            : (parsedMessage.payload.comment.content || '');
+                          
+                          // If the text is the same, don't update to prevent duplicates
+                          if (currentText === newText && !parsedMessage.payload.comment.updatedAt) {
+                            return c;
+                          }
+                          
+                          return parsedMessage.payload.comment;
+                        }
+                        return c;
+                      }).filter(Boolean) || []
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'COMMENT_DELETED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.commentId) {
+            setPosts(prev => 
+              prev.map(p => 
+                p?._id === parsedMessage.payload.postId 
+                  ? { 
+                      ...p,
+                      comments: p.comments?.filter(c => c?._id !== parsedMessage.payload.commentId) || []
+                    } 
+                  : p
+              ).filter(Boolean) // Remove any undefined posts
+            );
+          }
+          break;
+        case 'REACTION_UPDATED':
+          if (parsedMessage.payload?.organizationId === currentSelectedOrgId) {
+            const { entityType, entityId, postId, reactionsSummary } = parsedMessage.payload;
+            
+            if (postId && reactionsSummary) {
+              setPosts(prev => 
+                prev.map(post => {
+                  if (post?._id !== postId) return post;
+                  
+                  if (entityType === 'post') {
+                    return {
+                      ...post,
+                      reactions: reactionsSummary
+                    };
+                  } else if (entityType === 'comment' && entityId) {
+                    // Handle comment reactions
+                    return {
+                      ...post,
+                      comments: post.comments?.map(comment => 
+                        comment?._id === entityId 
+                          ? { ...comment, reactions: reactionsSummary }
+                          : comment
+                      ).filter(Boolean) || []
+                    };
+                  }
+                  return post;
+                }).filter(Boolean) // Remove any undefined posts
+              );
+            }
+          }
+          break;
+        default:
+          console.log('EmployeeDashboard: Unhandled WebSocket message type:', parsedMessage.type);
+      }
+    } catch (error) {
+      console.error('Error processing WebSocket message:', error);
+    }
+  }, [setPosts, posts]);
+
+  const { sendMessage } = useWebSocket(
+    WS_URL,
+    handleWebSocketMessage,
+    () => {
+      console.log('WebSocket connected');
+      // Send authentication message if we have the required data
+      const storedToken = localStorage.getItem('token');
+      const currentOrgId = organizationIdRef.current;
+      if (storedToken && currentOrgId) {
+        return {
+          type: 'AUTH',
+          token: storedToken,
+          organizationId: currentOrgId,
+          role: 'employee'
+        };
+      }
+      return null;
+    },
+    (error) => {
+      console.error('WebSocket error:', error);
+    },
+    [organizationId]
+  );
+
+  // Update organizationIdRef when organizationId changes and re-authenticate
+  useEffect(() => {
+    organizationIdRef.current = organizationId;
+    
+    // Re-authenticate with WebSocket if organization changes
+    const storedToken = localStorage.getItem('token');
+    if (storedToken && organizationId) {
+      sendMessage({
+        type: 'AUTH',
+        token: storedToken,
+        organizationId: organizationId,
+        role: 'employee'
+      });
+    }
+  }, [organizationId, sendMessage]);
+
+  // --- Fetch Organization Details ---
+  const fetchOrganizationDetails = async (orgId) => {
+    try {
+      const response = await api.get(`/organizations/${orgId}`);
+      if (response.data && response.data.name) {
+        setOrganizationName(response.data.name);
+        localStorage.setItem('organizationName', response.data.name);
+      }
+    } catch (error) {
+      console.error('Error fetching organization details:', error);
+      // Always show this message on any error
+      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+    }
+  };
+
+  // --- Check if email is in organization's verified emails ---
+  const verifyEmailInOrganization = async (email, orgId) => {
+    try {
+      const response = await api.get(`/organizations/${orgId}/verify-email`, {
+        params: { email }
+      });
+      
+      if (response.data?.success && response.data?.data?.isVerified) {
+        setIsEmailVerified(true);
+        return true;
+      } else {
+        setIsEmailVerified(false);
+        setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+        return false;
+      }
+    } catch (error) {
+      console.error('Error verifying email with organization:', error);
+      setIsEmailVerified(false);
+      setOrganizationName('Probably the admin edited the employee email list or deleted the organization');
+      return false;
+    }
+  };
 
   // --- Authentication Effect ---
   useEffect(() => {
@@ -700,10 +437,17 @@ const EmployeeDashboard = () => {
         const storedEmail = localStorage.getItem('email');
         const storedRole = localStorage.getItem('role');
         const storedToken = localStorage.getItem('token');
-        const storedOrgId = localStorage.getItem('orgId');
+        const storedOrgId = localStorage.getItem('orgId')?.trim(); // Trim any whitespace from orgId
 
         if (!storedEmail || !storedRole || !storedToken || !storedOrgId || storedRole !== 'employee') {
           navigate('/signin', { state: { message: 'Employee access required. Please sign in.' } });
+          return;
+        }
+        
+        // First verify the email is still in the organization's verified list
+        const isEmailValid = await verifyEmailInOrganization(storedEmail, storedOrgId);
+        if (!isEmailValid) {
+          // Don't proceed further if email is not in organization
           return;
         }
 
@@ -734,7 +478,11 @@ const EmployeeDashboard = () => {
           
           setEmployeeEmail(storedEmail);
           setOrganizationId(storedOrgId);
-          fetchPosts(); // Fetch posts after successful authentication
+          // Fetch organization details and posts in parallel
+          await Promise.all([
+            fetchOrganizationDetails(storedOrgId),
+            fetchPosts()
+          ]);
         } else {
           localStorage.clear();
           navigate('/signin', { state: { message: 'Session expired. Please sign in again.' } });
@@ -749,315 +497,40 @@ const EmployeeDashboard = () => {
     verifyAuth();
   }, [navigate]);
 
-  // --- WebSocket Effect for Real-time Updates ---
+  // --- Effect to fetch posts when authentication is complete and user is in view mode ---
   useEffect(() => {
-    if (!organizationId) {
-      if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-        console.log('EmployeeDashboard: No organizationId, closing WebSocket.');
-        ws.current.close();
-      }
-      return; // Don't connect if no organizationId
+    if (isEmailVerified && organizationId && viewMode === 'view' && posts.length === 0) {
+      fetchPosts();
     }
-
-    if (ws.current && ws.current.readyState !== WebSocket.CLOSED && ws.current.readyState !== WebSocket.CLOSING) {
-        // Initialize WebSocket connection when organizationId is available
-    } else {
-        // Use a hardcoded WebSocket URL since process.env is not available in the browser
-        const wsUrl = 'ws://localhost:5000';
-        console.log(`Connecting to WebSocket at ${wsUrl}`);
-        ws.current = new WebSocket(wsUrl);
-
-        ws.current.onopen = () => {
-            console.log('WebSocket connection established');
-        };
-
-        ws.current.onclose = (event) => {
-            console.log(`WebSocket connection closed: ${event.code} ${event.reason}`);
-            // Attempt to reconnect after 3 seconds
-            setTimeout(() => {
-                if (organizationId) {
-                    console.log('Attempting to reconnect WebSocket...');
-                    ws.current = new WebSocket(wsUrl);
-                }
-            }, 3000);
-        };
-
-        ws.current.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-
-        ws.current.onmessage = (event) => {
-            try {
-                const message = JSON.parse(event.data);
-                console.log('WebSocket message received:', message);
-
-                // Skip if message is invalid
-                if (!message || !message.type || !message.payload) {
-                    console.warn('Invalid WebSocket message format:', message);
-                    return;
-                }
-
-                // Skip if this message is not for the current organization
-                if (message.payload.organizationId && 
-                    message.payload.organizationId !== organizationId) {
-                    console.log(`Ignoring message for different organization: ${message.payload.organizationId}`);
-                    return;
-                }
-
-                // Validate message structure
-                if (!message || typeof message !== 'object') {
-                    console.warn('EmployeeDashboard: Invalid message format:', message);
-                    return;
-                }
-
-
-                // Check if message has a valid payload
-                if (!message.payload || typeof message.payload !== 'object') {
-                    console.warn('EmployeeDashboard: Message missing payload:', message);
-                    return;
-                }
-
-
-                // Skip if message is not for current organization
-                const orgId = message.payload.organizationId || message.payload.organization;
-                if (!orgId || orgId !== organizationId) {
-                    console.debug('EmployeeDashboard: WebSocket message for different organization, ignoring.');
-                    return;
-                }
-
-
-                // Process message based on type
-                switch (message.type) {
-                    case 'POST_CREATED':
-                        if (!message.payload._id || !message.payload.createdAt) {
-                            console.warn('EmployeeDashboard: Invalid POST_CREATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => 
-                            [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        );
-                        break;
-
-                    case 'POST_UPDATED':
-                        if (!message.payload._id) {
-                            console.warn('EmployeeDashboard: Invalid POST_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts =>
-                            prevPosts.map(p => (p._id === message.payload._id ? {...p, ...message.payload} : p))
-                                .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                        );
-                        break;
-
-                    case 'POST_DELETED':
-                        if (!message.payload.postId) {
-                            console.warn('EmployeeDashboard: Invalid POST_DELETED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
-                        break;
-                    case 'COMMENT_CREATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_CREATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    // Check if comment already exists to prevent duplicates
-                                    const commentExists = post.comments?.some(
-                                        c => c._id === message.payload.comment._id
-                                    );
-                                    
-                                    if (commentExists) {
-                                        console.log('Comment already exists, skipping duplicate');
-                                        return post;
-                                    }
-
-                                    return {
-                                        ...post,
-                                        comments: [
-                                            message.payload.comment,
-                                            ...(post.comments || [])
-                                        ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
-                                        commentCount: (post.commentCount || 0) + 1
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'COMMENT_UPDATED':
-                        if (!message.payload.postId || !message.payload.comment?._id) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    const existingComment = post.comments?.find(c => c._id === message.payload.comment._id);
-                                    if (!existingComment) {
-                                        console.warn('EmployeeDashboard: Comment not found for update:', message.payload.comment._id);
-                                        return post;
-                                    }
-                                    return {
-                                        ...post,
-                                        comments: (post.comments || [])
-                                            .map(c => c._id === message.payload.comment._id 
-                                                ? { ...c, ...message.payload.comment }
-                                                : c
-                                            )
-                                            .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'COMMENT_DELETED':
-                        if (!message.payload.postId || !message.payload.commentId) {
-                            console.warn('EmployeeDashboard: Invalid COMMENT_DELETED payload:', message.payload);
-                            return;
-                        }
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                if (post._id === message.payload.postId) {
-                                    return {
-                                        ...post,
-                                        comments: (post.comments || []).filter(c => c._id !== message.payload.commentId),
-                                        commentCount: Math.max(0, (post.commentCount || 0) - 1)
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-
-                    case 'REACTION_UPDATED':
-                        if (!message.payload.entityType || !message.payload.entityId) {
-                            console.warn('EmployeeDashboard: Invalid REACTION_UPDATED payload:', message.payload);
-                            return;
-                        }
-                        
-                        // Use reactions if available, otherwise fall back to reactionsSummary
-                        const reactionsData = message.payload.reactions || message.payload.reactionsSummary;
-                        if (!reactionsData) {
-                            console.warn('EmployeeDashboard: Missing reactions data in payload:', message.payload);
-                            return;
-                        }
-                        
-                        // Get the current user ID for hasReacted check
-                        const currentUserId = user?._id;
-                        
-                        // Process reactions to ensure they have the correct format
-                        const processedReactions = {};
-                        Object.entries(reactionsData).forEach(([reactionType, reaction]) => {
-                            if (!reaction) {
-                                processedReactions[reactionType] = { count: 0, users: [], hasReacted: false };
-                                return;
-                            }
-                            
-                            const userList = Array.isArray(reaction.users) ? 
-                                reaction.users : [];
-                                
-                            processedReactions[reactionType] = {
-                                count: reaction.count || 0,
-                                users: userList,
-                                hasReacted: currentUserId ? 
-                                    userList.some(id => id === currentUserId || id.toString() === currentUserId) : 
-                                    false
-                            };
-                        });
-                        
-                        console.log('Processing REACTION_UPDATED:', {
-                            entityType: message.payload.entityType,
-                            entityId: message.payload.entityId,
-                            postId: message.payload.postId,
-                            reactions: processedReactions
-                        });
-                        
-                        setPosts(prevPosts => {
-                            return prevPosts.map(post => {
-                                // Handle post reactions
-                                if (message.payload.entityType === 'post' && post._id === message.payload.entityId) {
-                                    console.log(`Updating reactions for post ${post._id}`);
-                                    return { 
-                                        ...post, 
-                                        reactions: {
-                                            ...post.reactions, // Keep existing reactions
-                                            ...processedReactions // Update with new reaction data
-                                        },
-                                        updatedAt: message.payload.updatedAt || new Date().toISOString()
-                                    };
-                                } 
-                                // Handle comment reactions
-                                else if (message.payload.entityType === 'comment' && post._id === message.payload.postId) {
-                                    console.log(`Checking comments in post ${post._id} for comment ${message.payload.entityId}`);
-                                    const updatedComments = (post.comments || []).map(comment => {
-                                        if (comment._id === message.payload.entityId) {
-                                            console.log(`Updating reactions for comment ${comment._id}`);
-                                            return { 
-                                                ...comment,
-                                                reactions: {
-                                                    ...comment.reactions, // Keep existing reactions
-                                                    ...processedReactions // Update with new reaction data
-                                                },
-                                                updatedAt: message.payload.updatedAt || new Date().toISOString()
-                                            };
-                                        }
-                                        return comment;
-                                    });
-                                    
-                                    return {
-                                        ...post,
-                                        comments: updatedComments
-                                    };
-                                }
-                                return post;
-                            });
-                        });
-                        break;
-                    default:
-                        console.log('EmployeeDashboard: Unhandled WebSocket message type:', message.type);
-                }
-            } catch (error) {
-                console.error('EmployeeDashboard: Failed to parse WebSocket message or update state:', error);
-            }
-        };
-
-        ws.current.onerror = (error) => {
-            console.error('EmployeeDashboard: WebSocket error:', error);
-        };
-
-        ws.current.onclose = (event) => {
-            console.log('EmployeeDashboard: WebSocket disconnected.', event.code, event.reason);
-        };
-    }
-
-    // Cleanup on component unmount or when organizationId changes
-    return () => {
-        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-            console.log('EmployeeDashboard: Closing WebSocket connection.');
-            ws.current.close();
-        }
-    };
-  }, [organizationId, setPosts]); // Dependencies for the WebSocket effect
-
+  }, [isEmailVerified, organizationId, viewMode]);
 
   // --- Fetch Posts ---
   const fetchPosts = async () => {
-    if (!organizationId) return;
-
     setLoading(prev => ({ ...prev, posts: true }));
     setError(null);
 
     try {
       const storedToken = localStorage.getItem('token');
+      const storedOrgId = localStorage.getItem('orgId')?.trim();
+      
+      // If we don't have the required data, try to get it from localStorage
+      const orgIdToUse = organizationId || storedOrgId;
+      const isVerified = isEmailVerified !== false; // Only block if explicitly false
+      
+      if (!orgIdToUse) {
+        setError('Organization ID not found. Please try refreshing the page.');
+        setPosts([]);
+        return;
+      }
+      
+      if (!storedToken) {
+        setError('Authentication token not found. Please sign in again.');
+        navigate('/signin');
+        return;
+      }
       
       // Use the correct endpoint format with organization ID as URL parameter
-      const response = await api.get(`/posts/${organizationId}`, {
+      const response = await api.get(`/posts/org/${orgIdToUse}`, {
         headers: { 
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${storedToken}`
@@ -1238,6 +711,9 @@ const EmployeeDashboard = () => {
         }
       }
 
+      // Ensure organizationId is trimmed before making the API call
+      const trimmedOrgId = organizationId.trim();
+      
       // Create the post with the uploaded media URLs
       const response = await api.post('/posts', {
         content: postData.content.trim(),
@@ -1245,7 +721,7 @@ const EmployeeDashboard = () => {
         mediaUrls,
         region: postData.region || '',
         department: postData.department || '',
-        orgId: organizationId,
+        orgId: trimmedOrgId,
         isAnonymous: true
       });
 
@@ -1259,8 +735,11 @@ const EmployeeDashboard = () => {
       // Fetch fresh posts to ensure we have the latest data
       await fetchPosts();
       
-      // Switch back to dashboard view
-      setViewMode('dashboard');
+      // Switch to view mode to show the posts list
+      setViewMode('view');
+      
+      // Scroll to the top of the posts list
+      window.scrollTo({ top: 0, behavior: 'smooth' });
       
       return response.data; // Return the created post data
     } catch (err) {
@@ -1346,27 +825,69 @@ const EmployeeDashboard = () => {
     }
   };
 
+  // --- Handle Post Edit ---
+  const handlePostEdit = (post) => {
+    setPostToEdit(post);
+    setShowEditPostModal(true);
+  };
+
+  const handlePostUpdated = (updatedPost) => {
+    setPosts(prev => prev.map(post => 
+      post._id === updatedPost._id ? { ...post, ...updatedPost, comments: post.comments || [], author: post.author } : post
+    ));
+    setShowEditPostModal(false);
+    setPostToEdit(null);
+  };
+
   const actions = [
     {
       title: "Create New Post",
-      description: "Share your feedback, complaints, or suggestions. Tag region & department if needed.",
+      description: isEmailVerified 
+        ? "Share your feedback, complaints, or suggestions. Tag region & department if needed."
+        : "Please verify your email with the organization to create posts.",
       buttonText: "Create Post",
-      onClick: () => setViewMode('create'),
+      onClick: isEmailVerified ? () => setViewMode('create') : () => setShowOrgAccessModal(true),
       icon: PencilSquareIcon,
-      bgColorClass: "bg-blue-50 dark:bg-blue-900/30",
-      accentColorClass: "text-blue-600 dark:text-blue-400"
+      bgColorClass: isEmailVerified 
+        ? "bg-blue-50 dark:bg-blue-900/30 hover:bg-blue-100 dark:hover:bg-blue-800/40" 
+        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70 hover:opacity-100 transition-opacity",
+      accentColorClass: isEmailVerified 
+        ? "text-blue-600 dark:text-blue-400" 
+        : "text-gray-500 dark:text-gray-400"
     },
     {
       title: "View Posts",
-      description: "Browse all anonymous posts within your organization",
-      buttonText: "View Posts",
-      onClick: () => {
-        fetchPosts();
-        setViewMode('view');
-      },
+      description: isEmailVerified 
+        ? "Browse all anonymous posts within your organization"
+        : "Please verify your email with the organization to view posts.",
+      buttonText: loading.posts ? "Loading..." : "View Posts",
+      onClick: isEmailVerified 
+        ? async () => {
+            try {
+              await fetchPosts();
+              setViewMode('view');
+            } catch (error) {
+              console.error('Error fetching posts:', error);
+              setError('Failed to fetch posts. Please try again.');
+            }
+          }
+        : () => setShowOrgAccessModal(true),
       icon: EyeIcon,
-      bgColorClass: "bg-indigo-50 dark:bg-indigo-900/30",
-      accentColorClass: "text-indigo-600 dark:text-indigo-400"
+      bgColorClass: isEmailVerified 
+        ? "bg-indigo-50 dark:bg-indigo-900/30 hover:bg-indigo-100 dark:hover:bg-indigo-800/40" 
+        : "bg-gray-100 dark:bg-gray-800/50 cursor-not-allowed opacity-70 hover:opacity-100 transition-opacity",
+      accentColorClass: isEmailVerified 
+        ? "text-indigo-600 dark:text-indigo-400" 
+        : "text-gray-500 dark:text-gray-400"
+    },
+    {
+      title: "Polls",
+      description: "Participate in organization polls. Your vote is anonymous.",
+      buttonText: "Go to Polls",
+      onClick: isEmailVerified ? () => setViewMode('polls') : () => setShowOrgAccessModal(true),
+      icon: ChartBarIcon,
+      bgColorClass: "bg-yellow-50 dark:bg-yellow-900/30",
+      accentColorClass: "text-yellow-600 dark:text-yellow-400"
     },
     {
       title: "Organization Verification",
@@ -1379,9 +900,90 @@ const EmployeeDashboard = () => {
     }
   ];
 
+  // Navigation items for the sidebar
+  const navItems = [
+    { 
+      name: 'Create Post', 
+      icon: PencilSquareIcon, 
+      action: isEmailVerified 
+        ? () => setViewMode('create')
+        : () => setShowOrgAccessModal(true),
+      current: viewMode === 'create',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'View Posts', 
+      icon: EyeIcon, 
+      action: isEmailVerified 
+        ? async () => {
+            try {
+              await fetchPosts();
+              setViewMode('view');
+            } catch (error) {
+              console.error('Error fetching posts:', error);
+              setError('Failed to fetch posts. Please try again.');
+            }
+          }
+        : () => setShowOrgAccessModal(true),
+      current: viewMode === 'view',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'Polls',
+      icon: ChartBarIcon,
+      action: isEmailVerified ? () => setViewMode('polls') : () => setShowOrgAccessModal(true),
+      current: viewMode === 'polls',
+      disabled: !isEmailVerified
+    },
+    { 
+      name: 'Verify Details', 
+      icon: CheckBadgeIcon, 
+      action: () => navigate('/employee/verify'),
+      current: false
+    }
+  ];
+
   const user = {
-    name: "Anonymous Employee"
+    name: localStorage.getItem('email') || "Anonymous Employee"
   };
+
+  // Filter posts based on selected filters
+  const filteredPosts = useMemo(() => {
+    const filtered = posts
+      .filter(post => post.postType !== 'poll') // Exclude polls
+      .filter(post => {
+        // Filter by post type
+        if (selectedPostType !== 'all' && post.postType !== selectedPostType) {
+          return false;
+        }
+        // Filter by region
+        if (selectedRegion !== 'all' && post.region !== selectedRegion) {
+          return false;
+        }
+        // Filter by department
+        if (selectedDepartment !== 'all' && post.department !== selectedDepartment) {
+          return false;
+        }
+        // Filter by search query
+        if (searchQuery && !post.content.toLowerCase().includes(searchQuery.toLowerCase())) {
+          return false;
+        }
+        return true;
+      });
+
+    // Sort posts: pinned first, then by creation date (newest first)
+    return filtered.sort((a, b) => {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      return new Date(b.createdAt) - new Date(a.createdAt);
+    });
+  }, [posts, selectedPostType, selectedRegion, selectedDepartment, searchQuery]);
+
+  // Pagination logic for posts
+  const totalPages = Math.ceil(filteredPosts.length / POSTS_PER_PAGE);
+  const paginatedPosts = useMemo(() => filteredPosts.slice((currentPage - 1) * POSTS_PER_PAGE, currentPage * POSTS_PER_PAGE), [filteredPosts, currentPage]);
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1); }, [selectedPostType, selectedRegion, selectedDepartment, searchQuery, posts]);
 
   const renderContent = () => {
     switch (viewMode) {
@@ -1416,23 +1018,130 @@ const EmployeeDashboard = () => {
             className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg"
           >
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+              <div className="flex items-center gap-2 mb-2">
+                <h2 className="text-xl font-bold text-gray-900 dark:text-white">Posts</h2>
+                <button
+                  onClick={fetchPosts}
+                  disabled={loading.posts}
+                  className="h-10 min-w-[110px] px-3 flex items-center justify-center rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                >
+                  {loading.posts ? (
+                    <span className="flex items-center"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>Refreshing...</span>
+                  ) : (
+                    <span className="flex items-center"><ArrowPathIcon className="h-5 w-5 mr-2" />Refresh</span>
+                  )}
+                </button>
+              </div>
+              <div className="flex flex-col gap-y-2">
+                {/* Row 1: Search */}
+                <div className="w-full">
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search posts..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full h-11 pl-10 pr-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-lg !bg-white dark:!bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                  </div>
+                </div>
+                {/* Row 2: Type (full width) */}
+                <div className="w-full flex flex-col">
+                  <label htmlFor="type-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Type</label>
+                  <CustomSelect
+                    id="type-select"
+                    className="h-11 w-full"
+                    label=""
+                    value={selectedPostType}
+                    onChange={setSelectedPostType}
+                    options={[
+                      { value: 'all', label: 'All Types' },
+                      { value: 'feedback', label: 'Feedback' },
+                      { value: 'complaint', label: 'Complaint' },
+                      { value: 'suggestion', label: 'Suggestion' },
+                      { value: 'public', label: 'Public' }
+                    ]}
+                    icon={TagIcon}
+                  />
+                </div>
+                {/* Row 3: Region + Department */}
+                <div className="flex flex-col md:flex-row gap-2 md:gap-x-4">
+                  <div className="w-full md:w-1/2 flex flex-col">
+                    <label htmlFor="region-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Region</label>
+                    <CustomSelect
+                      id="region-select"
+                      className="h-11 w-full"
+                      label=""
+                      value={selectedRegion}
+                      onChange={setSelectedRegion}
+                      options={[
+                        { value: 'all', label: 'All Regions' },
+                        ...Array.from(new Set(posts.map(post => post.region).filter(Boolean))).map(region => ({
+                          value: region,
+                          label: region
+                        }))
+                      ]}
+                      icon={MapPinIcon}
+                    />
+                  </div>
+                  <div className="w-full md:w-1/2 flex flex-col">
+                    <label htmlFor="department-select" className="text-xs font-medium text-gray-400 dark:text-slate-400 mb-1">Department</label>
+                    <CustomSelect
+                      id="department-select"
+                      className="h-11 w-full"
+                      label=""
+                      value={selectedDepartment}
+                      onChange={setSelectedDepartment}
+                      options={[
+                        { value: 'all', label: 'All Departments' },
+                        ...Array.from(new Set(posts.map(post => post.department).filter(Boolean))).map(department => ({
+                          value: department,
+                          label: department
+                        }))
+                      ]}
+                      icon={BuildingLibraryIcon}
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            {posts.length === 0 ? (
+            {error && (
+              <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
+                <div className="flex">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-red-400" />
+                  <div className="ml-3">
+                    <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            {loading.posts ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                <span className="ml-3 text-gray-600 dark:text-slate-300">Loading posts...</span>
+              </div>
+            ) : filteredPosts.length === 0 ? (
               <p className="text-gray-600 dark:text-slate-300">No posts found.</p>
             ) : (
               <div className="space-y-4">
-                {posts.map((post, i) => (
+                {paginatedPosts.map((post) => (
                   <motion.div
                     key={post._id}
                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.03 }}
+                    transition={{ delay: 0.03 }}
                   >
                     <div className="flex justify-between items-start mb-1 sm:mb-2">
                       <div className="flex items-center gap-2">
-                        <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
+                        {/* Pinned tag */}
+                        {post.isPinned && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mr-2">
+                            <PaperClipIcon className="h-4 w-4 mr-1 text-yellow-500" /> Pinned
+                          </span>
+                        )}
+                        <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium tracking-wide ${
                           post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
                           post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
                           post.postType === 'suggestion' ? 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-300' :
@@ -1457,18 +1166,32 @@ const EmployeeDashboard = () => {
                           })}
                         </div>
                       </div>
-                      {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handlePostDelete(post._id);
-                          }}
-                          className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
-                          title="Delete Post"
-                        >
-                          <TrashIcon className="h-4 w-4" />
-                        </button>
-                      )}
+                      <div className="flex space-x-1">
+                        {post.author && (post.author._id === localStorage.getItem('userId') || post.author.id === localStorage.getItem('userId')) && (
+                          <>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePostEdit(post);
+                              }}
+                              className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                              title="Edit Post"
+                            >
+                              <PencilSquareIcon className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handlePostDelete(post._id);
+                              }}
+                              className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20"
+                              title="Delete Post"
+                            >
+                              <TrashIcon className="h-4 w-4" />
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
                       {post.content}
@@ -1559,7 +1282,7 @@ const EmployeeDashboard = () => {
                         </span>
                       )}
                       <span className="text-gray-400 dark:text-slate-500">|</span>
-                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}</span>
+                      <span className="text-gray-600 dark:text-slate-300">{new Date(post.createdAt).toLocaleString()}{isPostEdited(post) && ' (edited)'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
                       <span className="block sm:inline mt-1 sm:mt-0 text-gray-600 dark:text-slate-300">Region: {post.region || 'N/A'}</span>
                       <span className="hidden sm:inline text-gray-400 dark:text-slate-500">|</span>
@@ -1567,26 +1290,87 @@ const EmployeeDashboard = () => {
                     </div>
                     {post.reactions && Object.entries(post.reactions).length > 0 && (
                       <div className="flex flex-wrap gap-2 mt-3">
-                        {Object.entries(post.reactions).map(([type, {count}]) => (
-                          <ReactionButton
-                            key={type}
-                            type={type}
-                            count={count || 0}
-                            postId={post._id}
-                          />
-                        ))}
+                        {Object.entries(post.reactions).map(([type, reactionData]) => {
+                          // Get the current user's reaction status
+                          const currentUserId = localStorage.getItem('userId');
+                          const hasReacted = reactionData.users && reactionData.users.includes(currentUserId);
+                          
+                          return (
+                            <ReactionButton
+                              key={type}
+                              type={type}
+                              count={reactionData.count || 0}
+                              postId={post._id}
+                              onReactionUpdate={(reactionData) => {
+                                // Update the post's reactions locally with single selection behavior
+                                setPosts(prevPosts => 
+                                  prevPosts.map(p => {
+                                    if (p._id === post._id) {
+                                      // Create a new reactions object with all reaction types
+                                      const updatedReactions = {};
+                                      Object.keys(p.reactions || {}).forEach(reactionType => {
+                                        if (reactionType === reactionData.type) {
+                                          // Update the clicked reaction type
+                                          updatedReactions[reactionType] = {
+                                            count: reactionData.count || 0,
+                                            users: reactionData.isReacted 
+                                              ? [...(p.reactions[reactionType]?.users || []), currentUserId].filter((v, i, a) => a.indexOf(v) === i)
+                                              : (p.reactions[reactionType]?.users || []).filter(id => id !== currentUserId)
+                                          };
+                                        } else {
+                                          // For other reaction types, remove current user if they were added
+                                          const filteredUsers = (p.reactions[reactionType]?.users || []).filter(id => id !== currentUserId);
+                                          updatedReactions[reactionType] = {
+                                            count: filteredUsers.length,
+                                            users: filteredUsers
+                                          };
+                                        }
+                                      });
+                                      
+                                      return {
+                                        ...p,
+                                        reactions: updatedReactions
+                                      };
+                                    }
+                                    return p;
+                                  })
+                                );
+                              }}
+                            />
+                          );
+                        })}
                       </div>
                     )}
                     <div className="mt-3">
                       <CommentSection 
                         postId={post._id} 
                         comments={post.comments || []} 
-                        onCommentAdded={(updatedComments) => {
-                          // Update the posts state with the new comments
+                        onCommentAdded={(newComment) => {
+                          // Update the posts state with the new comment
+                          console.log('EmployeeDashboard: onCommentAdded called with:', newComment);
                           setPosts(prevPosts => 
                             prevPosts.map(p => 
                               p._id === post._id 
-                                ? { ...p, comments: updatedComments } 
+                                ? { 
+                                    ...p, 
+                                    comments: [newComment, ...(p.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                                    commentCount: (p.commentCount || 0) + 1
+                                  } 
+                                : p
+                            )
+                          );
+                        }}
+                        onCommentDeleted={(deletedComment) => {
+                          // Update the posts state to remove the deleted comment
+                          console.log('EmployeeDashboard: onCommentDeleted called with:', deletedComment);
+                          setPosts(prevPosts => 
+                            prevPosts.map(p => 
+                              p._id === post._id 
+                                ? { 
+                                    ...p, 
+                                    comments: (p.comments || []).filter(c => c._id !== deletedComment._id),
+                                    commentCount: Math.max(0, (p.commentCount || 0) - 1)
+                                  } 
                                 : p
                             )
                           );
@@ -1595,9 +1379,40 @@ const EmployeeDashboard = () => {
                     </div>
                   </motion.div>
                 ))}
+                {/* Pagination controls for posts */}
+                <div className="flex justify-center items-center gap-2 mt-6">
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                  >
+                    &lt;
+                  </button>
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((page) => (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`px-3 py-1 rounded ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200'} font-medium mx-0.5`}
+                    >
+                      {page}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                  >
+                    &gt;
+                  </button>
+                </div>
               </div>
             )}
           </motion.div>
+        );
+
+      case 'polls':
+        return (
+          <Polling userRole="employee" orgId={organizationId} onBack={() => setViewMode('dashboard')} />
         );
 
       default:
@@ -1610,11 +1425,17 @@ const EmployeeDashboard = () => {
               className="mb-8"
             >
               <h2 className="text-2xl md:text-3xl font-bold text-gray-800 dark:text-slate-100">
-                Welcome, {user.name} 👋
+                Welcome to VoiceBox 👋
               </h2>
               <p className="text-gray-600 dark:text-slate-400 mt-1">
                 Here are your available actions. Your contributions are valued.
               </p>
+              <div className="mt-2 flex items-center text-sm text-gray-600 dark:text-slate-400">
+                <span className="font-medium">Current Organization:</span>
+                <span className="ml-2 px-2.5 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-200">
+                  {organizationName || 'Loading...'}
+                </span>
+              </div>
             </motion.div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8">
               {actions.map((action) => (
@@ -1650,6 +1471,11 @@ const EmployeeDashboard = () => {
 
   return (
     <div className={`flex h-screen ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`} itemScope itemType="http://schema.org/WebApplication">
+      {/* Organization Access Modal */}
+      <OrgAccessModal 
+        isOpen={showOrgAccessModal} 
+        onClose={() => setShowOrgAccessModal(false)} 
+      />
       {/* SEO Meta Tags */}
       <Helmet>
         <title>Employee Dashboard | VoiceBox</title>
@@ -1666,116 +1492,39 @@ const EmployeeDashboard = () => {
           {JSON.stringify(structuredData)}
         </script>
       </Helmet>
-      {/* Mobile sidebar overlay */}
-      <AnimatePresence>
-        {isMobileSidebarOpen && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/50 z-40 md:hidden"
-            onClick={() => setIsMobileSidebarOpen(false)}
-          />
-        )}
-      </AnimatePresence>
-
-      {/* Mobile sidebar */}
-      <AnimatePresence>
-        {isMobileSidebarOpen && (
-          <motion.aside
-            initial={{ x: '-100%' }}
-            animate={{ x: 0 }}
-            exit={{ x: '-100%' }}
-            transition={{ type: 'tween', duration: 0.2 }}
-            className="fixed inset-y-0 left-0 w-64 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex flex-col z-50 md:hidden"
-          >
-            <div className="p-4 border-b border-gray-200 dark:border-slate-700 flex justify-between items-center">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
-                  <BuildingOfficeIcon className="h-6 w-6" />
+      {/* Sidebar */}
+      <Sidebar
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+        sidebarNavItems={navItems}
+        logo={BuildingOfficeIcon}
+        title="VoiceBox"
+        userEmail={localStorage.getItem('email')}
+        theme={theme}
+        toggleTheme={toggleTheme}
+        onLogout={() => {
+          localStorage.clear();
+          navigate('/signin');
+        }}
+        viewMode={viewMode}
+        isAdmin={false}
+        additionalHeaderContent={!isEmailVerified ? (
+          <div className="fixed top-14 left-0 right-0 z-20">
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border-l-4 border-yellow-400 p-4">
+              <div className="flex">
+                <div className="flex-shrink-0">
+                  <ExclamationTriangleIcon className="h-5 w-5 text-yellow-400" aria-hidden="true" />
                 </div>
-                <span className="font-semibold text-gray-800 dark:text-white">VoiceBox</span>
-              </div>
-              <button
-                onClick={() => setIsMobileSidebarOpen(false)}
-                className="p-1 rounded-full text-gray-500 hover:bg-gray-100 dark:text-slate-400 dark:hover:bg-slate-700"
-              >
-                <XMarkIcon className="h-6 w-6" />
-              </button>
-            </div>
-            <nav className="flex-1 overflow-y-auto py-4 px-2">
-              <div className="space-y-1">
-                {actions.map((action) => (
-                  <button
-                    key={action.title}
-                    onClick={() => {
-                      action.onClick();
-                      setIsMobileSidebarOpen(false);
-                    }}
-                    className="w-full flex items-center px-4 py-3 text-sm font-medium rounded-lg text-gray-700 dark:text-slate-200 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-                  >
-                    <action.icon className="h-5 w-5 mr-3" />
-                    {action.title}
-                  </button>
-                ))}
-              </div>
-            </nav>
-            <div className="p-4 border-t border-gray-200 dark:border-slate-700">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center">
-                  <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500 mr-2" />
-                  <span className="text-sm font-medium text-gray-700 dark:text-slate-300">
-                    {user.name}
-                  </span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                  <button
-                    onClick={() => {
-                      handleLogout();
-                      setIsMobileSidebarOpen(false);
-                    }}
-                    className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-                    title="Logout"
-                  >
-                    <ArrowLeftOnRectangleIcon className="h-5 w-5" />
-                  </button>
+                <div className="ml-3">
+                  <p className="text-sm text-yellow-700 dark:text-yellow-300">
+                    {organizationName}
+                  </p>
                 </div>
               </div>
             </div>
-          </motion.aside>
-        )}
-      </AnimatePresence>
-
-      {/* Desktop sidebar */}
-      <aside className="hidden md:flex w-20 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-6 flex-shrink-0 shadow-sm">
-        <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white">
-          <BuildingOfficeIcon className="h-7 w-7 md:h-8" />
-        </div>
-        <nav className="flex flex-col space-y-5 items-center">
-          {actions.slice(0, 2).map(action => (
-            <button
-              key={action.title}
-              onClick={action.onClick}
-              title={action.title}
-              className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-            >
-              <action.icon className="h-6 w-6" />
-            </button>
-          ))}
-        </nav>
-        <div className="mt-auto flex flex-col items-center space-y-5">
-          <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-          <button
-            onClick={handleLogout}
-            title="Logout"
-            className="p-2 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors"
-          >
-            <ArrowLeftOnRectangleIcon className="h-6 w-6" />
-          </button>
-        </div>
-      </aside>
+          </div>
+        ) : null}
+      />
 
       <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
         <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-6 shadow-sm z-10 flex-shrink-0">
@@ -1785,6 +1534,7 @@ const EmployeeDashboard = () => {
               type="button"
               className="mr-2 p-2 rounded-md text-gray-500 hover:bg-gray-100 dark:hover:bg-slate-700 md:hidden"
               onClick={() => setIsMobileSidebarOpen(!isMobileSidebarOpen)}
+              aria-label="Toggle menu"
             >
               <Bars3Icon className="h-6 w-6" aria-hidden="true" />
             </button>
@@ -1807,8 +1557,8 @@ const EmployeeDashboard = () => {
           <div className="flex items-center space-x-4">
             <div className="flex items-center space-x-2">
               <UserCircleIcon className="h-8 w-8 text-gray-400 dark:text-slate-500" />
-              <span className="text-sm font-medium text-gray-700 dark:text-slate-300 hidden sm:block">
-                {user.name}
+              <span className="text-sm font-medium text-gray-700 dark:text-slate-300 truncate max-w-[200px]" title={localStorage.getItem('email') || ''}>
+                {localStorage.getItem('email') || ''}
               </span>
             </div>
           </div>
@@ -1837,6 +1587,17 @@ const EmployeeDashboard = () => {
         isDeleting={isDeletingPost}
         onConfirm={confirmDeletePost}
         confirmButtonText={isDeletingPost ? 'Deleting...' : 'Delete'}
+      />
+
+      {/* Post Edit Modal */}
+      <PostEditModal
+        isOpen={showEditPostModal}
+        onClose={() => {
+          setShowEditPostModal(false);
+          setPostToEdit(null);
+        }}
+        post={postToEdit}
+        onPostUpdated={handlePostUpdated}
       />
     </div>
   );

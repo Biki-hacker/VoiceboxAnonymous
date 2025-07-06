@@ -22,6 +22,7 @@ const PostCreation = ({
   const [message, setMessage] = useState(initialMessage);
   const [mediaUrls, setMediaUrls] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
   const [postType, setPostType] = useState(initialPostType);
   const [region, setRegion] = useState(initialRegion);
@@ -78,6 +79,7 @@ const PostCreation = ({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setIsLoading(true);
     
     if (!message.trim() && mediaUrls.length === 0) {
       setError('Please enter a message or attach a file');
@@ -110,6 +112,7 @@ const PostCreation = ({
         // Only reset the form if the onSend was successful
         setMessage('');
         setMediaUrls([]);
+        setIsLoading(false);
       }
     } catch (err) {
       console.error('Error in form submission:', err);
@@ -128,7 +131,7 @@ const PostCreation = ({
       <form onSubmit={handleSubmit} className="p-4">
         {/* Post Type Tabs */}
         <div className="mb-4">
-          <div className="flex space-x-1 p-1 bg-gray-100 dark:bg-slate-700 rounded-lg">
+          <div className="flex flex-wrap gap-1 p-1 bg-gray-100 dark:bg-slate-700 rounded-lg">
             {postTypes.map((type) => (
               <button
                 key={type}
@@ -137,7 +140,7 @@ const PostCreation = ({
                   setPostType(type);
                   onPostTypeChange(type);
                 }}
-                className={`flex-1 py-2 px-3 text-sm font-medium rounded-md transition-colors ${
+                className={`flex-1 min-w-[calc(50%-0.25rem)] py-2 px-3 text-sm font-medium rounded-md transition-colors ${
                   postType === type
                     ? 'bg-white dark:bg-slate-800 shadow text-blue-600 dark:text-blue-400'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-white/50 dark:hover:bg-slate-600/50'
@@ -258,7 +261,7 @@ const PostCreation = ({
           )}
           <button
             type="submit"
-            disabled={isUploading || (!message.trim() && mediaUrls.length === 0)}
+            disabled={isLoading || isUploading || (!message.trim() && mediaUrls.length === 0)} // Disabled during loading, upload, or empty content
             className={`inline-flex items-center justify-center px-4 py-2.5 sm:py-2 border border-transparent text-sm sm:text-base font-medium rounded-lg sm:rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors ${buttonClassName}`}
           >
             {isUploading ? (

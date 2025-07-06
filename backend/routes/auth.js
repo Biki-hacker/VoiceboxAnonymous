@@ -7,34 +7,75 @@ const auth = require('../middleware/auth');
 // Register new user
 router.post('/register', async (req, res) => {
   try {
-    const { email, password, role, organizationId } = req.body;
+    const { email, password, role, organizationId, isOAuth } = req.body;
 
     // Check if user already exists
     const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
+      return res.status(400).json({ 
+        success: false,
+        error: 'Email already registered',
+        code: 'EMAIL_EXISTS'
+      });
+    }
+
+    // For OAuth users, we don't need a password
+    const userData = {
+      email,
+      role,
+      organizationId,
+      isOAuth: !!isOAuth
+    };
+
+    // Only include password if provided (for non-OAuth users)
+    if (password) {
+      userData.password = password;
     }
 
     // Create new user
-    const user = new User({
-      email,
-      password,
-      role,
-      organizationId
-    });
-
+    const user = new User(userData);
     await user.save();
 
     // Generate token
     const token = jwt.sign(
-      { userId: user._id },
+      { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
-    res.status(201).json({ user, token });
+    // Set refresh token as HTTP-only cookie
+    const refreshToken = jwt.sign(
+      { userId: user._id },
+      process.env.REFRESH_TOKEN_SECRET || process.env.JWT_SECRET + '_refresh',
+      { expiresIn: '7d' }
+    );
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
+
+    res.status(201).json({ 
+      success: true,
+      user: {
+        id: user._id,
+        email: user.email,
+        role: user.role,
+        organizationId: user.organizationId,
+        isOAuth: user.isOAuth,
+        verified: user.verified
+      }, 
+      token 
+    });
   } catch (error) {
-    res.status(400).json({ error: error.message });
+    console.error('Registration error:', error);
+    res.status(400).json({ 
+      success: false,
+      error: error.message,
+      code: 'REGISTRATION_ERROR'
+    });
   }
 });
 
@@ -100,10 +141,28 @@ router.post('/login', async (req, res) => {
 
       // Check if user exists in our database
       console.log('Looking up local user:', email);
-      const localUser = await User.findOne({ email });
+      let localUser = await User.findOne({ email });
       
-      if (!localUser) {
-        console.error('Local user not found:', email);
+      // If user doesn't exist and this is an OAuth login, create the user
+      if (!localUser && req.body.isOAuth) {
+        console.log('Creating new OAuth user:', email);
+        
+        // Get role from the request or default to 'employee'
+        const role = req.body.role || 'employee';
+        
+        // Create new user without a password
+        localUser = new User({
+          email,
+          role,
+          isOAuth: true,
+          verified: true // Mark OAuth users as verified by default
+        });
+        
+        await localUser.save();
+        console.log('Created new OAuth user:', localUser);
+      } else if (!localUser) {
+        // If user doesn't exist and this is not an OAuth login
+        console.error('Local user not found and not an OAuth login:', email);
         return res.status(404).json({ 
           success: false,
           error: 'User not found. Please register first.',

@@ -1,127 +1,58 @@
 // src/pages/AdminDashboard.jsx
-import React, { useEffect, useState, useMemo, useCallback, Fragment, useRef } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { Helmet } from 'react-helmet';
-import { api } from '../api/axios'; // This is the axios instance with auth interceptor
+import { api } from '../utils/axios';
 import { supabase } from '../supabaseClient';
+import Sidebar from '../components/Sidebar';
 import { Bar, Pie } from 'react-chartjs-2';
 import {
     Chart as ChartJS, ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend
 } from 'chart.js';
 import { uploadMedia } from '../utils/uploadMedia';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Listbox, Transition, Dialog } from '@headlessui/react';
 import {
-    BuildingOffice2Icon, ChartBarIcon, CreditCardIcon, DocumentTextIcon, PlusIcon, ArrowLeftOnRectangleIcon,
-    UserCircleIcon, UserGroupIcon, ChevronDownIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
-    TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon, XMarkIcon,
-    CheckCircleIcon, ExclamationTriangleIcon, SunIcon, MoonIcon, CheckIcon, ChevronUpDownIcon,
-    LockClosedIcon, IdentificationIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
-    HandThumbUpIcon, HeartIcon, XCircleIcon,
-    FaceSmileIcon as EmojiHappyIcon
+    BuildingOffice2Icon, CreditCardIcon, PlusIcon, ArrowLeftOnRectangleIcon, ArrowUpTrayIcon,
+    UserCircleIcon, UserGroupIcon, ChevronRightIcon, PencilSquareIcon, TrashIcon, MagnifyingGlassIcon,
+    TagIcon, MapPinIcon, BuildingLibraryIcon, NoSymbolIcon, ExclamationCircleIcon,
+    ExclamationTriangleIcon, Cog8ToothIcon, Bars3Icon, FolderOpenIcon, ArrowsPointingOutIcon,
+    ClipboardDocumentIcon, PaperClipIcon,
+    ArrowPathIcon, ChartBarIcon
 } from '@heroicons/react/24/outline';
 import PostCreation from '../components/PostCreation';
 import DeletionConfirmation from '../components/DeletionConfirmation';
+import PostEditModal from '../components/PostEditModal';
+import Polling from '../components/Polling';
+
+// Import common components and hooks
+import useTheme from '../hooks/useTheme';
+import useWebSocket from '../hooks/useWebSocket';
+import Modal from '../components/common/Modal';
+import CustomSelect from '../components/common/CustomSelect';
+import CommentSection from '../components/common/CommentSection';
+import ReactionButton from '../components/common/ReactionButton';
 
 // Register Chart.js components
 ChartJS.register(ArcElement, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
-// --- Theme Hook ---
-const useTheme = () => {
-    const [theme, setThemeState] = useState(() => {
-        const savedTheme = localStorage.getItem('theme');
-        if (savedTheme) return savedTheme;
-        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-            return 'dark';
-        }
-        return 'light'; // Default light
-    });
-
-    useEffect(() => {
-        const root = window.document.documentElement;
-        if (theme === 'dark') { root.classList.add('dark'); }
-        else { root.classList.remove('dark'); }
-        localStorage.setItem('theme', theme);
-    }, [theme]);
-
-    const setTheme = (newTheme) => { if (newTheme === 'light' || newTheme === 'dark') setThemeState(newTheme); };
-    const toggleTheme = () => { setTheme(theme === 'light' ? 'dark' : 'light'); };
-    return [theme, toggleTheme, setTheme]; // Expose setTheme for direct setting if needed
-};
-
-
-// --- Reusable Modal Component ---
-const Modal = ({ isOpen, onClose, title, children, size = "max-w-md" }) => {
-    if (!isOpen) return null;
-    return (
-        <Transition.Root show={isOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-50" onClose={onClose}>
-                <Transition.Child
-                    as={Fragment}
-                    enter="ease-out duration-300" enterFrom="opacity-0" enterTo="opacity-100"
-                    leave="ease-in duration-200" leaveFrom="opacity-100" leaveTo="opacity-0"
-                >
-                    <div className="fixed inset-0 bg-black/60 dark:bg-black/75 backdrop-blur-sm transition-opacity" />
-                </Transition.Child>
-                <div className="fixed inset-0 z-10 overflow-y-auto">
-                    <div className="flex min-h-full items-center justify-center p-4 text-center sm:items-center">
-                        <Transition.Child
-                            as={Fragment}
-                            enter="ease-out duration-300" enterFrom="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95" enterTo="opacity-100 translate-y-0 sm:scale-100"
-                            leave="ease-in duration-200" leaveFrom="opacity-100 translate-y-0 sm:scale-100" leaveTo="opacity-0 translate-y-4 sm:translate-y-0 sm:scale-95"
-                        >
-                            <Dialog.Panel className={`relative transform overflow-hidden rounded-xl bg-white dark:bg-slate-800 text-left shadow-2xl transition-all sm:my-8 w-full ${size}`}>
-                                <div className="flex justify-between items-center p-5 border-b border-gray-200 dark:border-slate-700">
-                                    <Dialog.Title as="h3" className="text-lg font-semibold text-gray-900 dark:text-slate-100">{title}</Dialog.Title>
-                                    <button onClick={onClose} className="text-gray-400 dark:text-slate-400 hover:text-gray-600 dark:hover:text-slate-200 transition-colors p-1 rounded-full hover:bg-gray-100 dark:hover:bg-slate-700" aria-label="Close modal"><XMarkIcon className="h-6 w-6" /></button>
-                                </div>
-                                <div className="p-6 max-h-[70vh] overflow-y-auto custom-scrollbar">{children}</div>
-                            </Dialog.Panel>
-                        </Transition.Child>
-                    </div>
-                </div>
-            </Dialog>
-        </Transition.Root>
-    );
-};
-
 // --- Helper Components ---
 const NothingToShow = ({ message = "Nothing to show" }) => (
-    <div className="text-center py-8 px-4 bg-gray-50 dark:bg-slate-800/50 rounded-lg my-4 border border-gray-200 dark:border-slate-700"> <NoSymbolIcon className="h-10 w-10 text-gray-400 dark:text-slate-500 mx-auto mb-3" /> <p className="text-sm text-gray-500 dark:text-slate-400">{message}</p> </div>
+    <div className="text-center py-8 px-4 bg-gray-50 dark:bg-slate-800/50 rounded-lg my-4 border border-gray-200 dark:border-slate-700"> 
+        <NoSymbolIcon className="h-10 w-10 text-gray-400 dark:text-slate-500 mx-auto mb-3" /> 
+        <p className="text-sm text-gray-500 dark:text-slate-400">{message}</p> 
+    </div>
 );
+
 const DashboardCard = ({ children, className = "" }) => (
-    <motion.div initial={{ opacity: 0, y: 15 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden ${className}`}> {children} </motion.div>
-);
-const CustomSelect = ({ value, onChange, options, label, icon: Icon, disabled = false }) => {
-    const selectedOption = options.find(opt => opt.value === value) || (options.length > 0 ? options[0] : {label: 'Select', value: ''});
-    return (
-      <Listbox value={value} onChange={onChange} disabled={disabled}>
-        {({ open }) => (
-          <div className="relative w-full sm:w-40">
-            <Listbox.Label className="flex items-center text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">
-              {Icon && <Icon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500" />}
-              {label}
-            </Listbox.Label>
-            <Listbox.Button className={`relative w-full cursor-default rounded-md py-3 pl-3 pr-10 text-left text-sm bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition duration-150 ease-in-out ${disabled ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <span className="block truncate text-gray-900 dark:text-slate-100">{selectedOption.label || 'Select'}</span>
-              <span className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2"><ChevronUpDownIcon className="h-5 w-5 text-gray-400 dark:text-slate-400" aria-hidden="true" /></span>
-            </Listbox.Button>
-            <Transition show={open} as={Fragment} leave="transition ease-in duration-100" leaveFrom="opacity-100" leaveTo="opacity-0">
-              <Listbox.Options className="absolute z-20 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white dark:bg-slate-700 py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm custom-scrollbar">
-                {options.map((option) => (
-                  <Listbox.Option key={option.value} className={({ active }) => `relative cursor-default select-none py-2 pl-10 pr-4 ${active ? 'bg-blue-100 dark:bg-blue-900 text-blue-900 dark:text-blue-100' : 'text-gray-900 dark:text-slate-100'}`} value={option.value}>
-                    {({ selected }) => (<><span className={`block truncate ${selected ? 'font-semibold' : 'font-normal'}`}>{option.label}</span>{selected && (<span className="absolute inset-y-0 left-0 flex items-center pl-3 text-blue-600 dark:text-blue-400"><CheckIcon className="h-5 w-5" aria-hidden="true" /></span>)}</>)}
-                  </Listbox.Option>
-                ))}
-              </Listbox.Options>
-            </Transition>
-          </div>
-        )}
-      </Listbox>
-    );
-  };
-const ThemeToggle = ({ theme, toggleTheme }) => (
-    <button onClick={toggleTheme} className="relative inline-flex items-center justify-center w-10 h-10 rounded-full text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 dark:focus:ring-offset-slate-900 transition-all duration-200" aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}> <AnimatePresence initial={false} mode="wait"> <motion.div key={theme === 'dark' ? 'moon' : 'sun'} initial={{ y: -20, opacity: 0, rotate: -90 }} animate={{ y: 0, opacity: 1, rotate: 0 }} exit={{ y: 20, opacity: 0, rotate: 90 }} transition={{ duration: 0.2 }}> {theme === 'dark' ? ( <SunIcon className="h-6 w-6 text-yellow-400" /> ) : ( <MoonIcon className="h-6 w-6 text-blue-500" /> )} </motion.div> </AnimatePresence> </button>
+    <motion.div 
+        initial={{ opacity: 0, y: 15 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ duration: 0.3, ease: "easeOut" }} 
+        className={`bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-sm overflow-hidden ${className}`}
+    > 
+        {children} 
+    </motion.div>
 );
 
 // --- Main Dashboard Component ---
@@ -148,9 +79,11 @@ const AdminDashboard = () => {
     const [selectedType, setSelectedType] = useState('all');
     const [selectedRegion, setSelectedRegion] = useState('all');
     const [selectedDepartment, setSelectedDepartment] = useState('all');
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState({ orgList: true, orgDetails: false, modal: false, deleteOrg: {} });
     const [error, setError] = useState({ page: null, modal: null });
     const navigate = useNavigate();
+    const { user, logout, authToken } = useAuth();
     const [userData, setUserData] = useState(null);
     const [isAddOrgModalOpen, setIsAddOrgModalOpen] = useState(false);
     const [isEditParamsModalOpen, setIsEditParamsModalOpen] = useState(false);
@@ -183,11 +116,289 @@ const AdminDashboard = () => {
     const [showDeletePostDialog, setShowDeletePostDialog] = useState(false);
     const [postToDelete, setPostToDelete] = useState(null);
     const [isDeletingPost, setIsDeletingPost] = useState(false);
-    const ws = useRef(null); // WebSocket reference
+    const [deletingComment, setDeletingComment] = useState(null);
+    // Post editing state
+    const [showEditPostModal, setShowEditPostModal] = useState(false);
+    const [postToEdit, setPostToEdit] = useState(null);
+    const [pinningPost, setPinningPost] = useState(null); // Track which post is being pinned/unpinned
     const selectedOrgRef = useRef(selectedOrg); // Ref for current selectedOrg
     const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:5000'; // WebSocket URL
+    
+    // --- Add media error handling state ---
+    const [mediaErrors, setMediaErrors] = useState({});
+    
+    // Helper functions for post permissions
+    const isCurrentUserPost = (post) => {
+        if (!post) return false;
+        const currentUserId = localStorage.getItem('userId');
+        // Handle both cases: author as string ID or author as object with _id
+        const authorId = typeof post.author === 'string' ? post.author : post.author?._id;
+        return currentUserId && authorId === currentUserId;
+    };
+
+    const canEditPost = (post) => {
+        return isCurrentUserPost(post);
+    };
+
+    const canDeletePost = (post) => {
+        if (!post) return false;
+        const currentUserId = localStorage.getItem('userId');
+        const userRole = localStorage.getItem('role');
+        // Handle both cases: author as string ID or author as object with _id
+        const authorId = typeof post.author === 'string' ? post.author : post.author?._id;
+        return currentUserId && (authorId === currentUserId || userRole === 'admin');
+    };
+
+    // Helper function to deduplicate comments by ID
+    const deduplicateComments = (comments) => {
+        if (!Array.isArray(comments)) return [];
+        const seen = new Set();
+        return comments.filter(comment => {
+            if (!comment || !comment._id) return false;
+            if (seen.has(comment._id)) return false;
+            seen.add(comment._id);
+            return true;
+        });
+    };
+
+    // Helper function to check if post has been edited (excluding pinning)
+    const isPostEdited = (post) => {
+        // Only show edited if updatedAt is different from createdAt AND it's not just a pinning change
+        if (post.updatedAt === post.createdAt) {
+            return false;
+        }
+        
+        // If the post has been pinned/unpinned but the content hasn't changed, don't show as edited
+        // We can't easily detect this on the frontend, so we'll use a different approach
+        // For now, we'll show edited only if there's a significant time difference (more than 1 minute)
+        const timeDiff = new Date(post.updatedAt) - new Date(post.createdAt);
+        return timeDiff > 60000; // More than 1 minute difference
+    };
+
+    // WebSocket message handler
+    const handleWebSocketMessage = useCallback((message) => {
+        console.log('AdminDashboard: WebSocket message received:', message);
+        const currentSelectedOrgId = selectedOrgRef.current?._id;
+        
+        if (!currentSelectedOrgId) {
+            console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
+            return;
+        }
+
+        try {
+            const parsedMessage = typeof message === 'string' ? JSON.parse(message) : message;
+            
+            switch (parsedMessage.type) {
+                case 'POST_CREATED': {
+                    // Support both formats: payload.post or payload directly
+                    const postObj = parsedMessage.payload.post || parsedMessage.payload;
+                    if (
+                        parsedMessage.payload.organization === currentSelectedOrgId &&
+                        postObj?._id
+                    ) {
+                        setPosts(prev => [postObj, ...prev]);
+                    }
+                    break;
+                }
+                case 'POST_UPDATED': {
+                    // Support both formats: payload.post or payload directly
+                    const postObj = parsedMessage.payload.post || parsedMessage.payload;
+                    if (
+                        parsedMessage.payload.organization === currentSelectedOrgId &&
+                        postObj?._id
+                    ) {
+                        setPosts(prev =>
+                            prev.map(p =>
+                                p?._id === postObj._id
+                                    ? {
+                                        ...postObj,
+                                        comments: deduplicateComments(p.comments || [])
+                                    }
+                                    : p
+                            ).filter(Boolean)
+                        );
+                    }
+                    break;
+                }
+                case 'POST_DELETED':
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId) {
+                        setPosts(prev => prev.filter(p => p?._id !== parsedMessage.payload.postId));
+                    }
+                    break;
+                case 'COMMENT_CREATED':
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p?._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: deduplicateComments([...(p.comments || []), parsedMessage.payload.comment])
+                                    } 
+                                    : p
+                            ).filter(Boolean) // Remove any undefined posts
+                        );
+                    }
+                    break;
+                case 'COMMENT_UPDATED':
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.comment?._id) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p?._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: p.comments?.map(c => {
+                                            if (c?._id === parsedMessage.payload.comment._id) {
+                                                // Only update if the comment text is different or if we're updating other fields
+                                                const currentText = typeof c.text === 'string' ? c.text : (c.content || '');
+                                                const newText = typeof parsedMessage.payload.comment.text === 'string' 
+                                                    ? parsedMessage.payload.comment.text 
+                                                    : (parsedMessage.payload.comment.content || '');
+                                                
+                                                // If the text is the same, don't update to prevent duplicates
+                                                if (currentText === newText && !parsedMessage.payload.comment.updatedAt) {
+                                                    return c;
+                                                }
+                                                
+                                                return parsedMessage.payload.comment;
+                                            }
+                                            return c;
+                                        }).filter(Boolean) || []
+                                    } 
+                                    : p
+                            ).filter(Boolean) // Remove any undefined posts
+                        );
+                    }
+                    break;
+                case 'COMMENT_DELETED':
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId && parsedMessage.payload?.postId && parsedMessage.payload?.commentId) {
+                        setPosts(prev => 
+                            prev.map(p => 
+                                p?._id === parsedMessage.payload.postId 
+                                    ? { 
+                                        ...p,
+                                        comments: p.comments?.filter(c => c?._id !== parsedMessage.payload.commentId) || []
+                                    } 
+                                    : p
+                            ).filter(Boolean) // Remove any undefined posts
+                        );
+                    }
+                    break;
+                case 'REACTION_UPDATED':
+                    if (parsedMessage.payload?.organizationId === currentSelectedOrgId) {
+                        const { entityType, entityId, postId, reactionsSummary } = parsedMessage.payload;
+                        
+                        if (postId && reactionsSummary) {
+                            setPosts(prev => 
+                                prev.map(post => {
+                                    if (post?._id !== postId) return post;
+                                    
+                                    if (entityType === 'post') {
+                                        return {
+                                            ...post,
+                                            reactions: reactionsSummary
+                                        };
+                                    } else if (entityType === 'comment' && entityId) {
+                                        // Handle comment reactions
+                                        return {
+                                            ...post,
+                                            comments: post.comments?.map(comment => 
+                                                comment?._id === entityId 
+                                                    ? { ...comment, reactions: reactionsSummary }
+                                                    : comment
+                                            ).filter(Boolean) || []
+                                        };
+                                    }
+                                    return post;
+                                }).filter(Boolean) // Remove any undefined posts
+                            );
+                        }
+                    }
+                    break;
+                default:
+                    console.log('AdminDashboard: Unhandled WebSocket message type:', parsedMessage.type);
+            }
+        } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+        }
+    }, [setPosts, posts]);
+
+    // Initialize WebSocket connection using the shared hook
+    const { sendMessage } = useWebSocket(
+        WS_URL,
+        handleWebSocketMessage,
+        () => {
+            console.log('WebSocket connected');
+            // Send authentication message if we have the required data
+            if (authToken && selectedOrg?._id) {
+                return {
+                    type: 'AUTH',
+                    token: authToken,
+                    organizationId: selectedOrg._id,
+                    role: 'admin'
+                };
+            }
+            return null;
+        },
+        (error) => {
+            console.error('WebSocket error:', error);
+        },
+        [authToken, selectedOrg?._id]
+    );
+
+    // Update selectedOrgRef when selectedOrg changes
+    useEffect(() => {
+        selectedOrgRef.current = selectedOrg;
+        
+        // Re-authenticate with WebSocket if organization changes
+        if (authToken && selectedOrg?._id) {
+            sendMessage({
+                type: 'AUTH',
+                token: authToken,
+                organizationId: selectedOrg._id,
+                role: 'admin'
+            });
+        }
+    }, [selectedOrg, authToken, sendMessage]);
 
     // --- Post Deletion Handlers ---
+    const handleDeletePost = async (postId) => {
+        if (!selectedOrg || !postId) return;
+        let isMounted = true;
+        try {
+            const storedToken = localStorage.getItem('token');
+            if (!storedToken) {
+                throw new Error('No authentication token found');
+            }
+            const response = await api.delete(`/posts/${postId}`, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${storedToken}`
+                },
+                data: { organizationId: selectedOrg._id }
+            });
+            if (isMounted) {
+                setPosts(prev => prev.filter(p => p._id !== postId));
+                setShowDeletePostDialog(false);
+                setPostToDelete(null);
+                setPostSuccess('Post deleted successfully');
+                setTimeout(() => setPostSuccess(''), 3000);
+            }
+            if (selectedOrg?._id) {
+                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
+                if (isMounted) setStats(statsRes.data);
+            }
+            return response;
+        } catch (error) {
+            console.error('Error deleting post:', error);
+            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
+            if (isMounted) setPostError(errorMessage);
+            throw error;
+        } finally {
+            if (isMounted) setIsDeletingPost(false);
+        }
+        return () => { isMounted = false; };
+    };
+
     const confirmDeletePost = (post) => {
         setPostToDelete(post);
         setShowDeletePostDialog(true);
@@ -212,38 +423,19 @@ const AdminDashboard = () => {
             setIsDeletingPost(false);
         }
     };
-    
-    const handleDeletePost = async (postId) => {
-        if (!selectedOrg || !postId) return;
-        
-        try {
-            const response = await api.delete(`/posts/${postId}`);
-            
-            // Remove the deleted post from the UI
-            setPosts(prev => prev.filter(p => p._id !== postId));
-            
-            // Close the delete dialog
-            setShowDeletePostDialog(false);
-            setPostToDelete(null);
-            
-            // Show success message
-            const isAdminDelete = response.data?.deletedByAdmin;
-            if (isAdminDelete) {
-                setPostSuccess('Post deleted successfully');
-                setTimeout(() => setPostSuccess(''), 3000);
-            }
-            
-            // Refresh stats if needed
-            if (selectedOrg?._id) {
-                const statsRes = await api.get(`/posts/stats/${selectedOrg._id}`);
-                setStats(statsRes.data);
-            }
-        } catch (error) {
-            console.error('Error deleting post:', error);
-            const errorMessage = error.response?.data?.message || 'Failed to delete post.';
-            setPostError(errorMessage);
-            setTimeout(() => setPostError(''), 3000);
-        }
+
+    // --- Handle Post Edit ---
+    const handlePostEdit = (post) => {
+        setPostToEdit(post);
+        setShowEditPostModal(true);
+    };
+
+    const handlePostUpdated = (updatedPost) => {
+        setPosts(prev => prev.map(post => 
+            post._id === updatedPost._id ? { ...post, ...updatedPost, comments: post.comments || [], author: post.author } : post
+        ));
+        setShowEditPostModal(false);
+        setPostToEdit(null);
     };
 
     // --- Authentication Effect ---
@@ -287,226 +479,85 @@ const AdminDashboard = () => {
      */
     const selectOrganization = useCallback(async (org) => {
         if (!org || !org._id) {
-            console.log('[selectOrganization] Clearing organization selection');
             setSelectedOrg(null);
             setPosts([]);
             setStats([]);
             setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
             return;
         }
-
-        console.log(`[selectOrganization] Selecting organization:`, { 
-            id: org._id, 
-            name: org.name,
-            adminId: org.adminId
-        });
-        
-        // Update selected org and reset related state
         setSelectedOrg(org);
-        setLoading(prev => ({ 
-            ...prev, 
-            orgDetails: true, 
-            posts: true, 
-            stats: true 
-        }));
+        setLoading(prev => ({ ...prev, orgDetails: true, posts: true, stats: true }));
         setError(prev => ({ ...prev, page: null }));
         setPosts([]);
         setStats([]);
-
         try {
-            // Fetch posts and stats in parallel
             const [statsRes, postsRes] = await Promise.all([
-                // Fetch stats with error handling
-                api.get(`/posts/stats/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching stats for org ${org._id}:`, err);
-                    return { data: null };
-                }),
-                // Fetch posts with error handling
-                api.get(`/posts/${org._id}`, {
-                    validateStatus: status => status < 500 // Don't throw for 4xx errors
-                }).catch(err => {
-                    console.warn(`[selectOrganization] Error fetching posts for org ${org._id}:`, err);
-                    return { data: [] };
-                })
+                api.get(`/posts/stats/${org._id}`, { validateStatus: status => status < 500 }).catch(() => ({ data: null })),
+                api.get(`/posts/org/${org._id}`, { validateStatus: status => status < 500 }).catch(() => ({ data: [] }))
             ]);
-
-            // Process stats response
-            if (statsRes?.data) {
-                setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
-            } else {
-                setStats([]);
-            }
-
-            // Process posts response
+            setStats(Array.isArray(statsRes?.data) ? statsRes.data : []);
             if (Array.isArray(postsRes?.data)) {
-                const sortedPosts = [...postsRes.data].sort((a, b) => 
-                    new Date(b.createdAt) - new Date(a.createdAt)
-                );
+                const sortedPosts = [...postsRes.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
                 setPosts(sortedPosts);
             } else {
                 setPosts([]);
             }
         } catch (err) {
-            console.error(`[selectOrganization] Error fetching data for ${org?.name || 'organization'}:`, {
-                error: err,
-                response: err.response?.data,
-                status: err.response?.status
-            });
-
             let errorMessage = `Failed to load details for ${org?.name || 'the organization'}.`;
-            
-            // Handle different types of errors
             if (err.response) {
-                // Server responded with an error status code
-                if (err.response.status === 401) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                    // Optionally redirect to login
-                    // navigate('/login', { state: { from: 'session-expired' } });
-                } else if (err.response.status === 403) {
-                    errorMessage = 'You do not have permission to view this organization.';
-                } else if (err.response.status === 404) {
-                    // Clear any previous errors if we get a 404 (no posts)
-                    setError(prev => ({ ...prev, page: null }));
-                    return; // Exit early for 404 errors
-                } else if (err.response.data?.message) {
-                    errorMessage = err.response.data.message;
-                }
-            } else if (err.request) {
-                // Request was made but no response received
-                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-            } else if (err.message) {
-                // Other errors (e.g., from throw new Error)
-                errorMessage = err.message;
-            }
-            
-            // Update error state
-            setError(prev => ({
-                ...prev,
-                page: errorMessage
-            }));
-            
-            // Reset states on error
+                if (err.response.status === 401) errorMessage = 'Your session has expired. Please log in again.';
+                else if (err.response.status === 403) errorMessage = 'You do not have permission to view this organization.';
+                else if (err.response.status === 404) { setError(prev => ({ ...prev, page: null })); return; }
+                else if (err.response.data?.message) errorMessage = err.response.data.message;
+            } else if (err.request) errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            else if (err.message) errorMessage = err.message;
+            setError(prev => ({ ...prev, page: errorMessage }));
             setPosts([]);
             setStats([]);
         } finally {
-            // Ensure all loading states are reset
-            setLoading(prev => ({
-                ...prev,
-                orgDetails: false,
-                posts: false,
-                stats: false
-            }));
-            
-            // Log completion of organization selection
-            console.log(`[selectOrganization] Completed loading for org: ${org?._id || 'none'}`);
+            setLoading(prev => ({ ...prev, orgDetails: false, posts: false, stats: false }));
         }
-    }, []);
+    }, [setSelectedOrg, setPosts, setStats, setLoading, setError]);
 
     /**
      * Fetches organizations for the currently authenticated admin user
      * @returns {Promise<void>}
      */
     const fetchOrganizationsList = useCallback(async () => {
-        if (!userData) {
-            console.log('[fetchOrganizationsList] No user data available');
-            return;
-        }
-
-        console.log('[fetchOrganizationsList] Starting to fetch organizations for user:', userData.email);
+        if (!userData) return;
         setLoading(prev => ({ ...prev, orgList: true }));
         setError(prev => ({ ...prev, page: null }));
-
         try {
             const storedToken = localStorage.getItem('token');
             if (!storedToken) {
-                const errorMsg = 'No authentication token found. Please log in again.';
-                console.error('[fetchOrganizationsList]', errorMsg);
-                setError(prev => ({ ...prev, page: errorMsg }));
+                setError(prev => ({ ...prev, page: 'No authentication token found. Please log in again.' }));
                 return;
             }
-
-            console.log('[fetchOrganizationsList] Making API request to /organizations/by-admin');
-            
             const response = await api.get('/organizations/by-admin', {
-                headers: { 
-                    'Authorization': `Bearer ${storedToken}`,
-                    'Cache-Control': 'no-cache',
-                    'Pragma': 'no-cache'
-                },
-                validateStatus: status => status < 500 // Don't throw for 4xx errors
+                headers: { 'Authorization': `Bearer ${storedToken}`, 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+                validateStatus: status => status < 500
             });
-
-            console.log('[fetchOrganizationsList] API Response:', {
-                status: response.status,
-                data: response.data
-            });
-
-            // Handle different response statuses
-            if (!response.data) {
-                throw new Error('No data received from server');
-            }
-
-            if (!response.data.success) {
-                // Handle API-level errors (e.g., validation errors)
-                const errorMessage = response.data.message || 'Failed to fetch organizations';
-                throw new Error(errorMessage);
-            }
-
-            // Extract organizations from response
+            if (!response.data) throw new Error('No data received from server');
+            if (!response.data.success) throw new Error(response.data.message || 'Failed to fetch organizations');
             const orgs = Array.isArray(response.data.data) ? response.data.data : [];
-            console.log(`[fetchOrganizationsList] Found ${orgs.length} organizations`);
-            
-            // Update state with the organizations
             setOrganizations(orgs);
-
-            // Auto-select first organization if none selected
-            if (!selectedOrg && orgs.length > 0) {
-                console.log('[fetchOrganizationsList] Auto-selecting first organization:', orgs[0]._id);
+            // Only auto-select if not already selected
+            if ((!selectedOrg || !orgs.find(o => o._id === selectedOrg._id)) && orgs.length > 0) {
                 selectOrganization(orgs[0]);
             } else if (orgs.length === 0) {
-                console.log('[fetchOrganizationsList] No organizations found for user');
                 setSelectedOrg(null);
                 setPosts([]);
                 setStats([]);
             }
         } catch (err) {
-            console.error('[fetchOrganizationsList] Error loading organizations:', {
-                error: err,
-                response: err.response?.data,
-                status: err.response?.status
-            });
-            
             let errorMessage = 'Failed to load organizations. Please try again.';
-            
-            // Handle different types of errors
             if (err.response) {
-                // Server responded with an error status code
-                if (err.response.status === 401) {
-                    errorMessage = 'Your session has expired. Please log in again.';
-                    // Optionally redirect to login
-                    // navigate('/login', { state: { from: 'session-expired' } });
-                } else if (err.response.status === 403) {
-                    errorMessage = 'You do not have permission to view organizations.';
-                } else if (err.response.data?.message) {
-                    errorMessage = err.response.data.message;
-                }
-            } else if (err.request) {
-                // Request was made but no response received
-                errorMessage = 'Unable to connect to the server. Please check your internet connection.';
-            } else if (err.message) {
-                // Other errors (e.g., from throw new Error)
-                errorMessage = err.message;
-            }
-            
-            // Update error state
-            setError(prev => ({
-                ...prev,
-                page: errorMessage
-            }));
-            
-            // Reset states
+                if (err.response.status === 401) errorMessage = 'Your session has expired. Please log in again.';
+                else if (err.response.status === 403) errorMessage = 'You do not have permission to view organizations.';
+                else if (err.response.data?.message) errorMessage = err.response.data.message;
+            } else if (err.request) errorMessage = 'Unable to connect to the server. Please check your internet connection.';
+            else if (err.message) errorMessage = err.message;
+            setError(prev => ({ ...prev, page: errorMessage }));
             setOrganizations([]);
             setSelectedOrg(null);
             setPosts([]);
@@ -516,7 +567,7 @@ const AdminDashboard = () => {
         }
     }, [userData, selectedOrg, selectOrganization]);
 
-    // --- Effect to fetch organizations list when userData is available ---
+    // Only call fetchOrganizationsList when userData changes
     useEffect(() => {
         if (userData) {
             fetchOrganizationsList();
@@ -541,165 +592,6 @@ const AdminDashboard = () => {
         }
     }, [api]);
 
-    // --- WebSocket Effect for Real-time Updates ---
-    useEffect(() => {
-        if (!userData) {
-            if (ws.current && ws.current.readyState === WebSocket.OPEN) {
-                console.log('AdminDashboard: No user data, closing WebSocket.');
-                ws.current.close();
-            }
-            return; // Don't connect if no user data (not authenticated)
-        }
-
-        let reconnectAttempts = 0;
-        const maxReconnectAttempts = 5;
-        let reconnectTimeout;
-        let isMounted = true;
-        
-        // Create a wrapper for refreshOrgStats that checks isMounted
-        const safeRefreshOrgStats = async (orgId) => {
-            if (!isMounted) return Promise.resolve();
-            try {
-                return await refreshOrgStats(orgId);
-            } catch (err) {
-                console.error('Error in safeRefreshOrgStats:', err);
-                return Promise.reject(err);
-            }
-        };
-
-        const connectWebSocket = () => {
-            if (!isMounted) return;
-            
-            if (ws.current) {
-                if (ws.current.readyState === WebSocket.OPEN) return;
-                ws.current.close();
-            }
-
-            console.log(`AdminDashboard: Attempting to connect WebSocket to ${WS_URL}`);
-            ws.current = new WebSocket(WS_URL);
-
-            ws.current.onopen = () => {
-                console.log('AdminDashboard: WebSocket connected successfully.');
-                reconnectAttempts = 0; // Reset reconnect attempts on successful connection
-            };
-
-            ws.current.onmessage = async (event) => {
-                try {
-                    const message = JSON.parse(event.data);
-                    console.log('AdminDashboard: WebSocket message received:', message);
-                    const currentSelectedOrgId = selectedOrgRef.current?._id;
-
-                    if (!currentSelectedOrgId) {
-                        console.log('AdminDashboard: No organization selected, ignoring WebSocket message.');
-                        return;
-                    }
-
-                    switch (message.type) {
-                        case 'POST_CREATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_CREATED event for current org', message.payload);
-                                setPosts(prevPosts =>
-                                    [message.payload, ...prevPosts].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                );
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'POST_UPDATED':
-                            if (message.payload.organization === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_UPDATED event for current org', message.payload);
-                                setPosts(prevPosts =>
-                                    prevPosts.map(p => (p._id === message.payload._id ? message.payload : p))
-                                        .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
-                                );
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'POST_DELETED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                console.log('AdminDashboard: POST_DELETED event for current org', message.payload);
-                                setPosts(prevPosts => prevPosts.filter(p => p._id !== message.payload.postId));
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                            }
-                            break;
-                        case 'COMMENT_CREATED':
-                        case 'COMMENT_UPDATED':
-                        case 'COMMENT_DELETED':
-                        case 'REACTION_UPDATED':
-                            if (message.payload.organizationId === currentSelectedOrgId) {
-                                console.log(`AdminDashboard: ${message.type} event for current org, refreshing stats and potentially specific post.`);
-                                await safeRefreshOrgStats(currentSelectedOrgId);
-                                
-                                if (message.payload.postId) {
-                                    setPosts(prevPosts => prevPosts.map(p => {
-                                        if (p._id === message.payload.postId) {
-                                            let updatedPost = { ...p };
-                                            if (message.type === 'COMMENT_CREATED') {
-                                                updatedPost.commentCount = (updatedPost.commentCount || 0) + 1;
-                                            } else if (message.type === 'COMMENT_DELETED') {
-                                                updatedPost.commentCount = Math.max(0, (updatedPost.commentCount || 0) - 1);
-                                            }
-                                            return updatedPost;
-                                        }
-                                        return p;
-                                    }));
-                                }
-                            }
-                            break;
-                        default:
-                            console.log('AdminDashboard: Unhandled WebSocket message type:', message.type);
-                    }
-                } catch (error) {
-                    console.error('AdminDashboard: Failed to process WebSocket message:', error);
-                }
-            };
-
-            ws.current.onerror = (error) => {
-                console.error('AdminDashboard: WebSocket error:', error);
-            };
-
-            ws.current.onclose = (event) => {
-                console.log('AdminDashboard: WebSocket disconnected.', event.code, event.reason);
-                
-                if (!isMounted) return;
-                
-                // Attempt to reconnect with exponential backoff
-                if (reconnectAttempts < maxReconnectAttempts) {
-                    const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), 30000); // Max 30s delay
-                    console.log(`AdminDashboard: Attempting to reconnect in ${delay}ms...`);
-                    
-                    reconnectTimeout = setTimeout(() => {
-                        reconnectAttempts++;
-                        connectWebSocket();
-                    }, delay);
-                } else {
-                    console.error('AdminDashboard: Max reconnection attempts reached. Please refresh the page.');
-                }
-            };
-        };
-
-        // Initial connection
-        connectWebSocket();
-
-        // Cleanup on component unmount or when userData changes
-        return () => {
-            isMounted = false;
-            clearTimeout(reconnectTimeout);
-            
-            if (ws.current) {
-                ws.current.onopen = null;
-                ws.current.onmessage = null;
-                ws.current.onerror = null;
-                ws.current.onclose = null;
-                
-                if (ws.current.readyState === WebSocket.OPEN) {
-                    console.log('AdminDashboard: Closing WebSocket connection due to unmount or userData change.');
-                    ws.current.close();
-                }
-            }
-        };
-    }, [userData, refreshOrgStats]); // Dependencies for the WebSocket effect
-
-
     // --- Effect to handle auto-selection of an organization ---
     useEffect(() => {
         if (loading.orgList) return;
@@ -721,7 +613,23 @@ const AdminDashboard = () => {
 
 
     // --- Memoized Data for Filters and Charts ---
-    const filteredPosts = useMemo(() => posts.filter(post => (selectedType === 'all' || post.postType === selectedType) && (selectedRegion === 'all' || post.region === selectedRegion) && (selectedDepartment === 'all' || post.department === selectedDepartment)), [posts, selectedType, selectedRegion, selectedDepartment]);
+    const filteredPosts = useMemo(() => {
+        const filtered = posts
+          .filter(post => post.postType !== 'poll') // Exclude polls
+          .filter(post => 
+            (selectedType === 'all' || post.postType === selectedType) && 
+            (selectedRegion === 'all' || post.region === selectedRegion) && 
+            (selectedDepartment === 'all' || post.department === selectedDepartment) &&
+            (searchQuery === '' || post.content.toLowerCase().includes(searchQuery.toLowerCase()))
+          );
+        
+        // Sort posts: pinned first, then by creation date (newest first)
+        return filtered.sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return new Date(b.createdAt) - new Date(a.createdAt);
+        });
+    }, [posts, selectedType, selectedRegion, selectedDepartment, searchQuery]);
     const uniqueRegions = useMemo(() => [...new Set(posts.map(p => p.region).filter(Boolean))], [posts]);
     const uniqueDepartments = useMemo(() => [...new Set(posts.map(p => p.department).filter(Boolean))], [posts]);
     const typeOptions = [ { value: 'all', label: 'All Types' }, { value: 'feedback', label: 'Feedback' }, { value: 'complaint', label: 'Complaint' }, { value: 'suggestion', label: 'Suggestion' }, { value: 'public', label: 'Public' } ];
@@ -804,7 +712,7 @@ const AdminDashboard = () => {
 
     const handleOpenEditAdminEmailsModal = (e) => {
         e?.target?.blur();
-        const currentEmails = selectedOrg.adminEmails?.map(e => e.email) || [];
+        const currentEmails = selectedOrg.coAdminEmails?.map(e => e.email) || [];
         setAdminEmailsInput(currentEmails.join(', '));
         setIsEditAdminEmailsModalOpen(true);
     };
@@ -846,7 +754,7 @@ const AdminDashboard = () => {
                 throw new Error(`Invalid organization ID format: ${orgId}`);
             }
 
-            await api.put(`/organizations/${orgId}/admin-emails`, requestData);
+            await api.put(`/organizations/${orgId}/coadmin-emails`, requestData);
             
             // Refresh organization data
             const { data: updatedOrg } = await api.get(`/organizations/${orgId}`);
@@ -1067,54 +975,140 @@ const AdminDashboard = () => {
     // Post deletion is now handled by the handleDeletePost function above
     // which uses a modal dialog for confirmation
     
-    const handleLogout = () => { localStorage.clear(); navigate('/signin'); };
+    const handleLogout = () => {
+        logout();
+        navigate('/signin');
+    };
 
-    // State for Co-admin Orgs Modal
+        // State for Co-admin Orgs Modal
     const [isCoAdminOrgsModalOpen, setIsCoAdminOrgsModalOpen] = useState(false);
+    const [coAdminOrgs, setCoAdminOrgs] = useState([]);
+    const [loadingCoAdminOrgs, setLoadingCoAdminOrgs] = useState(false);
+    const [selectedCoAdminOrg, setSelectedCoAdminOrg] = useState(null);
+    
+    // Add state for no organizations modal
+    const [showNoOrgsModal, setShowNoOrgsModal] = useState(false);
     
     // Handler for opening Co-admin Orgs modal
-    const handleOpenCoAdminOrgsModal = () => {
+    const handleOpenCoAdminOrgsModal = async () => {
         setIsCoAdminOrgsModalOpen(true);
+        setLoadingCoAdminOrgs(true);
+        setError(prev => ({ ...prev, coAdminOrgs: null }));
+        
+        try {
+            console.log('Current user email:', userData?.email);
+            console.log('Auth token:', localStorage.getItem('token'));
+            
+            console.log('Fetching co-admin organizations...');
+            const response = await api.get('/organizations/coadmin', {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('token')}`
+                },
+                withCredentials: true
+            });
+            
+            console.log('Co-admin orgs response status:', response.status);
+            console.log('Full response:', response);
+            
+            // Handle different response formats
+            let orgs = [];
+            if (response.data?.success) {
+                // Handle standard success response with data array
+                orgs = Array.isArray(response.data.data) ? response.data.data : [];
+            } else if (Array.isArray(response.data)) {
+                // Handle case where response is directly an array
+                orgs = response.data;
+            } else if (response.data) {
+                // Handle case where data is a single object
+                orgs = [response.data];
+            }
+            
+            console.log('Processed orgs:', orgs);
+            setCoAdminOrgs(orgs);
+            
+            // If no orgs found, show a specific message
+            if (orgs.length === 0) {
+                setError(prev => ({
+                    ...prev,
+                    coAdminOrgs: 'You are not listed as a co-admin for any organizations.'
+                }));
+            }
+            
+        } catch (err) {
+            console.error('Full error object:', err);
+            console.error('Error response:', err.response?.data);
+            
+            let errorMessage = 'Failed to load co-admin organizations';
+            if (err.response) {
+                // Server responded with error status
+                errorMessage = err.response.data?.message || 
+                              err.response.data?.error || 
+                              `Server error: ${err.response.status}`;
+            } else if (err.request) {
+                // Request was made but no response received
+                errorMessage = 'No response from server. Please check your connection.';
+            } else {
+                // Something happened in setting up the request
+                errorMessage = err.message || 'Error setting up request';
+            }
+            
+            setError(prev => ({
+                ...prev,
+                coAdminOrgs: `Error: ${errorMessage}`
+            }));
+            setCoAdminOrgs([]);
+        } finally {
+            setLoadingCoAdminOrgs(false);
+        }
+    };
+    
+    // Handler for clicking on a co-admin organization
+    const handleCoAdminOrgClick = (org) => {
+        setSelectedCoAdminOrg(org);
     };
 
     // --- Sidebar Items ---
     const sidebarNavItems = [
+        { 
+            name: 'Create Post', 
+            icon: PencilSquareIcon, 
+            action: () => {
+                if (organizations.length === 0) {
+                    setShowNoOrgsModal(true);
+                } else {
+                    setViewMode('createPost');
+                }
+            }, 
+            current: viewMode === 'createPost'
+        },
         { name: 'Add Organization', icon: PlusIcon, action: handleOpenAddOrgModal, current: isAddOrgModalOpen },
         { name: 'Manage Orgs', icon: Cog8ToothIcon, action: handleOpenManageOrgModal, current: isManageOrgModalOpen },
         { name: 'Subscriptions', icon: CreditCardIcon, action: () => navigate('/subscriptions'), current: window.location.pathname === '/subscriptions' },
         { name: 'Co-admin Orgs', icon: UserGroupIcon, action: handleOpenCoAdminOrgsModal, current: isCoAdminOrgsModalOpen },
-        { name: 'Create Post', icon: PencilSquareIcon, action: () => setViewMode('createPost'), current: viewMode === 'createPost' },
+        { 
+            name: 'Polls', 
+            icon: ChartBarIcon, 
+            action: () => {
+                if (organizations.length === 0) {
+                    setShowNoOrgsModal(true);
+                } else {
+                    setViewMode('polls');
+                }
+            }, 
+            current: viewMode === 'polls'
+        },
     ];
 
-    // --- Mobile Sidebar Component ---
-    const MobileSidebar = () => (
-        <Transition.Root show={isMobileSidebarOpen} as={Fragment}>
-            <Dialog as="div" className="relative z-40 md:hidden" onClose={setIsMobileSidebarOpen}>
-                <Transition.Child as={Fragment} enter="transition-opacity ease-linear duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="transition-opacity ease-linear duration-300" leaveFrom="opacity-100" leaveTo="opacity-0"><div className="fixed inset-0 bg-gray-600/75 dark:bg-slate-900/75" /></Transition.Child>
-                <div className="fixed inset-0 z-40 flex">
-                    <Transition.Child as={Fragment} enter="transition ease-in-out duration-300 transform" enterFrom="-translate-x-full" enterTo="translate-x-0" leave="transition ease-in-out duration-300 transform" leaveFrom="translate-x-0" leaveTo="-translate-x-full">
-                        <Dialog.Panel className="relative flex w-full max-w-xs flex-1 flex-col bg-white dark:bg-slate-900 pt-5 pb-4">
-                            <Transition.Child as={Fragment} enter="ease-in-out duration-300" enterFrom="opacity-0" enterTo="opacity-100" leave="ease-in-out duration-300" leaveFrom="opacity-100" leaveTo="opacity-0">
-                                <div className="absolute top-0 right-0 -mr-12 pt-2"><button type="button" className="ml-1 flex h-10 w-10 items-center justify-center rounded-full focus:outline-none focus:ring-2 focus:ring-white" onClick={() => setIsMobileSidebarOpen(false)}><span className="sr-only">Close sidebar</span> <XMarkIcon className="h-6 w-6 text-white" aria-hidden="true" /></button></div>
-                            </Transition.Child>
-                            <div className="h-16 flex items-center justify-center px-4 border-b border-gray-200 dark:border-slate-700 flex-shrink-0"><BuildingOffice2Icon className="h-8 w-8 text-blue-600 dark:text-blue-500" /><span className="ml-2 text-xl font-semibold text-gray-800 dark:text-slate-100">Admin</span></div>
-                            <nav className="mt-5 flex flex-col space-y-4 items-center">
-                                {sidebarNavItems.map((item) => (<button key={item.name} onClick={() => { item.action(); setIsMobileSidebarOpen(false);}} className={`w-full flex items-center px-3 py-3 rounded-md text-sm font-medium group transition-colors duration-150 ${item.current ? 'bg-gray-100 dark:bg-slate-800 text-blue-700 dark:text-blue-400' : 'text-gray-600 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-slate-700 hover:text-gray-900 dark:hover:text-slate-100'}`}><item.icon className="h-6 w-6 mr-3 flex-shrink-0" />{item.name}</button>))}
-                            </nav>
-                            <div className="mt-auto flex flex-col items-center space-y-4">
-                                <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                                <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/50 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                                    <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-                                    <span className="sr-only">Logout</span>
-                                </button>
-                            </div>
-                        </Dialog.Panel>
-                    </Transition.Child>
-                    <div className="w-14 flex-shrink-0" aria-hidden="true"></div>
-                </div>
-            </Dialog>
-        </Transition.Root>
-    );
+    // Logo component for the sidebar
+    const Logo = BuildingOffice2Icon;
+
+    // Pagination state for posts
+    const [currentPage, setCurrentPage] = useState(1);
+    const POSTS_PER_PAGE = 20;
+    const totalPages = useMemo(() => Math.ceil(filteredPosts.length / POSTS_PER_PAGE), [filteredPosts.length]);
+    const paginatedPosts = useMemo(() => filteredPosts.slice((currentPage - 1) * POSTS_PER_PAGE, currentPage * POSTS_PER_PAGE), [filteredPosts, currentPage]);
+    useEffect(() => { setCurrentPage(1); }, [selectedType, selectedRegion, selectedDepartment, searchQuery, posts]);
 
     // --- Main Render ---
     return (
@@ -1128,20 +1122,19 @@ const AdminDashboard = () => {
                 </script>
             </Helmet>
             <div className={`flex h-screen overflow-hidden ${theme === 'dark' ? 'dark' : ''} font-sans antialiased`}>
-            <MobileSidebar />
-            <aside className="hidden md:flex md:w-20 lg:w-24 bg-white dark:bg-slate-900 border-r border-gray-200 dark:border-slate-700 flex-col items-center py-6 space-y-5 shadow-sm flex-shrink-0">
-                <div className="p-2 rounded-lg bg-blue-600 dark:bg-blue-500 text-white flex-shrink-0"><BuildingOffice2Icon className="h-7 w-7" /></div>
-                <nav className="flex flex-col space-y-4 items-center">
-                    {sidebarNavItems.map((item) => (<button key={item.name} onClick={item.action} title={item.name} className={`p-3 lg:p-3 rounded-lg transition-colors duration-150 ${item.current ? 'bg-blue-100 dark:bg-blue-500/20 text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-blue-600 dark:hover:text-blue-400'}`}><item.icon className="h-6 w-6 lg:h-7 lg:w-7" /><span className="sr-only">{item.name}</span></button>))}
-                </nav>
-                <div className="mt-auto flex flex-col items-center space-y-4">
-                    <ThemeToggle theme={theme} toggleTheme={toggleTheme} />
-                    <button onClick={handleLogout} title="Logout" className="p-3 lg:p-3 rounded-lg text-gray-500 dark:text-slate-400 hover:bg-red-100 dark:hover:bg-red-700/30 hover:text-red-600 dark:hover:text-red-400 transition-colors">
-                        <ArrowLeftOnRectangleIcon className="h-6 w-6 lg:h-7 lg:w-7" />
-                        <span className="sr-only">Logout</span>
-                    </button>
-                </div>
-            </aside>
+            <Sidebar
+                isMobileSidebarOpen={isMobileSidebarOpen}
+                setIsMobileSidebarOpen={setIsMobileSidebarOpen}
+                sidebarNavItems={sidebarNavItems}
+                logo={Logo}
+                title="Admin"
+                userEmail={userData?.email}
+                theme={theme}
+                toggleTheme={toggleTheme}
+                onLogout={handleLogout}
+                viewMode={viewMode}
+                isAdmin={true}
+            />
 
             <div className="flex-1 flex flex-col overflow-hidden bg-gray-50 dark:bg-slate-950">
                 <header className="h-16 bg-white dark:bg-slate-900 border-b border-gray-200 dark:border-slate-700 flex items-center justify-between px-4 sm:px-6 shadow-sm z-10 flex-shrink-0">
@@ -1169,7 +1162,9 @@ const AdminDashboard = () => {
                 </header>
 
                 <main className="flex-1 overflow-y-auto p-4 sm:p-6 md:p-8 custom-scrollbar">
-                    {viewMode === 'createPost' && selectedOrg ? (
+                    {viewMode === 'polls' ? (
+                        <Polling userRole="admin" orgId={selectedOrg?._id} onBack={() => setViewMode('dashboard')} />
+                    ) : viewMode === 'createPost' && selectedOrg ? (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
@@ -1220,7 +1215,7 @@ const AdminDashboard = () => {
                                             setViewMode('dashboard');
                                             
                                             // Refresh posts
-                                            const postsRes = await api.get(`/posts/${selectedOrg._id}`);
+                                            const postsRes = await api.get(`/posts/org/${selectedOrg._id}`);
                                             setPosts(postsRes.data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
                                             
                                             // Refresh stats
@@ -1288,7 +1283,34 @@ const AdminDashboard = () => {
                              <motion.div key="select-org-prompt" {...fadeInUp}> <DashboardCard className="p-6"><div className="text-center py-10"><MagnifyingGlassIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4"/><h3 className="text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Welcome, Admin!</h3><p className="text-gray-600 dark:text-slate-400">Please select an organization from the "Manage Orgs" menu or add a new one to view details.</p></div></DashboardCard> </motion.div>
                         ) : selectedOrg ? (
                             <motion.div key={selectedOrg._id} className="space-y-6 md:space-y-8" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5">ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded">{selectedOrg._id}</code> | Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"></div></div>
+                                <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-y-3 gap-x-4"><div><h2 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-slate-50">{selectedOrg.name}</h2><p className="text-xs sm:text-sm text-gray-500 dark:text-slate-400 mt-0.5 flex items-center">
+    ID: <code className="text-xs bg-gray-100 dark:bg-slate-700 px-1 py-0.5 rounded mx-1">{selectedOrg._id}</code>
+    <button 
+        onClick={(event) => {
+            navigator.clipboard.writeText(selectedOrg._id);
+            // Show a tooltip that the ID was copied
+            const tooltip = document.createElement('div');
+            tooltip.className = 'fixed bg-gray-800 text-white text-xs rounded py-1 px-2 z-50 shadow-lg';
+            tooltip.textContent = 'Copied!';
+            document.body.appendChild(tooltip);
+            // Position tooltip near the cursor
+            const rect = event.target.getBoundingClientRect();
+            tooltip.style.top = `${rect.top - 30}px`;
+            tooltip.style.left = `${rect.left + rect.width/2 - 20}px`;
+            setTimeout(() => {
+                tooltip.remove();
+            }, 1500);
+        }}
+        className="group relative text-gray-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition-all duration-200 p-1 -ml-1"
+        title="Copy to clipboard"
+    >
+        <div className="p-1 rounded-md group-hover:bg-blue-50 dark:group-hover:bg-blue-900/20 transition-colors">
+            <ClipboardDocumentIcon className="h-4 w-4 sm:h-4 sm:w-4" />
+        </div>
+    </button>
+    <span className="mx-1">|</span>
+    <span>Created: {new Date(selectedOrg.createdAt).toLocaleDateString()}</span>
+</p></div><div className="flex items-center space-x-2 sm:space-x-3 flex-shrink-0"></div></div>
                                 
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Employee Access</h3>
                                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
@@ -1297,15 +1319,12 @@ const AdminDashboard = () => {
                                                 <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Emails</h4>
                                                 <p className="text-sm text-gray-500 dark:text-slate-400">
                                                     {selectedOrg.employeeEmails?.length > 0
-                                                        ? `${selectedOrg.employeeEmails.length} email(s) configured`
-                                                        : 'No employee emails added'}
+                                                        ? `${selectedOrg.employeeEmails.length} of 25 employee emails configured`
+                                                        : 'No employee emails added (0/25)'}
                                                 </p>
                                                 {selectedOrg.employeeEmails?.length > 0 && (
                                                     <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                                                        <p>First email: {selectedOrg.employeeEmails[0].email}</p>
-                                                        {selectedOrg.employeeEmails.length > 1 && (
-                                                            <p>+ {selectedOrg.employeeEmails.length - 1} more</p>
-                                                        )}
+                                                        {selectedOrg.employeeEmails.length} email(s) configured
                                                     </div>
                                                 )}
                                             </div>
@@ -1328,18 +1347,15 @@ const AdminDashboard = () => {
                                     <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow">
                                         <div className="flex justify-between items-center">
                                             <div>
-                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Admin Emails</h4>
+                                                <h4 className="font-medium text-gray-900 dark:text-slate-100">Authorized Co-Admin Emails</h4>
                                                 <p className="text-sm text-gray-500 dark:text-slate-400">
-                                                    {selectedOrg.adminEmails?.length > 0
-                                                        ? `${selectedOrg.adminEmails.length} admin email(s) configured`
-                                                        : 'No admin emails added'}
+                                                    {selectedOrg.coAdminEmails?.length > 0
+                                                        ? `${selectedOrg.coAdminEmails.length} of 5 co-admin emails configured`
+                                                        : 'No co-admin emails added (0/5)'}
                                                 </p>
-                                                {selectedOrg.adminEmails?.length > 0 && (
+                                                {selectedOrg.coAdminEmails?.length > 0 && (
                                                     <div className="mt-2 text-xs text-gray-500 dark:text-slate-400">
-                                                        <p>First admin: {selectedOrg.adminEmails[0].email}</p>
-                                                        {selectedOrg.adminEmails.length > 1 && (
-                                                            <p>+ {selectedOrg.adminEmails.length - 1} more</p>
-                                                        )}
+                                                        {selectedOrg.coAdminEmails.length} email(s) configured
                                                     </div>
                                                 )}
                                             </div>
@@ -1358,35 +1374,97 @@ const AdminDashboard = () => {
                                 </DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6"><h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Post Statistics</h3>{loading.orgDetails ? (<div className="text-center py-10"><svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg></div>) : stats.length === 0 ? ( <NothingToShow message="No post statistics available yet." /> ) : (<div className="grid grid-cols-1 lg:grid-cols-5 gap-6 min-h-[300px] sm:min-h-[350px]"><div className="lg:col-span-3 h-[300px] sm:h-[350px]"> <Bar data={chartData} options={barChartOptions} /> </div><div className="lg:col-span-2 h-[300px] sm:h-[350px] flex items-center justify-center"> <Pie data={chartData} options={pieChartOptions} /> </div></div>)}</DashboardCard>
                                 <DashboardCard className="p-4 sm:p-6">
-                                    <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-4">Posts Overview</h3>
-                                    
-                                    <div className="mb-6 bg-gray-50 dark:bg-slate-800/50 p-3 sm:p-4 rounded-md border border-gray-200 dark:border-slate-700">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 sm:gap-4">
-                                            <CustomSelect 
-                                                label="Type" 
-                                                value={selectedType} 
-                                                onChange={setSelectedType} 
-                                                options={typeOptions} 
-                                                icon={TagIcon} 
-                                            />
-                                            <CustomSelect 
-                                                label="Region" 
-                                                value={selectedRegion} 
-                                                onChange={setSelectedRegion} 
-                                                options={regionOptions} 
-                                                icon={MapPinIcon} 
-                                                disabled={uniqueRegions.length === 0} 
-                                            />
-                                            <CustomSelect 
-                                                label="Department" 
-                                                value={selectedDepartment} 
-                                                onChange={setSelectedDepartment} 
-                                                options={departmentOptions} 
-                                                icon={BuildingLibraryIcon} 
-                                                disabled={uniqueDepartments.length === 0} 
-                                            />
+                                    <div className="mb-6">
+                                        <div className="flex items-center gap-2 mb-2 justify-between">
+                                            <h3 className="text-base sm:text-lg font-semibold text-gray-800 dark:text-slate-100 mb-2">Posts Overview</h3>
+                                            <button
+                                                onClick={async () => {
+                                                    if (!selectedOrg) return;
+                                                    setLoading(prev => ({ ...prev, orgDetails: true }));
+                                                    setError(prev => ({ ...prev, page: null }));
+                                                    try {
+                                                        const [postsRes, statsRes] = await Promise.all([
+                                                            api.get(`/posts/org/${selectedOrg._id}`),
+                                                            api.get(`/posts/stats/${selectedOrg._id}`)
+                                                        ]);
+                                                        if (Array.isArray(postsRes?.data)) {
+                                                            const sortedPosts = [...postsRes.data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+                                                            setPosts(sortedPosts);
+                                                        } else {
+                                                            setPosts([]);
+                                                        }
+                                                        setStats(Array.isArray(statsRes.data) ? statsRes.data : []);
+                                                    } catch (err) {
+                                                        setError(prev => ({ ...prev, page: 'Failed to refresh posts. Please try again.' }));
+                                                    } finally {
+                                                        setLoading(prev => ({ ...prev, orgDetails: false }));
+                                                    }
+                                                }}
+                                                disabled={loading.orgDetails}
+                                                className="h-10 min-w-[110px] px-3 flex items-center justify-center rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ml-2"
+                                                title="Refresh Posts"
+                                            >
+                                                {loading.orgDetails ? (
+                                                    <span className="flex items-center"><span className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></span>Refreshing...</span>
+                                                ) : (
+                                                    <span className="flex items-center"><ArrowPathIcon className="h-5 w-5 mr-2" />Refresh</span>
+                                                )}
+                                            </button>
+                                        </div>
+                                        <div className="flex flex-col gap-y-2">
+                                            {/* Row 1: Search (full width) */}
+                                            <div className="w-full">
+                                                <div className="relative">
+                                                    <input
+                                                        type="text"
+                                                        placeholder="Search posts..."
+                                                        value={searchQuery}
+                                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                                        className="h-11 w-full pl-10 pr-3 text-sm border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                    <MagnifyingGlassIcon className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400" />
+                                                </div>
+                                            </div>
+                                            {/* Row 2: Type (full width) */}
+                                            <div className="w-full flex flex-col">
+                                                <CustomSelect
+                                                    id="type-select"
+                                                    className="h-11 w-full"
+                                                    label="Type"
+                                                    value={selectedType}
+                                                    onChange={setSelectedType}
+                                                    options={typeOptions}
+                                                    icon={TagIcon}
+                                                />
+                                            </div>
+                                            {/* Row 3: Region + Department */}
+                                            <div className="flex flex-col md:flex-row gap-y-7 md:gap-x-4 mt-5">
+                                                <div className="w-full md:w-1/2 flex flex-col">
+                                                    <CustomSelect
+                                                        id="region-select"
+                                                        className="h-11 w-full"
+                                                        label="Region"
+                                                        value={selectedRegion}
+                                                        onChange={setSelectedRegion}
+                                                        options={regionOptions}
+                                                        icon={MapPinIcon}
+                                                    />
+                                                </div>
+                                                <div className="w-full md:w-1/2 flex flex-col">
+                                                    <CustomSelect
+                                                        id="department-select"
+                                                        className="h-11 w-full"
+                                                        label="Department"
+                                                        value={selectedDepartment}
+                                                        onChange={setSelectedDepartment}
+                                                        options={departmentOptions}
+                                                        icon={BuildingLibraryIcon}
+                                                    />
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
+                                    <div className="mb-8" />
                                     {loading.orgDetails ? (
                                         <div className="text-center py-10">
                                             <svg className="animate-spin h-6 w-6 text-blue-600 dark:text-blue-500 mx-auto" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -1398,7 +1476,7 @@ const AdminDashboard = () => {
                                         <NothingToShow message={posts.length === 0 ? "No posts found for this organization." : "No posts match the current filters."} />
                                     ) : (
                                         <div className="space-y-4">
-                                            {filteredPosts.map((post, i) => (
+                                            {paginatedPosts.filter(post => post && post._id).map((post, i) => (
                                                 <motion.div 
                                                     key={post._id} 
                                                     className="bg-white dark:bg-slate-800/70 border border-gray-200 dark:border-slate-700 rounded-lg p-3 sm:p-4 hover:shadow-md dark:hover:shadow-slate-700/50 transition-shadow duration-200"
@@ -1408,6 +1486,12 @@ const AdminDashboard = () => {
                                                 >
                                                     <div className="flex justify-between items-start mb-1 sm:mb-2">
                                                         <div className="flex items-center gap-2">
+                                                            {/* Pinned tag */}
+                                                            {post.isPinned && (
+                                                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-yellow-100 text-yellow-800 mr-2">
+                                                                <PaperClipIcon className="h-4 w-4 mr-1 text-yellow-500" /> Pinned
+                                                              </span>
+                                                            )}
                                                             <span className={`inline-block px-2 py-0.5 sm:px-2.5 rounded-full text-xs font-medium tracking-wide ${
                                                                 post.postType === 'feedback' ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300' :
                                                                 post.postType === 'complaint' ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300' :
@@ -1424,44 +1508,115 @@ const AdminDashboard = () => {
                                                                 {post.createdByRole === 'admin' || (post.author && post.author.role === 'admin') ? 'Admin' : 'User'}
                                                             </span>
                                                         </div>
-                                                        <button 
-                                                            onClick={(e) => {
+                                                        <div className="flex space-x-1">
+                                                          {canEditPost(post) && (
+                                                            <button
+                                                              onClick={(e) => {
                                                                 e.stopPropagation();
-                                                                confirmDeletePost(post);
-                                                            }}
-                                                            className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
-                                                            title="Delete Post"
-                                                            disabled={isDeletingPost}
-                                                        >
-                                                            {isDeletingPost && postToDelete?._id === post._id ? (
-                                                                <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                handlePostEdit(post);
+                                                              }}
+                                                              className="text-gray-400 dark:text-slate-500 hover:text-blue-600 dark:hover:text-blue-500 transition-colors p-1 rounded-full hover:bg-blue-50 dark:hover:bg-blue-900/20"
+                                                              title="Edit Post"
+                                                            >
+                                                              <PencilSquareIcon className="h-4 w-4" />
+                                                            </button>
+                                                          )}
+                                                          {/* Pin/unpin button for admin only */}
+                                                          {localStorage.getItem('role') === 'admin' && (
+                                                            <button
+                                                              onClick={async (e) => {
+                                                                e.stopPropagation();
+                                                                setPinningPost(post._id);
+                                                                
+                                                                try {
+                                                                  // Optimistic update - immediately show the change
+                                                                  setPosts(prevPosts => 
+                                                                    prevPosts.map(p => 
+                                                                      p._id === post._id 
+                                                                        ? { ...p, isPinned: !p.isPinned }
+                                                                        : p
+                                                                    )
+                                                                  );
+                                                                  
+                                                                  const response = await api.post(`/posts/${post._id}/pin`);
+                                                                  // Use the API response to update local state correctly
+                                                                  const updatedPost = response.data.post;
+                                                                  if (updatedPost) {
+                                                                    setPosts(prevPosts => 
+                                                                      prevPosts.map(p => 
+                                                                        p._id === post._id 
+                                                                          ? { ...p, isPinned: updatedPost.isPinned }
+                                                                          : p
+                                                                      )
+                                                                    );
+                                                                  }
+                                                                } catch (err) {
+                                                                  // Revert optimistic update on error
+                                                                  setPosts(prevPosts => 
+                                                                    prevPosts.map(p => 
+                                                                      p._id === post._id 
+                                                                        ? { ...p, isPinned: post.isPinned }
+                                                                        : p
+                                                                    )
+                                                                  );
+                                                                  setPostError('Failed to pin/unpin post.');
+                                                                  console.error('Error pinning/unpinning post:', err);
+                                                                } finally {
+                                                                  setPinningPost(null);
+                                                                }
+                                                              }}
+                                                              disabled={pinningPost === post._id}
+                                                              className={`text-gray-400 dark:text-slate-500 hover:text-yellow-600 dark:hover:text-yellow-500 p-1 rounded-full hover:bg-yellow-50 dark:hover:bg-yellow-900/20 transition-all duration-200 ${
+                                                                post.isPinned ? 'text-yellow-600 dark:text-yellow-500 bg-yellow-50 dark:bg-yellow-900/20' : ''
+                                                              } ${
+                                                                pinningPost === post._id ? 'opacity-50 cursor-not-allowed' : ''
+                                                              }`}
+                                                              title={post.isPinned ? 'Unpin Post' : 'Pin Post'}
+                                                            >
+                                                              {pinningPost === post._id ? (
+                                                                <svg className="animate-spin h-4 w-4 text-yellow-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                                                                 </svg>
-                                                            ) : (
-                                                                <TrashIcon className="h-4 w-4" />
-                                                            )}
-                                                        </button>
+                                                              ) : (
+                                                                <PaperClipIcon className="h-4 w-4" />
+                                                              )}
+                                                            </button>
+                                                          )}
+                                                          {canDeletePost(post) && (
+                                                            <button 
+                                                              onClick={(e) => {
+                                                                  e.stopPropagation();
+                                                                  confirmDeletePost(post);
+                                                              }}
+                                                              className="text-gray-400 dark:text-slate-500 hover:text-red-600 dark:hover:text-red-500 transition-colors p-1 -mr-1 -mt-1 rounded-full hover:bg-red-50 dark:hover:bg-red-900/20" 
+                                                              title="Delete Post"
+                                                              disabled={isDeletingPost}
+                                                          >
+                                                              {isDeletingPost && postToDelete?._id === post._id ? (
+                                                                  <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                                  </svg>
+                                                              ) : (
+                                                                  <TrashIcon className="h-4 w-4" />
+                                                              )}
+                                                            </button>
+                                                          )}
+                                                        </div>
                                                     </div>
                                                     <p className="text-sm text-gray-800 dark:text-slate-200 mb-2 sm:mb-3 whitespace-pre-wrap break-words">
-                                                        {post.content}
+                                                        {typeof post.content === 'string' ? post.content : '[Encrypted or invalid content]'}
                                                     </p>
                                                     
                                                     {/* Media Display */}
                                                     {post.mediaUrls && post.mediaUrls.length > 0 && (
                                                         <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                                             {post.mediaUrls.map((media, idx) => {
-                                                                // Handle both string and object formats
                                                                 const mediaUrl = typeof media === 'string' ? media : (media.url || media.preview);
                                                                 if (!mediaUrl) return null;
-                                                                
-                                                                // Determine if it's an image or video
-                                                                const isImage = typeof mediaUrl === 'string' && 
-                                                                    mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
-                                                                
-                                                                const isVideo = typeof mediaUrl === 'string' && 
-                                                                    mediaUrl.match(/\.(mp4|webm|ogg)$/i);
-                                                                
+                                                                const isImage = typeof mediaUrl === 'string' && mediaUrl.match(/\.(jpe?g|png|gif|webp)$/i);
+                                                                const isVideo = typeof mediaUrl === 'string' && mediaUrl.match(/\.(mp4|webm|ogg)$/i);
                                                                 const handleMediaClick = (e) => {
                                                                     e.stopPropagation();
                                                                     setViewingMedia({
@@ -1470,7 +1625,14 @@ const AdminDashboard = () => {
                                                                         type: isImage ? 'image' : 'video'
                                                                     });
                                                                 };
-                                                                
+                                                                // --- Media error fallback ---
+                                                                if (mediaErrors[mediaUrl]) {
+                                                                    return (
+                                                                        <div key={`${post._id}-media-${idx}`} className="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
+                                                                            <span className="text-gray-500">{isImage ? 'Image not available' : 'Video not available'}</span>
+                                                                        </div>
+                                                                    );
+                                                                }
                                                                 return isImage ? (
                                                                     <div 
                                                                         key={`${post._id}-media-${idx}`} 
@@ -1481,10 +1643,7 @@ const AdminDashboard = () => {
                                                                             src={mediaUrl}
                                                                             alt={`Media ${idx + 1}`}
                                                                             className="w-full h-32 object-cover rounded-lg hover:opacity-90 transition-opacity"
-                                                                            onError={(e) => {
-                                                                                console.error('Error loading image:', mediaUrl);
-                                                                                e.target.src = 'https://via.placeholder.com/300x200?text=Image+Not+Found';
-                                                                            }}
+                                                                            onError={() => setMediaErrors(prev => ({ ...prev, [mediaUrl]: true }))}
                                                                         />
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-10 transition-all duration-200 rounded-lg" />
                                                                         <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1502,14 +1661,7 @@ const AdminDashboard = () => {
                                                                         <video
                                                                             src={mediaUrl}
                                                                             className="w-full h-32 object-cover rounded-lg"
-                                                                            onError={(e) => {
-                                                                                console.error('Error loading video:', mediaUrl);
-                                                                                e.target.parentElement.innerHTML = `
-                                                                                    <div class="w-full h-32 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
-                                                                                        <span class="text-gray-500">Video not available</span>
-                                                                                    </div>
-                                                                                `;
-                                                                            }}
+                                                                            onError={() => setMediaErrors(prev => ({ ...prev, [mediaUrl]: true }))}
                                                                         />
                                                                         <div className="absolute inset-0 bg-black bg-opacity-0 group-hover:bg-opacity-30 transition-all duration-200 rounded-lg flex items-center justify-center">
                                                                             <div className="bg-black bg-opacity-50 rounded-full p-3 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1532,7 +1684,7 @@ const AdminDashboard = () => {
                                                           </span>
                                                         )}
                                                         <span>|</span>
-                                                        <span>{new Date(post.createdAt).toLocaleString()}</span>
+                                                        <span>{new Date(post.createdAt).toLocaleString()}{isPostEdited(post) && ' (edited)'}</span>
                                                         {post.region && (
                                                             <>
                                                                 <span className="hidden sm:inline">|</span>
@@ -1556,6 +1708,26 @@ const AdminDashboard = () => {
                                                                     type={type}
                                                                     postId={post._id}
                                                                     count={count || 0}
+                                                                    onReactionUpdate={(reactionData) => {
+                                                                        // Update the post's reactions locally
+                                                                        setPosts(prevPosts => 
+                                                                            prevPosts.map(p => {
+                                                                                if (p._id === post._id) {
+                                                                                    return {
+                                                                                        ...p,
+                                                                                        reactions: {
+                                                                                            ...p.reactions,
+                                                                                            [reactionData.type]: {
+                                                                                                count: reactionData.count || 0,
+                                                                                                hasReacted: reactionData.isReacted || false
+                                                                                            }
+                                                                                        }
+                                                                                    };
+                                                                                }
+                                                                                return p;
+                                                                            })
+                                                                        );
+                                                                    }}
                                                                 />
                                                             ))}
                                                         </div>
@@ -1567,10 +1739,66 @@ const AdminDashboard = () => {
                                                             postId={post._id} 
                                                             comments={post.comments || []} 
                                                             selectedOrg={selectedOrg}
+                                                            onCommentAdded={(newComment) => {
+                                                              // Update the posts state with the new comment
+                                                              console.log('AdminDashboard: onCommentAdded called with:', newComment);
+                                                              setPosts(prevPosts => 
+                                                                prevPosts.map(p => 
+                                                                  p._id === post._id 
+                                                                    ? { 
+                                                                        ...p, 
+                                                                        comments: [newComment, ...(p.comments || [])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)),
+                                                                        commentCount: (p.commentCount || 0) + 1
+                                                                      } 
+                                                                    : p
+                                                                )
+                                                              );
+                                                            }}
+                                                            onCommentDeleted={(deletedComment) => {
+                                                              // Update the posts state to remove the deleted comment
+                                                              console.log('AdminDashboard: onCommentDeleted called with:', deletedComment);
+                                                              setPosts(prevPosts => 
+                                                                prevPosts.map(p => 
+                                                                  p._id === post._id 
+                                                                    ? { 
+                                                                        ...p, 
+                                                                        comments: (p.comments || []).filter(c => c._id !== deletedComment._id),
+                                                                        commentCount: Math.max(0, (p.commentCount || 0) - 1)
+                                                                      } 
+                                                                    : p
+                                                                )
+                                                              );
+                                                            }}
                                                         />
                                                     </div>
                                                 </motion.div>
                                             ))}
+                                            {/* Pagination controls for posts */}
+                                            <div className="flex justify-center items-center gap-2 mt-6">
+                                                <button
+                                                    onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
+                                                    disabled={currentPage === 1}
+                                                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                                                >
+                                                    &lt;
+                                                </button>
+                                                {Array.from({ length: Math.ceil(filteredPosts.length / POSTS_PER_PAGE), }, (_, idx) => idx + 1).map((page) => (
+                                                    <button
+                                                        key={page}
+                                                        onClick={() => setCurrentPage(page)}
+                                                        className={`px-3 py-1 rounded ${currentPage === page ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-200'} font-medium mx-0.5`}
+                                                    >
+                                                        {page}
+                                                    </button>
+                                                ))}
+                                                <button
+                                                    onClick={() => setCurrentPage((prev) => Math.min(Math.ceil(filteredPosts.length / POSTS_PER_PAGE), prev + 1))}
+                                                    disabled={currentPage === Math.ceil(filteredPosts.length / POSTS_PER_PAGE)}
+                                                    className="px-2 py-1 rounded bg-gray-200 dark:bg-slate-700 text-gray-700 dark:text-gray-200 disabled:opacity-50"
+                                                >
+                                                    &gt;
+                                                </button>
+                                            </div>
                                         </div>
                                     )}
                                 </DashboardCard>
@@ -1582,6 +1810,108 @@ const AdminDashboard = () => {
                 </main>
             </div>
         </div>
+
+        {/* Co-admin Orgs Modal */}
+        <Modal 
+            isOpen={isCoAdminOrgsModalOpen} 
+            onClose={() => {
+                setIsCoAdminOrgsModalOpen(false);
+                setSelectedCoAdminOrg(null);
+            }} 
+            title="Co-admin Organizations"
+            size="max-w-md"
+        >
+            <div className="space-y-4">
+                {loadingCoAdminOrgs ? (
+                    <div className="flex justify-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                    </div>
+                ) : error.coAdminOrgs ? (
+                    <div className="bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 p-4 rounded-md">
+                        <p>{error.coAdminOrgs}</p>
+                    </div>
+                ) : coAdminOrgs.length === 0 ? (
+                    <div className="text-center py-6">
+                        <UserGroupIcon className="mx-auto h-12 w-12 text-gray-400 dark:text-slate-500" />
+                        <p className="mt-2 text-sm text-gray-600 dark:text-slate-300">You don't have co-admin access to any organizations.</p>
+                    </div>
+                ) : (
+                    <div className="space-y-3">
+                        <ul className="space-y-3 max-h-[60vh] overflow-y-auto pr-2 -mr-2">
+                            {coAdminOrgs.map((org) => (
+                                <li key={org._id}>
+                                    <button
+                                        onClick={() => setSelectedCoAdminOrg(org)}
+                                        className="w-full text-left group"
+                                    >
+                                        <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm p-4 border border-gray-200 dark:border-slate-700 hover:border-blue-300 dark:hover:border-blue-700 transition-colors group-hover:bg-blue-50/50 dark:group-hover:bg-slate-700/50">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                                                        {org.name}
+                                                    </p>
+                                                    {org.createdAt && (
+                                                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-1">
+                                                            Created on {new Date(org.createdAt).toLocaleDateString(undefined, { 
+                                                                year: 'numeric', 
+                                                                month: 'short', 
+                                                                day: 'numeric' 
+                                                            })}
+                                                        </p>
+                                                    )}
+                                                </div>
+                                                <ChevronRightIcon className="h-5 w-5 text-gray-400 group-hover:text-blue-500" />
+                                            </div>
+                                        </div>
+                                    </button>
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 text-center mt-4">
+                            {coAdminOrgs.length} organization{coAdminOrgs.length !== 1 ? 's' : ''} found • Click to view details
+                        </p>
+                    </div>
+                )}
+            </div>
+        </Modal>
+
+        {/* Co-admin Org Details Modal */}
+        <Modal
+            isOpen={!!selectedCoAdminOrg}
+            onClose={() => setSelectedCoAdminOrg(null)}
+            title="Upgrade Required"
+        >
+            <div className="text-center py-6 px-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                    <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500 dark:text-yellow-400" aria-hidden="true" />
+                </div>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-slate-100">
+                    Co-admin Feature Locked
+                </h3>
+                <div className="mt-3">
+                    <p className="text-sm text-gray-600 dark:text-slate-300">
+                        The admin of this organization is currently on a free plan. So, the co-admin feature is currently unavailable.
+                    </p>
+                </div>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                        type="button"
+                        onClick={() => navigate('/pricing')}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        <ArrowUpTrayIcon className="-ml-1 mr-2 h-4 w-4" />
+                        Check Plans
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setSelectedCoAdminOrg(null)}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
 
         {/* Media Viewer Modal */}
         {viewingMedia.isOpen && (
@@ -1725,19 +2055,6 @@ const AdminDashboard = () => {
             </div>
         </Modal>
 
-        {/* Co-admin Orgs Modal */}
-        <Modal 
-            isOpen={isCoAdminOrgsModalOpen} 
-            onClose={() => setIsCoAdminOrgsModalOpen(false)} 
-            title="Co-admin Organizations"
-            size="max-w-md"
-        >
-            <div className="text-center py-8">
-                <FolderOpenIcon className="h-12 w-12 text-gray-400 dark:text-slate-500 mx-auto mb-4" />
-                <h3 className="text-lg font-medium text-gray-900 dark:text-slate-100 mb-2">No Organizations</h3>
-                <p className="text-gray-500 dark:text-slate-400">There are no co-admin organizations to display.</p>
-            </div>
-        </Modal>
 
         {/* Delete Post Confirmation Dialog */}
         <DeletionConfirmation
@@ -1751,672 +2068,202 @@ const AdminDashboard = () => {
             confirmButtonText="Delete"
             cancelButtonText="Cancel"
         />
-        <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">{/* ... Manage Orgs Modal Content ... */ loading.orgList ? (<div className="text-center py-10"><p className="text-gray-600 dark:text-slate-400">Loading organizations...</p></div>) : organizations.length === 0 ? (<NothingToShow message="No organizations to manage. Add one first." />) : (<div className="space-y-3"><p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p><ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">{organizations.map((org) => (<li key={org._id} className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''}`}><div className="flex items-center justify-between space-x-3"><div className="flex-1 min-w-0"><button onClick={() => { selectOrganization(org); setIsManageOrgModalOpen(false); }} className="text-left w-full group"><p className={`text-sm font-medium truncate ${selectedOrg?._id === org._id ? 'text-blue-700 dark:text-blue-400' : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'}`}>{org.name}</p><p className="text-xs text-gray-500 dark:text-slate-400 truncate">ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}</p></button></div><button onClick={() => initiateDeleteOrganization(org)} disabled={loading.deleteOrg?.[org._id]} className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50" title="Delete Organization">{loading.deleteOrg?.[org._id] ? <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle><path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" className="opacity-75"></path></svg> : <TrashIcon className="h-4 w-4" />}</button></div></li>))}</ul></div>)}<div className="mt-6 flex justify-end"><button type="button" onClick={() => setIsManageOrgModalOpen(false)} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800">Close</button></div></Modal>
-        <Modal isOpen={isDeleteConfirmModalOpen} onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null);}} title={`Delete ${orgToDelete?.name || 'Organization'}`}>{/* ... Delete Org Confirmation Modal Content ... */}<div className="space-y-4"><p className="text-sm text-gray-700 dark:text-slate-300">This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.</p><div><label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><IdentificationIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Type organization name</label><input type="text" id="orgNameConfirmDel" value={deleteOrgNameConfirm} onChange={(e) => setDeleteOrgNameConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder={orgToDelete?.name || ''} disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div><div><label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center"><LockClosedIcon className="h-4 w-4 mr-1 text-gray-400 dark:text-slate-500"/> Your Password</label><input type="password" id="passwordConfirmDel" value={deletePasswordConfirm} onChange={(e) => setDeletePasswordConfirm(e.target.value)} className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50" placeholder="Enter your account password" disabled={loading.deleteOrg?.[orgToDelete?._id]} /></div> {error.modal && ( <p className="text-sm text-red-600 dark:text-red-400 flex items-center"> <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}</p> )} <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5"><button type="button" onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }} disabled={loading.deleteOrg?.[orgToDelete?._id]} className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50">Cancel</button><button type="button" onClick={handleConfirmDeleteOrg} disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name} className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[140px]">{loading.deleteOrg?.[orgToDelete?._id] ? ( <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle><path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> ) : 'Confirm Delete'}</button></div></div></Modal>
-        </>
-    );
-};
-
-// --- Reaction Button Component ---
-const ReactionButton = ({ type, count, postId, commentId = null }) => {
-  const [isReacted, setIsReacted] = useState(false);
-  const [currentCount, setCurrentCount] = useState(count || 0);
-  const [isLoading, setIsLoading] = useState(false);
-  const orgId = localStorage.getItem('orgId');
-
-  // Helper function to build the API endpoint
-  const buildEndpoint = (basePath, includeOrgId = true) => {
-    if (includeOrgId && orgId) {
-      return commentId 
-        ? `${basePath}/${orgId}/${postId}/comments/${commentId}/reactions`
-        : `${basePath}/${orgId}/${postId}/reactions`;
-    }
-    return commentId 
-      ? `${basePath}/${postId}/comments/${commentId}/reactions`
-      : `${basePath}/${postId}/reactions`;
-  };
-
-  // Fetch reaction status on mount and when postId/commentId/type changes
-  useEffect(() => {
-    const fetchReactionStatus = async () => {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) return;
-      
-      try {
-        // Try with orgId first if available
-        const endpoint = buildEndpoint('/posts', true);
-        const response = await api.get(endpoint, {
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          }
-        });
-
-        // Update local state with server data
-        if (response.data?.success && response.data?.data) {
-          const reactionData = response.data.data[type];
-          if (reactionData) {
-            setIsReacted(reactionData.hasReacted);
-            setCurrentCount(reactionData.count);
-          }
-        }
-      } catch (error) {
-        // If we have an orgId and got a 404, try without orgId
-        if (orgId && error.response?.status === 404) {
-          try {
-            const fallbackEndpoint = buildEndpoint('/posts', false);
-            const fallbackResponse = await api.get(fallbackEndpoint, {
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              }
-            });
-
-            if (fallbackResponse.data?.success && fallbackResponse.data?.data) {
-              const reactionData = fallbackResponse.data.data[type];
-              if (reactionData) {
-                setIsReacted(reactionData.hasReacted);
-                setCurrentCount(reactionData.count);
-              }
-            }
-          } catch (fallbackError) {
-            console.error('Error fetching reaction status from fallback endpoint:', fallbackError);
-          }
-        } else {
-          console.error('Error fetching reaction status:', error);
-        }
-      }
-    };
-
-    fetchReactionStatus();
-  }, [postId, commentId, type, orgId]);
-
-  const handleReaction = async () => {
-    if (isLoading) return;
-    
-    const wasReacted = isReacted;
-    const newIsReacted = !wasReacted;
-    const storedToken = localStorage.getItem('token');
-    
-    if (!storedToken) {
-      console.error('No authentication token found');
-      return;
-    }
-    
-    // Optimistic UI updates
-    setIsLoading(true);
-    setIsReacted(newIsReacted);
-    setCurrentCount(prev => newIsReacted ? prev + 1 : Math.max(0, prev - 1));
-    
-    try {
-      // First try with orgId if available
-      const endpoint = buildEndpoint('/posts', true);
-      
-      const response = await api.post(
-        endpoint, 
-        { type },
-        { 
-          headers: { 
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${storedToken}` 
-          } 
-        }
-      );
-      
-      // Update with server response
-      if (response.data?.success && response.data?.reaction) {
-        setIsReacted(response.data.reaction.hasReacted);
-        setCurrentCount(response.data.reaction.count);
-        return;
-      }
-    } catch (error) {
-      // If we have an orgId and got a 404, try without orgId
-      if (orgId && error.response?.status === 404) {
-        try {
-          const fallbackEndpoint = buildEndpoint('/posts', false);
-          const fallbackResponse = await api.post(
-            fallbackEndpoint,
-            { type },
-            { 
-              headers: { 
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${storedToken}` 
-              } 
-            }
-          );
-
-          if (fallbackResponse.data?.success && fallbackResponse.data?.reaction) {
-            setIsReacted(fallbackResponse.data.reaction.hasReacted);
-            setCurrentCount(fallbackResponse.data.reaction.count);
-            return;
-          }
-        } catch (fallbackError) {
-          console.error('Error updating reaction via fallback endpoint:', fallbackError);
-          throw fallbackError;
-        }
-      } else {
-        console.error('Error updating reaction:', error);
-        throw error;
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const getIcon = () => {
-    const baseClass = "h-5 w-5";
-    switch(type) {
-      case 'like': return <HandThumbUpIcon className={baseClass} />;
-      case 'love': return <HeartIcon className={`${baseClass} text-red-500`} />;
-      case 'laugh': return <EmojiHappyIcon className={`${baseClass} text-yellow-500`} />;
-      case 'angry': return <XCircleIcon className={`${baseClass} text-orange-500`} />;
-      default: return <HandThumbUpIcon className={baseClass} />;
-    }
-  };
-
-  return (
-    <button
-      onClick={handleReaction}
-      className={`flex items-center gap-1 px-2 py-1 rounded-full transition-colors ${
-        isReacted 
-          ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 text-blue-300' 
-          : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-slate-700 dark:text-slate-300 dark:hover:bg-slate-600'
-      }`}
-      title={isReacted ? `You reacted with ${type}` : `React with ${type}`}
-      disabled={isLoading}
-    >
-      {isLoading ? (
-        <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-      ) : (
-        getIcon()
-      )}
-      <span className="text-sm">{currentCount}</span>
-    </button>
-  );
-};
-
-// --- Comment Section Component ---
-const CommentSection = ({ postId, comments: initialComments = [], selectedOrg, onCommentAdded }) => {
-  const [newComment, setNewComment] = useState('');
-  const [localComments, setLocalComments] = useState(initialComments || []);
-  const [error, setError] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [commentToDelete, setCommentToDelete] = useState(null);
-
-  // Update local comments when initialComments prop changes
-  useEffect(() => {
-    setLocalComments(initialComments || []);
-  }, [initialComments]);
-
-  // Function to fetch the post with its comments
-  const fetchPostWithComments = async () => {
-    setIsLoading(true);
-    setError(null);
-    
-    try {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found');
-      }
-      
-      const orgId = selectedOrg?._id;
-      if (!orgId) {
-        throw new Error('No organization selected');
-      }
-      
-      if (!postId) {
-        throw new Error('No post ID provided');
-      }
-      
-      console.log('Fetching comments for post:', postId, 'in org:', orgId);
-      
-      try {
-        // Get the specific post with comments and author info populated
-        const response = await api.get(`/posts/${orgId}?postId=${postId}`);
-        
-        if (!response.data) {
-          throw new Error('No data received from server');
-        }
-        
-        const post = response.data;
-        
-        if (!post) {
-          throw new Error('Post not found');
-        }
-        
-        // Get comments from the post and ensure they have proper author info
-        const updatedComments = Array.isArray(post.comments) 
-          ? post.comments.map(comment => ({
-              ...comment,
-              // Ensure we have author info and default to empty object if not available
-              author: comment.author || { _id: comment.author, role: 'user' },
-              // For backward compatibility, check createdByRole first, then fall back to author.role
-              createdByRole: comment.createdByRole || (comment.author?.role || 'user')
-            }))
-          : [];
-        
-        console.log('Fetched comments with author info:', updatedComments);
-        
-        setLocalComments(updatedComments);
-        
-        if (onCommentAdded) {
-          onCommentAdded(updatedComments);
-        }
-      } catch (error) {
-        console.error('Error fetching post:', error);
-        setError('Failed to load comments. Please try again.');
-      }
-    } catch (error) {
-      console.error('Error fetching comments:', error);
-      setError(error.response?.data?.message || error.message || 'Failed to fetch comments');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleCommentSubmit = async () => {
-    const commentText = newComment.trim();
-    if (!commentText || isSubmitting) return;
-    
-    setIsSubmitting(true);
-    setError(null);
-    
-    // Clear input immediately for better UX
-    setNewComment('');
-
-    try {
-      // Get the stored token
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found. Please sign in again.');
-      }
-      
-      // Get the current user's email and role
-      const userEmail = localStorage.getItem('email');
-      const userRole = localStorage.getItem('role');
-      
-      if (!userEmail || !userRole) {
-        throw new Error('User session is incomplete. Please sign in again.');
-      }
-      
-      console.log('Posting comment to post:', postId, 'as user:', userEmail, 'with role:', userRole);
-      
-      // The backend will handle setting author and createdByRole from the authenticated user's session
-      const response = await api.post(
-        `/posts/${postId}/comments`,
-        { 
-          text: commentText  // Only send the text, let backend handle the rest
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${storedToken}`
-          }
-        }
-      );
-      
-      console.log('Comment posted successfully, response:', response.data);
-      
-      // If the response includes the updated post with comments, use that
-      if (response.data && response.data.post && response.data.post.comments) {
-        const updatedComments = response.data.post.comments.map(comment => ({
-          ...comment,
-          // Ensure we have the author info
-          author: comment.author || {
-            _id: 'unknown',
-            name: 'Unknown User',
-            email: 'unknown@example.com',
-            role: comment.createdByRole || 'user'
-          },
-          // Ensure we have a createdByRole
-          createdByRole: comment.createdByRole || 'user'
-        }));
-        
-        setLocalComments(updatedComments);
-        if (onCommentAdded) {
-          onCommentAdded(updatedComments);
-        }
-      } else {
-        // Fallback to fetching the updated comments from the backend
-        await fetchPostWithComments();
-      }
-      
-      setError(null);
-    } catch (error) {
-      console.error('Error submitting comment:', error);
-      
-      // Enhanced error handling
-      let errorMessage = 'Failed to post comment. ';
-      
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        // that falls out of the range of 2xx
-        console.error('Response data:', error.response.data);
-        console.error('Response status:', error.response.status);
-        console.error('Response headers:', error.response.headers);
-        
-        if (error.response.status === 401) {
-          errorMessage += 'Authentication failed. Please sign in again.';
-          // Redirect to login after a short delay
-          setTimeout(() => navigate('/signin'), 2000);
-        } else if (error.response.data) {
-          errorMessage += error.response.data.message || JSON.stringify(error.response.data);
-        }
-      } else if (error.request) {
-        // The request was made but no response received
-        console.error('No response received:', error.request);
-        errorMessage += 'No response from server. Please check your connection.';
-      } else {
-        // Something happened in setting up the request that triggered an Error
-        console.error('Error setting up request:', error.message);
-        errorMessage += error.message || 'Unknown error occurred';
-      }
-      
-      setError(errorMessage);
-      // Restore the comment text if there was an error
-      setNewComment(commentText);
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleDeleteClick = (commentId) => {
-    setCommentToDelete(commentId);
-    setShowDeleteDialog(true);
-  };
-
-  const handleCancelDelete = () => {
-    setShowDeleteDialog(false);
-    setCommentToDelete(null);
-  };
-
-  const handleConfirmDelete = async () => {
-    if (!commentToDelete || isLoading) return;
-    
-    setIsLoading(true);
-    setShowDeleteDialog(false);
-    setError(null);
-
-    try {
-      const storedToken = localStorage.getItem('token');
-      if (!storedToken) {
-        throw new Error('No authentication token found');
-      }
-
-      const response = await api.delete(`/posts/${postId}/comments/${commentToDelete}`, {
-        headers: {
-          'Authorization': `Bearer ${storedToken}`
-        }
-      });
-
-      // Show success message if this was an admin deletion
-      if (response.data?.deletedByAdmin) {
-        setError('Comment deleted by admin.');
-      }
-
-      // Refresh comments after successful deletion
-      await fetchPostWithComments();
-    } catch (error) {
-      console.error('Error deleting comment:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to delete comment';
-      setError(errorMessage);
-    } finally {
-      setIsLoading(false);
-      setCommentToDelete(null);
-    }
-  };
-  
-  // For backward compatibility
-  const handleCommentDelete = handleDeleteClick;
-
-  return (
-    <div className="mt-4 space-y-4">
-      {/* Delete Confirmation Dialog for Comments */}
-      <Modal 
-        isOpen={showDeleteDialog} 
-        onClose={handleCancelDelete}
-        title="Delete Comment"
-        size="max-w-md"
-      >
-        <div className="space-y-4">
-          <p className="text-gray-800 dark:text-slate-200">
-            Are you sure you want to delete this comment? This action cannot be undone.
-          </p>
-          {commentToDelete && (
-            <div className="bg-gray-100 dark:bg-slate-700 p-3 rounded-md">
-              <p className="text-sm text-gray-700 dark:text-slate-200 italic">
-                "{localComments.find(c => c._id === commentToDelete)?.text}"
-              </p>
-            </div>
-          )}
-          <div className="flex justify-end space-x-3 pt-2">
-            <button
-              onClick={handleCancelDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleConfirmDelete}
-              disabled={isLoading}
-              className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[100px]"
-            >
-              {isLoading ? (
-                <>
-                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                  </svg>
-                  Deleting...
-                </>
-              ) : 'Delete'}
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {error && (
-        <div className="text-sm text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900/20 p-2 rounded">
-          {error}
-        </div>
-      )}
-      
-      <div className="flex gap-2">
-        <input
-          type="text"
-          value={newComment}
-          onChange={(e) => setNewComment(e.target.value)}
-          placeholder="Write a comment..."
-          className="flex-1 p-2 rounded bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white"
-          onKeyPress={(e) => e.key === 'Enter' && handleCommentSubmit()}
+        {/* Post Edit Modal */}
+        <PostEditModal
+            isOpen={showEditPostModal}
+            onClose={() => {
+                setShowEditPostModal(false);
+                setPostToEdit(null);
+            }}
+            post={postToEdit}
+            onPostUpdated={handlePostUpdated}
         />
-        <button
-          onClick={handleCommentSubmit}
-          disabled={!newComment.trim() || isSubmitting}
-          className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? 'Posting...' : 'Post'}
-        </button>
-      </div>
-
-      {localComments.map(comment => {
-        const isAdmin = comment.createdByRole === 'admin' || (comment.author && comment.author.role === 'admin');
-        
-        return (
-          <div key={comment._id} className="bg-white dark:bg-slate-800 rounded-lg p-4 shadow mb-4">
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className="text-sm font-medium">
-                  {comment.author?.name || <span className="text-gray-800 dark:text-slate-200">Anonymous</span>}
-                </span>
-                <span className={`ml-1 px-1.5 py-0.5 text-[10px] rounded-full ${
-                  isAdmin 
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200'
-                    : 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-                }`}>
-                  {isAdmin ? 'Admin' : 'User'}
-                </span>
-                <span className="text-xs text-gray-500 dark:text-slate-400">
-                  {new Date(comment.createdAt).toLocaleString()}
-                </span>
+        <Modal isOpen={isManageOrgModalOpen} onClose={() => setIsManageOrgModalOpen(false)} title="Manage Organizations" size="max-w-2xl">
+  {loading.orgList ? (
+    <div className="text-center py-10">
+      <p className="text-gray-600 dark:text-slate-400">Loading organizations...</p>
+    </div>
+  ) : organizations.length === 0 ? (
+    <NothingToShow message="No organizations to manage. Add one first." />
+  ) : (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600 dark:text-slate-400">Select an organization to view details or delete.</p>
+      <ul className="divide-y divide-gray-200 dark:divide-slate-700 max-h-[60vh] overflow-y-auto custom-scrollbar -mx-1 pr-1">
+        {organizations.map((org) => (
+          <li
+            key={org._id}
+            className={`p-3 hover:bg-gray-50 dark:hover:bg-slate-700/50 rounded-md transition-colors ${
+              selectedOrg?._id === org._id ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+            }`}
+          >
+            <div className="flex items-center justify-between space-x-3">
+              <div className="flex-1 min-w-0">
+                <button
+                  onClick={() => {
+                    selectOrganization(org);
+                    setIsManageOrgModalOpen(false);
+                  }}
+                  className="text-left w-full group"
+                >
+                  <p
+                    className={`text-sm font-medium truncate ${
+                      selectedOrg?._id === org._id
+                        ? 'text-blue-700 dark:text-blue-400'
+                        : 'text-gray-800 dark:text-slate-100 group-hover:text-blue-600 dark:group-hover:text-blue-400'
+                    }`}
+                  >
+                    {org.name}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-slate-400 truncate">
+                    ID: {org._id} | Created: {new Date(org.createdAt).toLocaleDateString()}
+                  </p>
+                </button>
               </div>
               <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleDeleteClick(comment._id);
-                }}
-                className="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                disabled={isLoading}
-                title="Delete comment"
+                onClick={() => initiateDeleteOrganization(org)}
+                disabled={loading.deleteOrg?.[org._id]}
+                className="p-1.5 rounded-md text-red-500 hover:bg-red-100 dark:hover:bg-red-700/30 disabled:opacity-50"
+                title="Delete Organization"
               >
-                <TrashIcon className="h-4 w-4" />
+                {loading.deleteOrg?.[org._id] ? (
+                  <svg className="animate-spin h-4 w-4 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" className="opacity-25"></circle>
+                    <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : (
+                  <TrashIcon className="h-4 w-4" />
+                )}
               </button>
             </div>
-            
-            <p className="text-gray-800 dark:text-slate-200 mb-3">{comment.text}</p>
-            
-            {/* Use the same ReactionButton component as posts */}
-            <div className="flex gap-2">
-              {['like', 'love', 'laugh', 'angry'].map((type) => (
-                <ReactionButton
-                  key={type}
-                  type={type}
-                  postId={postId}
-                  commentId={comment._id}
-                  count={comment.reactions?.[type]?.count || 0}
-                />
-              ))}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )}
+  <div className="mt-6 flex justify-end">
+    <button
+      type="button"
+      onClick={() => setIsManageOrgModalOpen(false)}
+      className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800"
+    >
+      Close
+    </button>
+  </div>
+</Modal>
+        <Modal
+          isOpen={isDeleteConfirmModalOpen}
+          onClose={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }}
+          title={`Delete ${orgToDelete?.name || 'Organization'}`}
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-700 dark:text-slate-300">
+              This action is permanent and will delete all associated posts. To confirm, type the organization's name (<strong className="font-semibold text-red-600 dark:text-red-400">{orgToDelete?.name}</strong>) and enter your account password.
+            </p>
+            <div>
+              <label htmlFor="orgNameConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center">
+                Type organization name
+              </label>
+              <input
+                type="text"
+                id="orgNameConfirmDel"
+                value={deleteOrgNameConfirm}
+                onChange={(e) => setDeleteOrgNameConfirm(e.target.value)}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                placeholder={orgToDelete?.name || ''}
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+              />
             </div>
-          </div>
-        );
-      })}
-
-      {/* Delete Confirmation Dialog */}
-      {showDeleteDialog && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-lg p-6 max-w-sm w-full mx-4">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Delete Comment</h3>
-            <p className="text-gray-600 dark:text-slate-300 mb-6">Are you sure you want to delete this comment? This action cannot be undone.</p>
-            <div className="flex justify-end space-x-3">
+            <div>
+              <label htmlFor="passwordConfirmDel" className="text-sm font-medium text-gray-700 dark:text-slate-300 mb-1 flex items-center">
+                Your Password
+              </label>
+              <input
+                type="password"
+                id="passwordConfirmDel"
+                value={deletePasswordConfirm}
+                onChange={(e) => setDeletePasswordConfirm(e.target.value)}
+                className="w-full border border-gray-300 dark:border-slate-600 rounded-md shadow-sm p-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 focus:ring-red-500 focus:border-red-500 disabled:opacity-50"
+                placeholder="Enter your account password"
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+              />
+            </div>
+            {error.modal && (
+              <p className="text-sm text-red-600 dark:text-red-400 flex items-center">
+                <ExclamationTriangleIcon className="h-4 w-4 mr-1 flex-shrink-0"/> {error.modal}
+              </p>
+            )}
+            <div className="flex justify-end space-x-3 pt-3 border-t border-gray-200 dark:border-slate-700 mt-5">
               <button
-                onClick={handleCancelDelete}
-                disabled={isLoading}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+                type="button"
+                onClick={() => { setIsDeleteConfirmModalOpen(false); setOrgToDelete(null); }}
+                disabled={loading.deleteOrg?.[orgToDelete?._id]}
+                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
-                onClick={handleConfirmDelete}
-                disabled={isLoading}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50"
+                type="button"
+                onClick={handleConfirmDeleteOrg}
+                disabled={loading.deleteOrg?.[orgToDelete?._id] || !deletePasswordConfirm || deleteOrgNameConfirm !== orgToDelete?.name}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 border border-transparent rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-red-500 dark:focus:ring-offset-slate-800 disabled:opacity-50 flex items-center justify-center min-w-[140px]"
               >
-                {isLoading ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Deleting...
-                  </>
-                ) : 'Delete'}
+                {loading.deleteOrg?.[orgToDelete?._id] ? (
+                  <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                ) : 'Confirm Delete'}
               </button>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
+        </Modal>
+
+        {/* No Organizations Selected Modal */}
+        <Modal
+            isOpen={showNoOrgsModal}
+            onClose={() => setShowNoOrgsModal(false)}
+            title="No Organizations Selected"
+        >
+            <div className="text-center py-6 px-4">
+                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-yellow-100 dark:bg-yellow-900/30">
+                    <ExclamationTriangleIcon className="h-8 w-8 text-yellow-500 dark:text-yellow-400" aria-hidden="true" />
+                </div>
+                <h3 className="mt-4 text-lg font-medium text-gray-900 dark:text-slate-100">
+                    No Organizations Available
+                </h3>
+                <div className="mt-3">
+                    <p className="text-sm text-gray-600 dark:text-slate-300">
+                        You need to add at least one organization before you can create posts or manage polls.
+                    </p>
+                </div>
+                <div className="mt-6 flex flex-col sm:flex-row gap-3 justify-center">
+                    <button
+                        type="button"
+                        onClick={() => {
+                            setShowNoOrgsModal(false);
+                            handleOpenAddOrgModal();
+                        }}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        <PlusIcon className="-ml-1 mr-2 h-4 w-4" />
+                        Add Organization
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setShowNoOrgsModal(false)}
+                        className="inline-flex justify-center items-center px-4 py-2 border border-gray-300 dark:border-slate-600 rounded-md shadow-sm text-sm font-medium text-gray-700 dark:text-slate-200 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                    >
+                        Close
+                    </button>
+                </div>
+            </div>
+        </Modal>
+        </>
+    );
 };
 
-// --- Media Viewer Modal Component ---
-const MediaViewer = ({ mediaUrl, mediaType, onClose }) => {
-  const modalRef = useRef(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
-
-  // Close modal when clicking outside the content
-  useEffect(() => {
-    const handleClickOutside = (event) => {
-      if (modalRef.current && !modalRef.current.contains(event.target)) {
-        onClose();
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [onClose]);
-
-  // Handle keyboard events
-  useEffect(() => {
-    const handleKeyDown = (event) => {
-      if (event.key === 'Escape') {
-        onClose();
-      }
-    };
-
-    document.addEventListener('keydown', handleKeyDown);
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [onClose]);
-
-  // Toggle fullscreen mode
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(console.log);
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen();
-        setIsFullscreen(false);
-      }
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black bg-opacity-90 z-50 flex items-center justify-center p-4">
-      <div className="relative w-full h-full flex items-center justify-center">
-        <button
-          onClick={onClose}
-          className="absolute top-4 right-4 text-white hover:text-gray-300 z-10 p-2"
-          aria-label="Close media viewer"
-        >
-          <XCircleIcon className="h-8 w-8" />
-        </button>
-        
-        <div 
-          ref={modalRef} 
-          className="relative max-w-full max-h-full flex items-center justify-center"
-        >
-          {mediaType === 'image' ? (
-            <img
-              src={mediaUrl}
-              alt="Full size media"
-              className="max-w-full max-h-[90vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
-          ) : (
-            <video
-              src={mediaUrl}
-              className="max-w-full max-h-[90vh]"
-              controls
-              autoPlay
-              controlsList="nodownload"
-              onClick={(e) => e.stopPropagation()}
-            />
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
+// --- Import MediaViewer Component ---
+import MediaViewer from '../components/MediaViewer';
 
 // Animation variants for Framer Motion
 export const fadeInUp = { 

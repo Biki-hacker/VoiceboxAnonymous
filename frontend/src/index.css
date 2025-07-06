@@ -3,6 +3,34 @@
 @tailwind components;
 @tailwind utilities;
 
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.8;
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.animate-pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
 /* Custom Animations */
 @keyframes blob {
   0% {
@@ -67,4 +95,44 @@ body {
   color: #1F2937; /* gray-800 - Default text color */
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+/* Default hero heading size for Chrome browsers */
+.chrome-hero-text {
+  font-size: 1.71rem;
+}
+@media (min-width: 768px) {
+  .chrome-hero-text {
+    font-size: 2.37rem;
+  }
+}
+@media (min-width: 1024px) {
+  .chrome-hero-text {
+    font-size: 3.16rem;
+  }
+}
+
+/* Non-Chrome browsers: smaller hero heading */
+body:not(.chrome-only) .chrome-hero-text {
+  font-size: 2.1rem !important;
+  line-height: 1.1 !important;
+}
+@media (min-width: 768px) {
+  body:not(.chrome-only) .chrome-hero-text {
+    font-size: 2.89rem !important;
+  }
+}
+@media (min-width: 1024px) {
+  body:not(.chrome-only) .chrome-hero-text {
+    font-size: 3.68rem !important;
+  }
+}
+
+@keyframes blink-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+.animate-blink-caret {
+  animation: blink-caret 1s steps(1) infinite;
 }

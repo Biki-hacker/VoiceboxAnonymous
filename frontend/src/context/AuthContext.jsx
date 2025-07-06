@@ -21,7 +21,7 @@ export const AuthProvider = ({ children }) => {
         return;
       }
 
-      const response = await axios.get(`${import.meta.env.VITE_API_URL}/api/auth/me`, {
+      const response = await axios.get(`${import.meta.env.VITE_API_URL}/auth/me`, {
         headers: { Authorization: `Bearer ${token}` }
       });
       setUser(response.data);
@@ -36,7 +36,7 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       setError(null);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/login`, {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/login`, {
         email,
         password
       });
@@ -53,7 +53,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('userId', user._id); // Store MongoDB user ID
       
       if (user.organizationId) {
-        localStorage.setItem('orgId', user.organizationId);
+        // Trim any whitespace from organization ID before storing
+        const trimmedOrgId = user.organizationId.toString().trim();
+        localStorage.setItem('orgId', trimmedOrgId);
+        console.log('Stored organization ID (trimmed):', trimmedOrgId);
       }
       
       console.log('User logged in:', { email, userId: user._id, role: user.role });
@@ -68,7 +71,7 @@ export const AuthProvider = ({ children }) => {
   const register = async (email, password, role, organizationId) => {
     try {
       setError(null);
-      const response = await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/register`, {
+      const response = await axios.post(`${import.meta.env.VITE_API_URL}/auth/register`, {
         email,
         password,
         role,
@@ -88,7 +91,10 @@ export const AuthProvider = ({ children }) => {
       localStorage.setItem('userId', user._id); // Store MongoDB user ID
       
       if (organizationId) {
-        localStorage.setItem('orgId', organizationId);
+        // Trim any whitespace from organization ID before storing
+        const trimmedOrgId = organizationId.toString().trim();
+        localStorage.setItem('orgId', trimmedOrgId);
+        console.log('Stored organization ID (trimmed):', trimmedOrgId);
       }
       
       console.log('User registered:', { email, userId: user._id, role });
@@ -104,7 +110,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        await axios.post(`${import.meta.env.VITE_API_URL}/api/auth/logout`, {}, {
+        await axios.post(`${import.meta.env.VITE_API_URL}/auth/logout`, {}, {
           headers: { Authorization: `Bearer ${token}` }
         });
       }

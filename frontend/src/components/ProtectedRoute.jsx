@@ -1,7 +1,7 @@
 // src/components/ProtectedRoute.jsx
 import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
-import { api } from '../api/axios';
+import { api } from '../utils/axios';  // Consolidated axios instance
 
 const ProtectedRoute = ({ children, requiredRole }) => {
   const [isAuthorized, setIsAuthorized] = useState(null);
@@ -24,20 +24,117 @@ const ProtectedRoute = ({ children, requiredRole }) => {
         console.log('[ProtectedRoute] localStorage token:', token);
         console.log('[ProtectedRoute] localStorage role:', role);
         
+        // If we're on the OAuth callback route, let it through
+        if (window.location.pathname.includes('/auth/callback')) {
+          console.log('[ProtectedRoute] OAuth callback detected, allowing pass-through');
+          if (isMounted) setIsAuthorized(true);
+          return;
+        }
+        
         // If we have a token and role matches, we can be optimistic
         if (token && role === requiredRole) {
           const lastVerified = localStorage.getItem('lastVerified');
           const now = new Date().getTime();
           console.log('[ProtectedRoute] lastVerified:', lastVerified, 'now:', now);
           
+          // If we have a valid token and role, we should verify it
+          // Don't rely on cached verification if it's too old
           if (lastVerified && (now - parseInt(lastVerified, 10)) < 5 * 60 * 1000) {
             console.log('[ProtectedRoute] Using cached auth, granting access');
             if (isMounted) setIsAuthorized(true);
             return;
           }
-        }
-        
-        if (!token) {
+          
+          // Verify with backend if we have a token
+          const email = localStorage.getItem('email');
+          if (!email) {
+            console.log('[ProtectedRoute] No email found in localStorage, cannot verify');
+            if (isMounted) setIsAuthorized(false);
+            return;
+          }
+
+          console.log('[ProtectedRoute] Sending /auth/verify-status request...');
+          // Verify with backend
+          const response = await api.get('/auth/verify-status', {
+            signal: controller.signal,
+            params: { email },
+            headers: {
+              'Cache-Control': 'no-cache',
+              'Pragma': 'no-cache',
+              'Authorization': `Bearer ${token}`
+            }
+          });
+          console.log('[ProtectedRoute] /auth/verify-status response:', response);
+          
+          const responseData = response?.data;
+          
+          // Extract user data from the response
+          // The new format has user data in response.data.data
+          let userData = responseData?.data || responseData;
+          
+          // If we still don't have user data, check for common response formats
+          if (!userData) {
+            if (responseData?.user) {
+              userData = responseData.user;
+            } else if (responseData) {
+              // If response is not in expected format but has data, use it
+              userData = responseData;
+            }
+          }
+          
+          if (!userData) {
+            console.error('Invalid response format:', response);
+            throw new Error('Invalid server response format');
+          }
+          
+          console.log('[ProtectedRoute] Extracted user data:', userData);
+          
+          // Update last verified timestamp
+          localStorage.setItem('lastVerified', new Date().getTime().toString());
+          
+          // Extract user data from response
+          const { role: userRole, organizationId, email: userEmail, verified } = userData;
+          
+          // For admin role, we don't need email verification
+          // Just ensure the role is set correctly
+          if (userRole === 'admin') {
+            console.log('[ProtectedRoute] Admin user detected, skipping email verification');
+            // Set verified to true for admin to bypass verification
+            userData.verified = true;
+            // Ensure admin role is properly set in localStorage
+            localStorage.setItem('role', 'admin');
+            // Grant access to any route if user is admin
+            if (isMounted) setIsAuthorized(true);
+            return;
+          }
+          
+          console.log('[ProtectedRoute] Backend verification successful. User role:', userRole, 'Required role:', requiredRole);
+          
+          // Update local storage with fresh data
+          if (userRole) {
+            localStorage.setItem('role', userRole);
+          } else {
+            console.warn('[ProtectedRoute] No role received from backend');
+          }
+          
+          if (organizationId) localStorage.setItem('orgId', organizationId);
+          if (userEmail) localStorage.setItem('email', userEmail);
+          
+          if (userRole === requiredRole) {
+            console.log('[ProtectedRoute] Role matches, granting access');
+            if (isMounted) setIsAuthorized(true);
+          } else {
+            console.warn(`[ProtectedRoute] Role mismatch. Required: ${requiredRole}, Got: ${userRole || 'undefined'}`);
+            // Clear potentially stale auth data
+            localStorage.removeItem('token');
+            localStorage.removeItem('role');
+            localStorage.removeItem('email');
+            localStorage.removeItem('orgId');
+            localStorage.removeItem('lastVerified');
+            if (isMounted) setIsAuthorized(false);
+          }
+        } else {
+          // If no token and no role
           console.log('[ProtectedRoute] No token found in localStorage, redirecting');
           if (isMounted) setIsAuthorized(false);
           return;
@@ -98,6 +195,13 @@ const ProtectedRoute = ({ children, requiredRole }) => {
           console.log('[ProtectedRoute] Admin user detected, skipping email verification');
           // Set verified to true for admin to bypass verification
           userData.verified = true;
+          localStorage.setItem('verified', 'true');
+        } else if (userData.verified) {
+          // Ensure verified status is stored for non-admin users
+          localStorage.setItem('verified', 'true');
+        } else {
+          // Clear any stale verification status
+          localStorage.removeItem('verified');
         }
         
         console.log('[ProtectedRoute] Backend verification successful. User role:', userRole, 'Required role:', requiredRole);

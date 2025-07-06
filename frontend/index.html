@@ -29,6 +29,18 @@
     <!-- DNS prefetch -->
     <link rel="dns-prefetch" href="//fonts.googleapis.com" />
     <link rel="dns-prefetch" href="//fonts.gstatic.com" />
+    <script>
+      // This script runs before React, capturing the auth hash from the URL.
+      (function() {
+        const hash = window.location.hash;
+        // If the hash contains Supabase recovery tokens, save it to sessionStorage.
+        if (hash.includes('access_token') && hash.includes('type=recovery')) {
+          sessionStorage.setItem('supabase_password_recovery_hash', hash);
+          // Clean the hash from the URL for security and to prevent routing issues.
+          window.history.replaceState(null, document.title, window.location.pathname + window.location.search);
+        }
+      })();
+    </script>
   </head>
   <body class="bg-[#040b1d] text-white">
     <div id="root"></div>
@@ -36,9 +48,12 @@
     
     <!-- Load web fonts asynchronously -->
     <script>
-      // Load Google Fonts asynchronously
+      // Load Google Fonts asynchronously with font-display: swap
       WebFontConfig = {
-        google: { families: ['Inter:300,400,500,600,700'] }
+        google: { 
+          families: ['Inter:300,400,500,600,700'],
+          display: 'swap'
+        }
       };
       (function(d) {
         var wf = d.createElement('script'), s = d.scripts[0];

@@ -36,14 +36,23 @@ const getCurrentUser = async (req, res, next) => {
 
 const registerUser = async (req, res, next) => {
   try {
-    const { email, password, role, organizationId } = req.body;
+    const { email, password, role, organizationId, isOAuth } = req.body;
 
     // Validate input
-    if (!email || !password || !role) {
+    if (!email || !role) {
       return res.status(400).json({
         success: false,
-        message: 'Email, password, and role are required',
+        message: 'Email and role are required',
         code: 'VALIDATION_ERROR'
+      });
+    }
+    
+    // Only require password for non-OAuth users
+    if (!isOAuth && !password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Password is required',
+        code: 'PASSWORD_REQUIRED'
       });
     }
 
